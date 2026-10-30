@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Weigh-In</title>
+<meta name="theme-color" content="#1F5C4D">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Weigh-In">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icons/icon-192.png">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Alfa+Slab+One&family=Barlow:wght@400;500;600;700&family=Barlow+Condensed:wght@500;600;700&display=swap">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div id="app">
+  <div class="boot">Loading Weigh-In…</div>
+</div>
+<datalist id="species">
+  <option>Largemouth Bass</option><option>Smallmouth Bass</option><option>Spotted Bass</option>
+  <option>Striped Bass</option><option>White Bass</option><option>Hybrid Striped Bass</option>
+  <option>Crappie</option><option>Bluegill</option><option>Redear Sunfish</option>
+  <option>Channel Catfish</option><option>Blue Catfish</option><option>Flathead Catfish</option>
+  <option>Walleye</option><option>Sauger</option><option>Northern Pike</option><option>Muskie</option>
+  <option>Rainbow Trout</option><option>Brown Trout</option><option>Paddlefish</option>
+  <option>Common Carp</option><option>Freshwater Drum</option><option>Gar</option>
+  <option>Redfish</option><option>Speckled Trout</option><option>Flounder</option>
+</datalist>
+<datalist id="lures">
+  <option>Plastic worm</option><option>Crankbait</option><option>Spinnerbait</option><option>Jig</option>
+  <option>Topwater</option><option>Swimbait</option><option>Jerkbait</option><option>Chatterbait</option>
+  <option>Spoon</option><option>Inline spinner</option><option>Fly</option><option>Live minnow</option>
+  <option>Nightcrawler</option><option>Cut bait</option><option>Chicken liver</option>
+</datalist>
+<script type="module" src="app.js"></script>
+<script>
+  if ("serviceWorker" in navigator) {
+    window.addEventListener("load", () => navigator.serviceWorker.register("sw.js").catch(() => {}));
+  }
+</script>
+</body>
+</html>
