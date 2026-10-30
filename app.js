@@ -3,7 +3,7 @@ import { firebaseConfig } from "./firebase-config.js";
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
 import {
   getAuth, onAuthStateChanged, createUserWithEmailAndPassword, signInWithEmailAndPassword,
-  signOut, sendPasswordResetEmail
+  signOut, sendPasswordResetEmail, GoogleAuthProvider, signInWithPopup
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 import {
   getFirestore, collection, doc, setDoc, getDoc, addDoc, deleteDoc, updateDoc, onSnapshot,
@@ -74,6 +74,7 @@ const ICON = {
   chat: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a8 8 0 0 1-11.6 7.1L4 20l1-4.6A8 8 0 1 1 21 12z"/></svg>',
   map: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s7-6.2 7-12a7 7 0 0 0-14 0c0 5.8 7 12 7 12z"/><circle cx="12" cy="10" r="2.5"/></svg>',
   me: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/></svg>',
+  sun: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="9" r="3.5"/><path d="M9 2.5v1.5M2.5 9H4M4.4 4.4l1 1M13.6 4.4l-1 1"/><path d="M8 20h10a3.5 3.5 0 0 0 .5-7 5 5 0 0 0-9.4 1A3 3 0 0 0 8 20z"/></svg>',
   trash: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13"/></svg>',
 };
 
@@ -172,6 +173,13 @@ function renderAuth(mode = "signin") {
     el("h1", null, "Weigh-In"),
     el("p", null, "Post your catches, run tournaments with friends, and see who's got the biggest fish."),
     f,
+    el("div", { class: "or" }, "or"),
+    el("button", { class: "btn ghost wide", type: "button", onclick: async () => {
+      msg.textContent = "";
+      try { await signInWithPopup(auth, new GoogleAuthProvider()); }
+      catch (err) { if (!/popup-closed|cancelled-popup/.test(err?.code || "")) msg.textContent = "Google sign-in didn't work here. Use your email and password instead."; }
+    } }, "Continue with Google"),
+    el("button", { class: "link", type: "button", style: "align-self:flex-start", onclick: openPrivacy }, "How Weigh-In uses your info"),
     el("div", { class: "row spread" },
       el("button", { class: "link", type: "button", onclick: () => renderAuth(isNew ? "signin" : "signup") },
         isNew ? "I already have an account" : "Create an account"),
@@ -277,7 +285,7 @@ function refreshMe(view) { if (S.tab === "me" && (S.meView === view || S.meView 
 let $screen, $nav;
 function buildShell() {
   $screen = el("div", { class: "screen" });
-  const tabs = [["feed", "Feed", ICON.feed], ["map", "Map", ICON.map], ["post", "Post", ICON.plus], ["tours", "Tourneys", ICON.trophy], ["me", "Me", ICON.me]];
+  const tabs = [["feed", "Feed", ICON.feed], ["map", "Map", ICON.map], ["post", "Post", ICON.plus], ["bite", "Bite", ICON.sun], ["tours", "Tourneys", ICON.trophy], ["me", "Me", ICON.me]];
   $nav = el("nav", { class: "tabs", "aria-label": "Sections" }, el("div", { class: "in" }, tabs.map(([k, label, icon]) =>
     el("button", { class: "tab" + (k === "post" ? " post" : ""), type: "button", "data-tab": k, onclick: () => go(k) },
       k === "post" ? el("span", { class: "bob", html: icon }) : el("span", { html: icon }), label,
@@ -294,15 +302,156 @@ function go(tab) {
 }
 function updateDot() { $nav?.querySelector(".dot")?.toggleAttribute("hidden", S.reqIn.length === 0); }
 function renderTab() {
+  clearInterval(tick);
   if (S.tab !== "map") destroyMap();
   if (S.tab === "feed") return renderFeed();
   if (S.tab === "map") return renderMap();
   if (S.tab === "me") watchMine();
   $screen.className = "screen";
   const p = el("div", { class: "pad" });
-  ({ post: viewPost, tours: viewTours, me: viewMe })[S.tab](p);
+  ({ post: viewPost, bite: viewBite, tours: viewTours, me: viewMe })[S.tab](p);
   $screen.replaceChildren(p);
   updateDot();
+}
+
+/* ======================= BITE: weather + what's biting ======================= */
+const WX_CODES = [[0, "Clear"], [2, "Partly cloudy"], [3, "Overcast"], [48, "Fog"], [57, "Drizzle"], [67, "Rain"], [77, "Snow"], [82, "Showers"], [86, "Snow showers"], [99, "Thunderstorms"]];
+const wxName = (c) => (WX_CODES.find(([max]) => c <= max) || [0, "Unknown"])[1];
+const wxCache = {};
+async function fetchWeather(loc) {
+  const key = loc.lat + "," + loc.lng;
+  if (wxCache[key] && Date.now() - wxCache[key].at < 600000) return wxCache[key].data;
+  const url = "https://api.open-meteo.com/v1/forecast?latitude=" + loc.lat + "&longitude=" + loc.lng +
+    "&current=temperature_2m,weather_code,wind_speed_10m,wind_direction_10m,pressure_msl,cloud_cover" +
+    "&hourly=temperature_2m,pressure_msl,precipitation_probability,weather_code,wind_speed_10m" +
+    "&daily=sunrise,sunset&temperature_unit=fahrenheit&wind_speed_unit=mph&timezone=auto&past_hours=6&forecast_hours=12&forecast_days=2";
+  const r = await fetch(url);
+  if (!r.ok) throw new Error("Weather service said " + r.status);
+  const data = await r.json();
+  wxCache[key] = { at: Date.now(), data };
+  return data;
+}
+const compass = (d) => ["N", "NE", "E", "SE", "S", "SW", "W", "NW"][Math.round(d / 45) % 8];
+function biteScore(w) {
+  const c = w.current, h = w.hourly;
+  const i = Math.max(0, h.time.findIndex((t) => t.slice(0, 13) === c.time.slice(0, 13)));
+  const dP = i >= 6 ? c.pressure_msl - h.pressure_msl[i - 6] : 0; // hPa over the last ~6 hours
+  let s = 50; const why = [];
+  if (dP <= -1 && dP > -4) { s += 20; why.push("Pressure is slowly falling. Fish often feed before weather moves in."); }
+  else if (dP <= -4) { s += 0; why.push("Pressure is dropping fast, so a front is close."); }
+  else if (Math.abs(dP) < 1) { s += 10; why.push("Pressure is steady."); }
+  else if (dP >= 4) { s -= 10; why.push("Pressure is climbing fast, which can slow the bite."); }
+  else { s += 3; why.push("Pressure is slowly rising."); }
+  const wind = c.wind_speed_10m;
+  if (wind < 12) { s += 15; why.push("Light wind."); } else if (wind > 20) { s -= 20; why.push("Strong wind makes casting and boating harder."); } else why.push("Moderate wind.");
+  if (c.weather_code >= 95) { s -= 30; why.push("Thunderstorms. Stay off the water."); }
+  else if (c.weather_code >= 61 && c.weather_code <= 82) { s -= 8; why.push("Wet weather."); }
+  else if (c.cloud_cover > 50) { s += 8; why.push("Cloud cover can make fish less shy."); }
+  const now = new Date(c.time).getTime();
+  const near = [...(w.daily.sunrise || []), ...(w.daily.sunset || [])].some((t) => Math.abs(new Date(t).getTime() - now) < 90 * 60000);
+  if (near) { s += 15; why.push("Close to sunrise or sunset, a classic feeding time."); }
+  s = Math.max(5, Math.min(98, s));
+  return { s, label: s >= 80 ? "Great" : s >= 62 ? "Good" : s >= 42 ? "Fair" : "Slow", why, dP };
+}
+const timeOf = (iso) => new Date(iso).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+function viewBite(p) {
+  p.append(el("h1", null, "Bite"));
+  const box = el("div", { class: "stack" });
+  p.append(box);
+  const saved = (() => { try { return JSON.parse(getPref("wx", "null")); } catch { return null; } })();
+  const loadWx = async (loc) => {
+    setPref("wx", JSON.stringify(loc));
+    box.replaceChildren(el("p", { class: "muted" }, "Loading weather for " + loc.name + "…"));
+    try { drawWx(box, await fetchWeather(loc), loc, loadWx); }
+    catch (e) { box.replaceChildren(wxPicker(loadWx, "Couldn't load the weather. Check your internet and try again."), el("p", { class: "muted small" }, String(e.message || e))); }
+  };
+  if (saved && typeof saved.lat === "number") loadWx(saved); else box.append(wxPicker(loadWx));
+  p.append(lureChart());
+}
+function wxPicker(onPick, note) {
+  const q = el("input", { type: "search", placeholder: "Search a town or lake, like Austin", "aria-label": "Search for a place", maxlength: 60 });
+  const res = el("div", { class: "list" });
+  const search = async () => {
+    const name = q.value.trim(); if (name.length < 2) return;
+    res.replaceChildren(el("p", { class: "muted" }, "Searching…"));
+    try {
+      const r = await fetch("https://geocoding-api.open-meteo.com/v1/search?count=5&language=en&name=" + encodeURIComponent(name));
+      const j = await r.json(); const rows = j.results || [];
+      if (!rows.length) { res.replaceChildren(el("p", { class: "muted" }, "Nothing found. Try a bigger town nearby.")); return; }
+      res.replaceChildren(...rows.map((x) => el("button", { class: "item", type: "button",
+        onclick: () => onPick({ lat: Math.round(x.latitude * 100) / 100, lng: Math.round(x.longitude * 100) / 100, name: [x.name, x.admin1].filter(Boolean).join(", ") }) },
+        el("div", { class: "stack", style: "gap:2px" }, el("span", { class: "t" }, x.name), el("span", { class: "s" }, [x.admin1, x.country].filter(Boolean).join(", "))))));
+    } catch { res.replaceChildren(el("p", { class: "muted" }, "Search didn't work. Try again.")); }
+  };
+  q.addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); search(); } });
+  return el("div", { class: "stack" },
+    el("p", { class: "muted" }, note || "Pick where you're fishing to see the weather and a rough bite forecast."),
+    el("button", { class: "btn", type: "button", onclick: () => {
+      if (!navigator.geolocation) { toast("This browser can't share your location."); return; }
+      navigator.geolocation.getCurrentPosition(
+        (pos) => onPick({ lat: Math.round(pos.coords.latitude * 100) / 100, lng: Math.round(pos.coords.longitude * 100) / 100, name: "Your location" }),
+        () => toast("Couldn't get your location. Search for a town instead."), { timeout: 10000 });
+    } }, "Use my location"),
+    el("div", { class: "row" }, q, el("button", { class: "btn small ghost", type: "button", onclick: search }, "Search")), res);
+}
+function drawWx(box, w, loc, onPick) {
+  const c = w.current, h = w.hourly, b = biteScore(w);
+  const i = Math.max(0, h.time.findIndex((t) => t.slice(0, 13) === c.time.slice(0, 13)));
+  const inHg = (c.pressure_msl * 0.02953).toFixed(2);
+  const trend = b.dP <= -1 ? "falling" : b.dP >= 1 ? "rising" : "steady";
+  const next = h.time.slice(i + 1, i + 13).map((t, k) => ({ t, temp: h.temperature_2m[i + 1 + k], rain: h.precipitation_probability[i + 1 + k], code: h.weather_code[i + 1 + k] }));
+  box.replaceChildren(
+    el("div", { class: "row spread" }, el("strong", null, loc.name), el("button", { class: "link", type: "button", onclick: () => box.replaceChildren(wxPicker(onPick)) }, "Change")),
+    el("div", { class: "wx-now" },
+      el("div", { class: "wx-temp" }, Math.round(c.temperature_2m) + "°"),
+      el("div", { class: "stack", style: "gap:2px" }, el("b", null, wxName(c.weather_code)), el("span", { class: "muted" }, `Wind ${Math.round(c.wind_speed_10m)} mph ${compass(c.wind_direction_10m)}`))),
+    el("div", { class: "stats wx" },
+      el("div", null, el("b", null, inHg), el("span", null, "Pressure " + trend)),
+      el("div", null, el("b", null, timeOf(w.daily.sunrise[0])), el("span", null, "Sunrise")),
+      el("div", null, el("b", null, timeOf(w.daily.sunset[0])), el("span", null, "Sunset"))),
+    el("div", { class: "bite" },
+      el("div", { class: "row spread" }, el("b", null, "Bite forecast"), el("span", { class: "bite-label" }, b.label)),
+      el("div", { class: "meter", role: "img", "aria-label": "Bite score " + b.s + " out of 100" }, el("i", { style: "width:" + b.s + "%" })),
+      el("ul", { class: "why" }, b.why.map((x) => el("li", null, x))),
+      el("p", { class: "muted small" }, "A rough guide from pressure, wind, clouds, and time of day. Fish don't read forecasts, so use your own judgment.")),
+    el("div", { class: "hours", "aria-label": "Next 12 hours" }, next.map((x) => el("div", { class: "hr" },
+      el("small", null, new Date(x.t).toLocaleTimeString([], { hour: "numeric" })), el("b", null, Math.round(x.temp) + "°"), el("small", null, (x.rain ?? 0) + "% rain")))),
+    el("p", { class: "muted small" }, "Weather from Open-Meteo. Your location is only used to ask for the forecast and is not saved to your account."));
+}
+
+function lureChart() {
+  const wrap = el("div", { class: "stack", style: "margin-top:8px" });
+  const dayMs = 86400000;
+  const draw = () => {
+    const f = S.biteFilter || (S.biteFilter = { days: 30, species: "" });
+    const since = f.days ? Date.now() - f.days * dayMs : 0;
+    const inWin = S.posts.filter((x) => (x.createdAt?.toMillis?.() ?? Date.now()) >= since && x.lure && String(x.lure).trim());
+    const species = [...new Set(inWin.map((x) => String(x.species).trim()))].sort();
+    if (f.species && !species.includes(f.species)) f.species = "";
+    const rows = inWin.filter((x) => !f.species || String(x.species).trim() === f.species);
+    const groups = new Map();
+    for (const x of rows) {
+      const k = String(x.lure).trim().toLowerCase().replace(/\s+/g, " ");
+      const g = groups.get(k) || { name: (t => t.charAt(0).toUpperCase() + t.slice(1))(String(x.lure).trim().replace(/\s+/g, " ")), n: 0, lb: 0, nlb: 0 };
+      g.n++; if (typeof x.lb === "number" && x.lb > 0) { g.lb += x.lb; g.nlb++; }
+      groups.set(k, g);
+    }
+    const top = [...groups.values()].sort((a, b) => b.n - a.n).slice(0, 8);
+    const max = top[0]?.n || 1;
+    const periods = [[7, "7 days"], [30, "30 days"], [0, "All time"]];
+    wrap.replaceChildren(...[
+      el("h2", null, "What's biting"),
+      el("div", { class: "chips" }, periods.map(([d, label]) => el("button", { class: "chip", type: "button", "aria-pressed": String(f.days === d), onclick: () => { f.days = d; draw(); } }, label))),
+      species.length > 1 ? el("select", { "aria-label": "Fish type", onchange: (e) => { f.species = e.target.value; draw(); } },
+        el("option", { value: "" }, "All fish"), species.map((s) => el("option", { value: s, selected: s === f.species ? "" : null }, s))) : null,
+      top.length ? el("div", { class: "bars", role: "list" }, top.map((g) => el("div", { class: "bar-row", role: "listitem" },
+        el("div", { class: "bar-name" }, g.name, g.nlb ? el("small", null, " · avg " + (g.lb / g.nlb).toFixed(1) + " lb") : null),
+        el("div", { class: "bar-track" }, el("i", { style: "width:" + Math.max(6, Math.round(g.n / max * 85)) + "%" }), el("b", null, String(g.n)))))) :
+        el("p", { class: "empty" }, "No catches with a lure listed in this time. Add the lure when you post a catch and it shows up here."),
+      el("p", { class: "muted small" }, `Counts catches posted in Weigh-In (${rows.length} in this view), so it shows what your community is catching on, not every fish out there. Only the newest 40 catches are loaded.`)].filter(Boolean));
+  };
+  draw();
+  return wrap;
 }
 
 /* ======================= FEED (swipe up/down) ======================= */
@@ -400,12 +549,33 @@ async function shrinkPhoto(file) {
     return out.length < 880000 ? out : "";
   } finally { URL.revokeObjectURL(url); }
 }
-function tourStatus(t) {
-  const today = localDate(new Date());
-  if (today < t.start) return "soon";
-  if (today > t.end) return "final";
-  return "live";
+function tourRange(t) {
+  if (t.startAt && t.endAt) return { s: t.startAt, e: t.endAt };
+  return { s: new Date(t.start + "T00:00:00").getTime(), e: new Date(t.end + "T23:59:59").getTime() };
 }
+function tourStatus(t) { const { s, e } = tourRange(t), now = Date.now(); return now < s ? "soon" : now > e ? "final" : "live"; }
+const phasesOf = (t) => (Array.isArray(t.phases) ? t.phases : []);
+function phaseWindows(t) {
+  let at = tourRange(t).s;
+  return phasesOf(t).map((ph, i) => { const w = { i, s: at, e: at + (ph.mins || 0) * 60000, ph }; at = w.e; return w; });
+}
+function phaseAt(t, ms = Date.now()) { const w = phaseWindows(t).find((x) => ms >= x.s && ms < x.e); return w ? w.i : -1; }
+const lureOk = (rule, lure) => { const r = String(rule || "").trim().toLowerCase(), l = String(lure || "").trim().toLowerCase(); return !r || (!!l && (l.includes(r) || r.includes(l))); };
+const fmtWhen = (ms) => new Date(ms).toLocaleString(undefined, { weekday: "short", month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
+function fmtDur(ms) {
+  const s = Math.max(0, Math.floor(ms / 1000)), d = Math.floor(s / 86400), h = Math.floor((s % 86400) / 3600), m = Math.floor((s % 3600) / 60), x = s % 60;
+  return d ? `${d}d ${h}h ${m}m` : h ? `${h}h ${pad2(m)}m ${pad2(x)}s` : `${m}m ${pad2(x)}s`;
+}
+const dtLocal = (ms) => { const d = new Date(ms); return `${localDate(d)}T${pad2(d.getHours())}:${pad2(d.getMinutes())}`; };
+// Does this catch count? Timed tournaments only count catches inside the time window that follow the phase's lure rule.
+function catchCounts(t, p) {
+  if (!t.startAt) return true;
+  const ms = p.createdAt?.toMillis?.() || 0, { s, e } = tourRange(t);
+  if (ms && (ms < s || ms > e)) return false;
+  const ph = phasesOf(t)[p.phase];
+  return !(ph?.lure && !lureOk(ph.lure, p.lure));
+}
+let tick = null;
 let draftPhoto = "", draftLoc = null;
 function viewPost(p) {
   const myLive = S.tournaments.filter((t) => tourStatus(t) === "live" && (t.members || []).includes(S.user.uid));
@@ -443,6 +613,13 @@ function viewPost(p) {
       : "Optional. Everyone using Weigh-In can see map pins, so skip it for your home or a secret spot.";
   }
   paintLoc();
+  const tourHint = el("span", { class: "hint", id: "f-tour-hint" }, myLive.length ? "Only tournaments you've joined that are happening now show up here." : "Join a tournament in Tourneys to count this catch.");
+  const paintTourHint = (tid) => {
+    const t = myLive.find((x) => x.id === tid);
+    if (!t) { tourHint.textContent = myLive.length ? "Only tournaments you've joined that are happening now show up here." : "Join a tournament in Tourneys to count this catch."; return; }
+    const ph = phasesOf(t)[phaseAt(t)];
+    tourHint.textContent = ph ? `Now: ${ph.name}${ph.where ? " at " + ph.where : ""}${ph.lure ? ". Lure rule: " + ph.lure + " only" : ""}.` : "This catch will count in this tournament.";
+  };
   const f = el("form", { novalidate: true },
     el("div", { class: "field" }, el("span", null, "Photo"), preview, removeBtn),
     el("label", { class: "field" }, el("span", null, "Fish type"),
@@ -457,9 +634,9 @@ function viewPost(p) {
       el("input", { id: "f-spot", name: "spot", maxlength: 40, placeholder: "North cove" })),
     el("div", { class: "field" }, el("span", null, "Where you caught it"), locBtn, precSel, locRemove, locNote),
     el("label", { class: "field" }, el("span", null, "Tournament"),
-      el("select", { id: "f-tour", name: "tour" }, el("option", { value: "" }, "No tournament"),
+      el("select", { id: "f-tour", name: "tour", onchange: (e) => paintTourHint(e.target.value) }, el("option", { value: "" }, "No tournament"),
         myLive.map((t) => el("option", { value: t.id }, t.name))),
-      el("span", { class: "hint" }, myLive.length ? "Only tournaments you've joined that are happening now show up here." : "Join a tournament in Tourneys to count this catch.")),
+      tourHint),
     el("button", { class: "btn wide", type: "submit" }, "Post catch"));
   f.addEventListener("submit", async (e) => {
     e.preventDefault();
@@ -470,6 +647,10 @@ function viewPost(p) {
     if (!lb && !inches) { toast("Add a weight or a length."); return; }
     const tid = String(fd.get("tour") || "");
     const t = S.tournaments.find((x) => x.id === tid);
+    const phaseIdx = t ? phaseAt(t) : -1, rule = t ? phasesOf(t)[phaseIdx] : null;
+    if (rule?.lure && !lureOk(rule.lure, fd.get("lure"))) {
+      if (!confirm(`This phase is "${rule.lure}" only. Your lure doesn't match, so this catch won't count in the tournament. Post it anyway?`)) return;
+    }
     const btn = f.querySelector("button[type=submit]"); btn.disabled = true; btn.textContent = "Posting…";
     try {
       const lure = String(fd.get("lure") || "").trim();
@@ -477,7 +658,7 @@ function viewPost(p) {
         uid: S.user.uid, name: S.name, species, lb, inches,
         lure, spot: String(fd.get("spot") || "").trim(),
         photo: draftPhoto || "", tournamentId: t ? t.id : "", tournamentName: t ? t.name : "",
-        createdAt: serverTimestamp(),
+        phase: phaseIdx, createdAt: serverTimestamp(),
       });
       let pinFailed = false;
       if (draftLoc) {
@@ -514,36 +695,83 @@ function viewTours(p) {
     const st = tourStatus(t), n = (t.members || []).length;
     return el("button", { class: "item", type: "button", onclick: () => openTour(t.id) },
       el("div", { class: "stack", style: "gap:2px;min-width:0" }, el("span", { class: "t" }, t.name),
-        el("span", { class: "s" }, `${SCORING[t.scoring]?.name || ""} · ${fmtDay(t.start)}${t.end !== t.start ? " – " + fmtDay(t.end) : ""} · ${n} angler${n === 1 ? "" : "s"}`)),
+        el("span", { class: "s" }, `${SCORING[t.scoring]?.name || ""} · ${t.startAt ? fmtWhen(t.startAt) : fmtDay(t.start) + (t.end !== t.start ? " – " + fmtDay(t.end) : "")}${phasesOf(t).length ? " · " + phasesOf(t).length + " phases" : ""} · ${n} angler${n === 1 ? "" : "s"}`)),
       el("span", { class: "pill " + st }, { live: "Live", soon: "Upcoming", final: "Final" }[st]));
   })));
 }
 function viewCreateTour(p) {
-  const today = new Date();
+  const start0 = Math.floor(Date.now() / 60000) * 60000; // starts right now unless you change it
+  const phaseRows = [];
+  const phasesBox = el("div", { class: "stack" });
+  const summary = el("span", { class: "hint" });
+  const splitBox = el("input", { type: "checkbox", id: "t-split" });
+  const endField = el("label", { class: "field" }, el("span", null, "Ends"), el("input", { id: "t-end", type: "datetime-local", value: dtLocal(start0 + 3 * 3600000) }));
+  const phaseWrap = el("div", { class: "stack", hidden: true });
+  const startInput = el("input", { id: "t-start", type: "datetime-local", value: dtLocal(start0) });
+  function paintSummary() {
+    const mins = phaseRows.reduce((a, r) => a + (parseInt(r.mins.value) || 0), 0);
+    const st = new Date(startInput.value).getTime();
+    summary.textContent = mins && st ? `Total ${Math.floor(mins / 60)}h ${mins % 60}m. Ends ${fmtWhen(st + mins * 60000)}.` : "Enter the minutes for each phase.";
+  }
+  function addPhase(pre = {}) {
+    const r = {
+      name: el("input", { maxlength: 30, placeholder: "Phase " + (phaseRows.length + 1), value: pre.name || "", "aria-label": "Phase name" }),
+      where: el("input", { maxlength: 40, placeholder: "Lake or spot (optional)", value: pre.where || "", "aria-label": "Lake or spot" }),
+      lure: el("input", { maxlength: 30, placeholder: "Lure rule, like Crankbait (optional)", value: pre.lure || "", "aria-label": "Lure rule" }),
+      mins: el("input", { type: "number", inputmode: "numeric", min: 5, max: 1440, placeholder: "Minutes", value: pre.mins || "", "aria-label": "Minutes", oninput: paintSummary }),
+    };
+    r.card = el("div", { class: "phase-card" },
+      el("div", { class: "row spread" }, el("b", null, "Phase"), el("button", { class: "link danger small", type: "button", onclick: () => {
+        if (phaseRows.length <= 1) { toast("Keep at least one phase, or turn phases off."); return; }
+        phaseRows.splice(phaseRows.indexOf(r), 1); r.card.remove(); paintSummary();
+      } }, "Remove")),
+      r.name, r.where, r.lure, r.mins);
+    phaseRows.push(r); phasesBox.append(r.card); paintSummary();
+  }
+  addPhase({ mins: 60 }); addPhase({ mins: 60 });
+  phaseWrap.append(phasesBox, el("button", { class: "btn ghost small", type: "button", style: "align-self:flex-start", onclick: () => { if (phaseRows.length >= 8) { toast("That's the max of 8 phases."); return; } addPhase({ mins: 60 }); } }, "+ Add phase"), summary);
+  splitBox.addEventListener("change", () => { phaseWrap.hidden = !splitBox.checked; endField.hidden = splitBox.checked; paintSummary(); });
+  startInput.addEventListener("input", paintSummary);
   const f = el("form", { novalidate: true },
     el("label", { class: "field" }, el("span", null, "Name"), el("input", { id: "t-name", name: "name", maxlength: 40, placeholder: "Saturday Bass Bash", required: true })),
-    el("label", { class: "field" }, el("span", null, "How is it scored?"),
-      el("select", { id: "t-scoring", name: "scoring" }, Object.entries(SCORING).map(([k, s]) => el("option", { value: k }, `${s.name}: ${s.desc}`)))),
-    el("div", { class: "two" },
-      el("label", { class: "field" }, el("span", null, "Starts"), el("input", { id: "t-start", type: "date", name: "start", value: localDate(today) })),
-      el("label", { class: "field" }, el("span", null, "Ends"), el("input", { id: "t-end", type: "date", name: "end", value: localDate(new Date(Date.now() + 2 * 864e5)) }))),
+    el("label", { class: "field" }, el("span", null, "How is the leaderboard scored?"),
+      el("select", { id: "t-scoring", name: "scoring" }, Object.entries(SCORING).map(([k, s]) => el("option", { value: k }, `${s.name}: ${s.desc}`))),
+      el("span", { class: "hint" }, "First fish, biggest fish and most fish awards are always shown too.")),
+    el("label", { class: "field" }, el("span", null, "Starts"), startInput),
+    endField,
+    el("label", { class: "row", style: "gap:10px;flex-wrap:nowrap" }, splitBox, el("span", null, "Split into phases (a different lake or lure for each part)")),
+    phaseWrap,
     el("button", { class: "btn wide", type: "submit" }, "Create tournament"));
   f.addEventListener("submit", async (e) => {
     e.preventDefault();
     const fd = new FormData(f);
-    const name = String(fd.get("name") || "").trim(), start = fd.get("start"), end = fd.get("end");
+    const name = String(fd.get("name") || "").trim();
+    const startAt = new Date(startInput.value).getTime();
     if (!name) { toast("Give the tournament a name."); return; }
-    if (!start || !end || end < start) { toast("The end date has to be on or after the start date."); return; }
+    if (!startAt) { toast("Pick a start date and time."); return; }
+    let endAt, phases = [];
+    if (splitBox.checked) {
+      phases = phaseRows.map((r, i) => ({ name: r.name.value.trim() || "Phase " + (i + 1), where: r.where.value.trim(), lure: r.lure.value.trim(), mins: parseInt(r.mins.value) || 0 }));
+      if (phases.some((x) => x.mins < 5 || x.mins > 1440)) { toast("Each phase needs 5 to 1440 minutes."); return; }
+      endAt = startAt + phases.reduce((a, x) => a + x.mins, 0) * 60000;
+    } else {
+      endAt = new Date(f.querySelector("#t-end").value).getTime();
+      if (!endAt || endAt <= startAt) { toast("The end has to be after the start."); return; }
+    }
     try {
-      const ref = await addDoc(collection(db, "tournaments"), { name, scoring: fd.get("scoring"), start, end, createdBy: S.user.uid, createdByName: S.name, members: [S.user.uid], createdAt: serverTimestamp() });
+      const data = { name, scoring: fd.get("scoring"), start: localDate(new Date(startAt)), end: localDate(new Date(endAt)), startAt, endAt,
+        createdBy: S.user.uid, createdByName: S.name, members: [S.user.uid], createdAt: serverTimestamp() };
+      if (phases.length) data.phases = phases;
+      const ref = await addDoc(collection(db, "tournaments"), data);
       S.creatingTour = false; toast("Tournament created. You're in!"); openTour(ref.id);
     } catch (err) { toast(errText(err)); }
   });
   p.append(el("button", { class: "link", type: "button", style: "align-self:flex-start", onclick: () => { S.creatingTour = false; renderTab(); } }, "‹ Back"),
     el("h1", null, "New tournament"), f);
 }
+let phaseFilter = null;
 function openTour(id) {
-  S.openTournament = id; S.viewing = null; S.tourPosts = [];
+  S.openTournament = id; S.viewing = null; S.tourPosts = []; phaseFilter = null;
   tourUnsub?.();
   tourUnsub = onSnapshot(query(collection(db, "posts"), where("tournamentId", "==", id)), (s) => {
     S.tourPosts = s.docs.map((d) => ({ id: d.id, ...d.data({ serverTimestamps: "estimate" }) }));
@@ -551,10 +779,9 @@ function openTour(id) {
   }, () => {});
   renderTab();
 }
-function standings(t) {
+function standings(t, posts) {
   const by = new Map();
-  for (const p of S.tourPosts) {
-    if (!(t.members || []).includes(p.uid)) continue;
+  for (const p of posts) {
     if (!by.has(p.uid)) by.set(p.uid, { uid: p.uid, name: p.name, fish: [] });
     by.get(p.uid).fish.push(p);
   }
@@ -568,26 +795,74 @@ function standings(t) {
   });
   return rows.sort((a, b) => b.score - a.score || b.fish.length - a.fish.length);
 }
+function awardsFor(posts) {
+  if (!posts.length) return null;
+  const ms = (p) => p.createdAt?.toMillis?.() || 0;
+  const first = [...posts].sort((a, b) => ms(a) - ms(b))[0];
+  const big = [...posts].sort((a, b) => (b.lb || 0) - (a.lb || 0) || (b.inches || 0) - (a.inches || 0))[0];
+  const counts = new Map();
+  posts.forEach((p) => { const c = counts.get(p.uid) || { name: p.name, n: 0 }; c.n++; counts.set(p.uid, c); });
+  const most = [...counts.values()].sort((a, b) => b.n - a.n)[0];
+  return { first, big, most };
+}
 function viewTour(p) {
   const t = S.tournaments.find((x) => x.id === S.openTournament);
-  if (!t) { S.openTournament = null; return viewTours(p); }
+  if (!t) { p.append(el("button", { class: "link", type: "button", style: "align-self:flex-start", onclick: () => { S.openTournament = null; tourUnsub?.(); tourUnsub = null; renderTab(); } }, "‹ All tourneys"), el("p", { class: "muted" }, "Loading tournament…")); return; }
   const st = tourStatus(t), joined = (t.members || []).includes(S.user.uid), sc = SCORING[t.scoring] || SCORING.heaviest;
+  const phases = phaseWindows(t), timed = !!t.startAt, range = tourRange(t);
   p.append(el("button", { class: "link", type: "button", style: "align-self:flex-start", onclick: () => { S.openTournament = null; tourUnsub?.(); tourUnsub = null; renderTab(); } }, "‹ All tourneys"),
     el("div", { class: "stack", style: "gap:6px" },
       el("div", { class: "row" }, el("span", { class: "pill " + st }, { live: "Live", soon: "Upcoming", final: "Final" }[st]),
-        el("span", { class: "label" }, `${fmtDay(t.start)}${t.end !== t.start ? " – " + fmtDay(t.end) : ""}`)),
+        el("span", { class: "label" }, timed ? `${fmtWhen(range.s)} to ${fmtWhen(range.e)}` : `${fmtDay(t.start)}${t.end !== t.start ? " – " + fmtDay(t.end) : ""}`)),
       el("h1", null, t.name),
       el("p", { class: "muted", style: "margin:0" }, `${sc.desc}. Started by @${t.createdByName || "someone"}. Only catches posted to this tournament count.`)));
+
+  if (timed) {
+    const lab = el("span", { class: "label" }), big = el("b", { class: "big" }), sub = el("span", { class: "hint" });
+    p.append(el("div", { class: "timer", role: "timer" }, lab, big, sub));
+    let lastKey = "";
+    const upd = () => {
+      const now = Date.now(), status = tourStatus(t), idx = phaseAt(t, now), key = status + idx;
+      if (lastKey && key !== lastKey) { renderTab(); return; }
+      lastKey = key;
+      if (status === "soon") { lab.textContent = "Starts in"; big.textContent = fmtDur(range.s - now); sub.textContent = ""; }
+      else if (status === "final") { lab.textContent = "Finished"; big.textContent = "Time's up"; sub.textContent = ""; }
+      else if (idx >= 0) { lab.textContent = `Phase ${idx + 1} of ${phases.length}: ${phases[idx].ph.name}`; big.textContent = fmtDur(phases[idx].e - now) + " left"; sub.textContent = "Tournament ends in " + fmtDur(range.e - now); }
+      else { lab.textContent = "Time left"; big.textContent = fmtDur(range.e - now); sub.textContent = ""; }
+    };
+    upd(); tick = setInterval(upd, 1000);
+  }
+  if (phases.length) {
+    const nowIdx = phaseAt(t);
+    p.append(el("section", { class: "stack" }, el("h2", null, "Phases"), el("div", { class: "list" }, phases.map((w) =>
+      el("div", { class: "item", style: "cursor:default" },
+        el("div", { class: "stack", style: "gap:2px;min-width:0" }, el("span", { class: "t" }, `${w.i + 1}. ${w.ph.name}`),
+          el("span", { class: "s" }, [w.ph.where || null, w.ph.lure ? w.ph.lure + " only" : "Any lure", `${w.ph.mins} min`].filter(Boolean).join(" · "))),
+        el("span", { class: "pill " + (w.i === nowIdx ? "live" : Date.now() > w.e ? "final" : "soon") }, w.i === nowIdx ? "Now" : Date.now() > w.e ? "Done" : "Next"))))));
+  }
   if (!joined && st !== "final") p.append(el("button", { class: "btn wide", type: "button", onclick: async () => {
     try { await updateDoc(doc(db, "tournaments", t.id), { members: arrayUnion(S.user.uid) }); toast(`You joined ${t.name}!`); }
     catch (err) { toast(errText(err)); }
   } }, "Join this tournament"));
   else if (joined && st === "live") p.append(el("button", { class: "btn wide", type: "button", onclick: () => go("post") }, "Post a catch for this tournament"));
 
-  const rows = standings(t);
+  const members = t.members || [];
+  const counted = S.tourPosts.filter((x) => members.includes(x.uid) && catchCounts(t, x));
+  const scoped = phaseFilter == null ? counted : counted.filter((x) => x.phase === phaseFilter);
+  if (phases.length) p.append(el("div", { class: "chips", role: "group", "aria-label": "Show results for" },
+    [["Overall", null], ...phases.map((w) => [w.ph.name, w.i])].map(([label, v]) =>
+      el("button", { class: "chip", type: "button", "aria-pressed": String(phaseFilter === v), onclick: () => { phaseFilter = v; renderTab(); } }, label))));
+
+  const aw = awardsFor(scoped);
+  p.append(el("section", { class: "awards", "aria-label": "Awards" },
+    el("div", null, el("span", { class: "label" }, "First fish"), el("b", null, aw ? "@" + aw.first.name : "–"), el("span", { class: "hint" }, aw ? `${aw.first.species} · ${ago(aw.first.createdAt)}` : "No fish yet")),
+    el("div", null, el("span", { class: "label" }, "Biggest fish"), el("b", null, aw ? "@" + aw.big.name : "–"), el("span", { class: "hint" }, aw ? `${aw.big.species}, ${sizeText(aw.big)}` : "No fish yet")),
+    el("div", null, el("span", { class: "label" }, "Most fish"), el("b", null, aw ? "@" + aw.most.name : "–"), el("span", { class: "hint" }, aw ? `${aw.most.n} fish` : "No fish yet"))));
+
+  const rows = standings(t, scoped);
   const board = el("section", { class: "board", "aria-label": "Leaderboard" },
-    el("div", { class: "board-h" }, el("h2", null, st === "final" ? "Final standings" : "Leaderboard"), el("span", { class: "label" }, sc.name)));
-  if (!rows.length) board.append(el("p", { class: "empty", style: "padding:14px 16px" }, (t.members || []).length + " joined. No fish posted yet."));
+    el("div", { class: "board-h" }, el("h2", null, st === "final" ? "Final standings" : "Leaderboard"), el("span", { class: "label" }, sc.name + (phaseFilter != null ? " · " + phases[phaseFilter]?.ph.name : ""))));
+  if (!rows.length) board.append(el("p", { class: "empty", style: "padding:14px 16px" }, members.length + " joined. No fish posted yet."));
   else board.append(el("ol", { class: "lb" }, rows.map((r, i) =>
     el("li", { class: r.uid === S.user.uid ? "me" : null, tabindex: 0, onclick: () => { S.viewing = r.uid; renderTab(); } },
       el("span", { class: "place " + (i < 3 ? "p" + (i + 1) : "") }, String(i + 1)),
@@ -597,14 +872,14 @@ function viewTour(p) {
   p.append(board);
 
   const shown = S.viewing ? S.tourPosts.filter((x) => x.uid === S.viewing) : S.tourPosts;
-  const who = S.viewing ? rows.find((r) => r.uid === S.viewing)?.name : null;
+  const who = S.viewing ? rows.find((r) => r.uid === S.viewing)?.name || S.tourPosts.find((x) => x.uid === S.viewing)?.name : null;
   p.append(el("div", { class: "row spread" }, el("h2", null, who ? `@${who}'s catches` : "All catches"),
     who ? el("button", { class: "link", type: "button", onclick: () => { S.viewing = null; renderTab(); } }, "Show everyone") : null));
   const sorted = [...shown].sort((a, b) => (b.createdAt?.toMillis?.() || 0) - (a.createdAt?.toMillis?.() || 0));
   if (!sorted.length) p.append(el("p", { class: "empty" }, "No catches yet."));
   else p.append(el("div", { class: "list" }, sorted.map((c) => el("div", { class: "item", style: "cursor:default" },
     el("div", { class: "stack", style: "gap:2px;min-width:0" }, el("span", { class: "t" }, `${c.species}, ${sizeText(c)}`),
-      el("span", { class: "s" }, `@${c.name} · ${c.lure ? "on " + c.lure + " · " : ""}${ago(c.createdAt)}`)),
+      el("span", { class: "s" }, `@${c.name} · ${c.lure ? "on " + c.lure + " · " : ""}${phasesOf(t)[c.phase] ? phasesOf(t)[c.phase].name + " · " : ""}${ago(c.createdAt)}${members.includes(c.uid) && !catchCounts(t, c) ? " · doesn't count" : ""}`)),
     c.photo ? el("img", { src: c.photo, alt: "", style: "width:56px;height:56px;object-fit:cover;border-radius:8px;flex:none" }) : null))));
   if (t.createdBy === S.user.uid) p.append(el("button", { class: "link danger", type: "button", style: "align-self:flex-start", onclick: async () => {
     if (!confirm("Delete this tournament? Catches stay on the feed.")) return;
@@ -699,12 +974,26 @@ function viewFriends(p) {
       el("span", { class: "t" }, "@" + r.toName),
       el("button", { class: "link", type: "button", onclick: () => deleteDoc(doc(db, "requests", r.id)).catch((e) => toast(errText(e))) }, "Cancel"))))));
 }
+function linkify(text) {
+  return String(text).split(/(https:\/\/[^\s]+)/g).map((part, i) => i % 2
+    ? el("a", { href: part, target: "_blank", rel: "noopener noreferrer" }, part) : part);
+}
 function openChat(fs) {
   const fr = friendOf(fs);
   const list = el("div", { class: "msgs" }, el("p", { class: "muted" }, "Loading…"));
   const input = el("input", { id: "m-text", maxlength: 500, placeholder: `Message @${fr.name}`, autocomplete: "off" });
   const form = el("form", { class: "composer" }, input, el("button", { class: "btn small", type: "submit" }, "Send"));
   const close = () => { un(); bg.remove(); };
+  const send = (text) => addDoc(collection(db, "friendships", fs.id, "messages"), { uid: S.user.uid, text, createdAt: serverTimestamp() });
+  const callRow = el("div", { class: "callrow" },
+    el("button", { class: "btn ghost small", type: "button", id: "m-call", onclick: () => {
+      const bytes = crypto.getRandomValues(new Uint8Array(12));
+      const room = "WeighIn" + [...bytes].map((b) => b.toString(36).padStart(2, "0")).join("");
+      const url = "https://meet.jit.si/" + room;
+      window.open(url, "_blank", "noopener,noreferrer");
+      send("📹 Video call: " + url).catch((err) => toast(errText(err)));
+    } }, "📹 Start video call"),
+    el("button", { class: "link small", type: "button", onclick: () => { window.open("https://meet.google.com/new", "_blank", "noopener,noreferrer"); toast("Start a meeting, copy its link, then paste it here."); } }, "Use Google Meet instead"));
   form.addEventListener("submit", async (e) => {
     e.preventDefault();
     const text = input.value.trim(); if (!text) return;
@@ -714,12 +1003,12 @@ function openChat(fs) {
   });
   const bg = el("div", { class: "sheet-bg" }, el("div", { class: "sheet full", role: "dialog", "aria-label": `Chat with ${fr.name}` },
     el("div", { class: "sheet-h top" }, el("button", { class: "link", type: "button", onclick: close }, "‹ Back"), el("h2", null, "@" + fr.name), el("span")),
-    list, form));
+    list, callRow, form));
   document.body.append(bg);
   const un = onSnapshot(query(collection(db, "friendships", fs.id, "messages"), orderBy("createdAt", "desc"), limit(150)), (s) => {
     const rows = s.docs.map((d) => d.data({ serverTimestamps: "estimate" })).reverse();
     if (!rows.length) { list.replaceChildren(el("p", { class: "muted" }, `Say hi to @${fr.name}!`)); return; }
-    list.replaceChildren(...rows.map((m) => el("div", { class: "msg" + (m.uid === S.user.uid ? " mine" : "") }, m.text)));
+    list.replaceChildren(...rows.map((m) => el("div", { class: "msg" + (m.uid === S.user.uid ? " mine" : "") }, linkify(m.text))));
     list.scrollTop = list.scrollHeight;
   }, () => list.replaceChildren(el("p", { class: "muted" }, "Couldn't load messages.")));
 }
@@ -857,6 +1146,29 @@ function viewSettings(p) {
         el("span", { class: "hint" }, "A pin only goes on the map when you tap “Add my location” on a post. Deleting a post removes its pin.")),
       el("span", { class: "hint" }, "Everyone using Weigh-In can see map pins. Skip the location for your home or a secret spot.")),
     el("section", { class: "stack" },
+      el("button", { class: "btn ghost wide", type: "button", id: "s-about", onclick: openPrivacy }, "About and privacy"),
       el("button", { class: "btn wide", type: "button", onclick: () => { if (confirm("Sign out of Weigh-In?")) signOut(auth); } }, "Sign out")),
     el("p", { class: "hint" }, "Weigh-In is free. Don't post personal info like your address or school."));
+}
+
+
+/* ======================= ABOUT + PRIVACY ======================= */
+function openPrivacy() {
+  const close = () => bg.remove();
+  const item = (title, text) => el("div", { class: "stack", style: "gap:2px" }, el("b", null, title), el("span", null, text));
+  const bg = el("div", { class: "sheet-bg", onclick: (e) => { if (e.target === bg) close(); } },
+    el("div", { class: "sheet", role: "dialog", "aria-label": "About and privacy" },
+      el("div", { class: "sheet-h" }, el("h2", null, "About and privacy"), el("button", { class: "link", type: "button", onclick: close }, "Close")),
+      el("div", { class: "msgs about" },
+        item("Who made this", "Weigh-In is a free hobby app for friends who fish. One person runs it and it has no company or ads behind it. It was built with the help of AI, and the code is public so anyone can read it at github.com/weigh-in/weigh-in."),
+        item("Your password", "The app never sees your password. Google's Firebase service handles sign-in. If you choose Continue with Google, the app only gets your name and email, and never a password."),
+        item("Your email", "Only used to sign you in and to send a password reset. Other anglers can't see it. The person who runs the app can see the emails that signed up."),
+        item("What other people can see", "Your angler name, profile picture, catches, photos, comments, and any map pin you add. Anyone who makes an account can see these."),
+        item("What stays private", "Chats are only seen by you and your friend. Your fishing log is only seen by you."),
+        item("Map pins", "A pin is only added when you tap Add my location on a post. The default is an approximate area of about 1 km. Deleting the post removes the pin."),
+        item("Weather", "The Bite tab asks a free weather service (Open-Meteo) for a forecast using the town you pick or your location if you allow it. That location is not saved to your account."),
+        item("What the app doesn't do", "No ads, no tracking, no selling your info, no payments."),
+        item("Staying safe", "Don't post your address, school, or a spot you want to keep secret. Skip the location on catches near your home."),
+        item("Deleting things", "You can delete any of your catches or comments yourself. To remove your whole account, ask the person who runs the app.")))); 
+  document.body.append(bg);
 }
