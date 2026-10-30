@@ -72,6 +72,8 @@ const ICON = {
   log: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 3h11l3 3v15H5z"/><path d="M9 9h6M9 13h6M9 17h4"/></svg>',
   friends: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20a6.5 6.5 0 0 1 13 0"/><circle cx="17" cy="9" r="2.5"/><path d="M16 14a5 5 0 0 1 6 5"/></svg>',
   chat: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a8 8 0 0 1-11.6 7.1L4 20l1-4.6A8 8 0 1 1 21 12z"/></svg>',
+  map: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s7-6.2 7-12a7 7 0 0 0-14 0c0 5.8 7 12 7 12z"/><circle cx="12" cy="10" r="2.5"/></svg>',
+  me: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/></svg>',
   trash: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13"/></svg>',
 };
 
@@ -86,16 +88,53 @@ const fb = initializeApp(firebaseConfig);
 const auth = getAuth(fb);
 const db = getFirestore(fb);
 
+/* ======================= avatars + photo helpers ======================= */
+const userCache = new Map();
+function getUser(uid) {
+  let v = userCache.get(uid);
+  if (!v) { v = getDoc(doc(db, "users", uid)).then((s) => (s.exists() ? s.data() : {})).catch(() => ({})); userCache.set(uid, v); }
+  return v;
+}
+function hue(str) { let h = 0; for (const ch of String(str)) h = (h * 31 + ch.charCodeAt(0)) % 360; return h; }
+function avatar(uid, name, size = 32) {
+  const n = el("span", { class: "av", style: `--s:${size}px;background:hsl(${hue(name || uid)} 45% 36%)`, "aria-hidden": "true" }, (name || "?")[0].toUpperCase());
+  getUser(uid).then((u) => { if (u?.photo) n.replaceChildren(el("img", { src: u.photo, alt: "" })); });
+  return n;
+}
+function loadImage(src) { return new Promise((res, rej) => { const i = new Image(); i.onload = () => res(i); i.onerror = rej; i.src = src; }); }
+async function squarePhoto(file, size = 256) {
+  const url = URL.createObjectURL(file);
+  try {
+    const img = await loadImage(url);
+    const side = Math.min(img.width, img.height);
+    const c = document.createElement("canvas"); c.width = c.height = size;
+    c.getContext("2d").drawImage(img, (img.width - side) / 2, (img.height - side) / 2, side, side, 0, 0, size, size);
+    return c.toDataURL("image/jpeg", 0.82);
+  } finally { URL.revokeObjectURL(url); }
+}
+async function thumbFrom(dataUrl, max = 160) {
+  try {
+    const i = await loadImage(dataUrl);
+    const sc = Math.min(1, max / Math.max(i.width, i.height));
+    const c = document.createElement("canvas"); c.width = Math.round(i.width * sc); c.height = Math.round(i.height * sc);
+    c.getContext("2d").drawImage(i, 0, 0, c.width, c.height);
+    return c.toDataURL("image/jpeg", 0.6);
+  } catch { return ""; }
+}
+function getPref(k, d) { try { return localStorage.getItem("weighin-" + k) || d; } catch { return d; } }
+function setPref(k, v) { try { localStorage.setItem("weighin-" + k, v); } catch { /* private mode */ } }
+
 /* ======================= app state ======================= */
 const S = {
   user: null, name: "", tab: "feed",
   posts: [], tournaments: [], log: [],
   reqIn: [], reqOut: [], friendships: [],
   openTournament: null, tourPosts: [], viewing: null, creatingTour: false,
+  meView: "main", mine: [], spots: [], map: null, markers: null,
 };
 const unsubs = [];
-let tourUnsub = null;
-function stopAll() { unsubs.splice(0).forEach((u) => u()); tourUnsub?.(); tourUnsub = null; }
+let tourUnsub = null, meUnsub = null;
+function stopAll() { unsubs.splice(0).forEach((u) => u()); tourUnsub?.(); tourUnsub = null; meUnsub?.(); meUnsub = null; destroyMap(); S.mine = []; }
 
 /* ======================= auth screens ======================= */
 const NAME_RE = /^[A-Za-z0-9_]{2,20}$/;
@@ -213,35 +252,41 @@ function startApp() {
   }, () => {}));
   unsubs.push(onSnapshot(query(collection(db, "users", uid, "log"), orderBy("date", "desc")), (s) => {
     S.log = s.docs.map((d) => ({ id: d.id, ...d.data() }));
-    if (S.tab === "log") renderTab();
+    refreshMe("log");
   }, () => {}));
   unsubs.push(onSnapshot(query(collection(db, "requests"), where("to", "==", uid)), (s) => {
     S.reqIn = s.docs.map((d) => ({ id: d.id, ...d.data() }));
-    updateDot(); if (S.tab === "friends") renderTab();
+    updateDot(); refreshMe("friends");
   }, () => {}));
   unsubs.push(onSnapshot(query(collection(db, "requests"), where("from", "==", uid)), (s) => {
     S.reqOut = s.docs.map((d) => ({ id: d.id, ...d.data() }));
-    if (S.tab === "friends") renderTab();
+    refreshMe("friends");
   }, () => {}));
   unsubs.push(onSnapshot(query(collection(db, "friendships"), where("members", "array-contains", uid)), (s) => {
     S.friendships = s.docs.map((d) => ({ id: d.id, ...d.data() }));
-    if (S.tab === "friends") renderTab();
+    refreshMe("friends");
+  }, () => {}));
+  unsubs.push(onSnapshot(query(collection(db, "spots"), orderBy("createdAt", "desc"), limit(300)), (s) => {
+    S.spots = s.docs.map((d) => ({ id: d.id, ...d.data({ serverTimestamps: "estimate" }) }));
+    if (S.tab === "map" && S.map) drawSpots(false);
   }, () => {}));
   buildShell();
 }
+function refreshMe(view) { if (S.tab === "me" && (S.meView === view || S.meView === "main")) renderTab(); }
 
 let $screen, $nav;
 function buildShell() {
   $screen = el("div", { class: "screen" });
-  const tabs = [["feed", "Feed", ICON.feed], ["post", "Post", ICON.plus], ["tours", "Tourneys", ICON.trophy], ["log", "Log", ICON.log], ["friends", "Friends", ICON.friends]];
+  const tabs = [["feed", "Feed", ICON.feed], ["map", "Map", ICON.map], ["post", "Post", ICON.plus], ["tours", "Tourneys", ICON.trophy], ["me", "Me", ICON.me]];
   $nav = el("nav", { class: "tabs", "aria-label": "Sections" }, el("div", { class: "in" }, tabs.map(([k, label, icon]) =>
     el("button", { class: "tab" + (k === "post" ? " post" : ""), type: "button", "data-tab": k, onclick: () => go(k) },
       k === "post" ? el("span", { class: "bob", html: icon }) : el("span", { html: icon }), label,
-      k === "friends" ? el("span", { class: "dot", hidden: true }) : null))));
+      k === "me" ? el("span", { class: "dot", hidden: true }) : null))));
   $app.replaceChildren($screen, $nav);
   go(S.tab);
 }
 function go(tab) {
+  if (tab === "me") S.meView = "main";
   S.tab = tab;
   if (tab !== "tours") { S.openTournament = null; S.creatingTour = false; tourUnsub?.(); tourUnsub = null; }
   $nav.querySelectorAll(".tab").forEach((b) => b.dataset.tab === tab ? b.setAttribute("aria-current", "page") : b.removeAttribute("aria-current"));
@@ -249,10 +294,13 @@ function go(tab) {
 }
 function updateDot() { $nav?.querySelector(".dot")?.toggleAttribute("hidden", S.reqIn.length === 0); }
 function renderTab() {
+  if (S.tab !== "map") destroyMap();
   if (S.tab === "feed") return renderFeed();
+  if (S.tab === "map") return renderMap();
+  if (S.tab === "me") watchMine();
   $screen.className = "screen";
   const p = el("div", { class: "pad" });
-  ({ post: viewPost, tours: viewTours, log: viewLog, friends: viewFriends })[S.tab](p);
+  ({ post: viewPost, tours: viewTours, me: viewMe })[S.tab](p);
   $screen.replaceChildren(p);
   updateDot();
 }
@@ -288,16 +336,21 @@ function makeCard(p) {
     p.photo ? el("img", { src: p.photo, alt: `${p.species} caught by ${p.name}`, loading: "lazy" }) : el("div", { class: "nophoto" }, "No photo"),
     el("div", { class: "shade" }),
     el("div", { class: "info" },
-      el("div", { class: "who" }, "@" + p.name + "  ·  " + ago(p.createdAt)),
+      el("div", { class: "who" }, avatar(p.uid, p.name, 30), el("span", null, "@" + p.name + "  ·  " + ago(p.createdAt))),
       el("div", { class: "species" }, p.species),
       el("div", { class: "size" }, sizeText(p)),
       el("div", { class: "meta" }, [p.lure ? "Caught on " + p.lure : null, p.spot || null, p.tournamentName ? "🏆 " + p.tournamentName : null].filter(Boolean).join("  ·  "))),
     el("div", { class: "side" },
       el("div", null, el("button", { type: "button", "aria-label": "Comments", html: ICON.chat, onclick: () => openComments(p) }), el("small", null, "Comments")),
-      mine ? el("div", null, el("button", { type: "button", "aria-label": "Delete this post", html: ICON.trash, onclick: async () => {
-        if (!confirm("Delete this catch? This can't be undone.")) return;
-        try { await deleteDoc(doc(db, "posts", p.id)); cardCache.delete(p.id); toast("Catch deleted."); } catch (e) { toast(errText(e)); }
-      } }), el("small", null, "Delete")) : null));
+      mine ? el("div", null, el("button", { type: "button", "aria-label": "Delete this post", html: ICON.trash, onclick: () => deletePost(p) }), el("small", null, "Delete")) : null));
+}
+async function deletePost(p) {
+  if (!confirm("Delete this catch? This can't be undone.")) return;
+  try {
+    await deleteDoc(doc(db, "posts", p.id)); cardCache.delete(p.id);
+    deleteDoc(doc(db, "spots", p.id)).catch(() => {}); // its map pin, if it had one
+    toast("Catch deleted.");
+  } catch (e) { toast(errText(e)); }
 }
 
 /* ======================= comments sheet ======================= */
@@ -322,7 +375,7 @@ function openComments(p) {
     const rows = s.docs.map((d) => ({ id: d.id, ...d.data({ serverTimestamps: "estimate" }) }));
     if (!rows.length) { list.replaceChildren(el("p", { class: "muted" }, "No comments yet. Say something nice!")); return; }
     list.replaceChildren(...rows.map((c) => el("div", { class: "comment" },
-      el("div", { class: "row spread" }, el("b", null, "@" + c.name), el("span", { class: "hint" }, ago(c.createdAt))),
+      el("div", { class: "row spread" }, el("span", { class: "row", style: "gap:8px;flex-wrap:nowrap" }, avatar(c.uid, c.name, 24), el("b", null, "@" + c.name)), el("span", { class: "hint" }, ago(c.createdAt))),
       el("span", null, c.text),
       c.uid === S.user.uid ? el("button", { class: "link danger small", type: "button", style: "align-self:flex-start", onclick: () => deleteDoc(doc(db, "posts", p.id, "comments", c.id)).catch((e) => toast(errText(e))) }, "Delete") : null)));
     list.scrollTop = list.scrollHeight;
@@ -353,7 +406,7 @@ function tourStatus(t) {
   if (today > t.end) return "final";
   return "live";
 }
-let draftPhoto = "";
+let draftPhoto = "", draftLoc = null;
 function viewPost(p) {
   const myLive = S.tournaments.filter((t) => tourStatus(t) === "live" && (t.members || []).includes(S.user.uid));
   const preview = el("div", { class: "photo-pick" });
@@ -371,6 +424,25 @@ function viewPost(p) {
     removeBtn.hidden = !draftPhoto;
   }
   paintPhoto();
+  const locNote = el("span", { class: "hint" });
+  const precSel = el("select", { id: "f-prec", name: "prec", "aria-label": "How exact the map pin is", onchange: () => setPref("prec", precSel.value) },
+    el("option", { value: "approx" }, "Approximate area (about 1 km)"), el("option", { value: "exact" }, "Exact spot"));
+  precSel.value = getPref("prec", "approx");
+  const locBtn = el("button", { class: "btn ghost small", type: "button", id: "f-loc", onclick: () => {
+    if (!navigator.geolocation) { toast("This phone can't share location."); return; }
+    locBtn.disabled = true; locBtn.textContent = "Finding you…";
+    navigator.geolocation.getCurrentPosition((pos) => { draftLoc = { lat: pos.coords.latitude, lng: pos.coords.longitude }; locBtn.disabled = false; paintLoc(); },
+      () => { locBtn.disabled = false; paintLoc(); toast("Couldn't get your location. Make sure location is allowed for this app."); },
+      { enableHighAccuracy: true, timeout: 12000, maximumAge: 60000 });
+  } }, "📍 Add my location");
+  const locRemove = el("button", { class: "link", type: "button", style: "align-self:flex-start", onclick: () => { draftLoc = null; paintLoc(); } }, "Remove location");
+  function paintLoc() {
+    locBtn.hidden = !!draftLoc; locBtn.textContent = "📍 Add my location"; locRemove.hidden = !draftLoc; precSel.hidden = !draftLoc;
+    locNote.textContent = draftLoc
+      ? "Location added. Everyone using Weigh-In will see this pin on the map."
+      : "Optional. Everyone using Weigh-In can see map pins, so skip it for your home or a secret spot.";
+  }
+  paintLoc();
   const f = el("form", { novalidate: true },
     el("div", { class: "field" }, el("span", null, "Photo"), preview, removeBtn),
     el("label", { class: "field" }, el("span", null, "Fish type"),
@@ -383,6 +455,7 @@ function viewPost(p) {
       el("input", { id: "f-lure", name: "lure", list: "lures", maxlength: 40, placeholder: "Crankbait", autocomplete: "off" })),
     el("label", { class: "field" }, el("span", null, "Spot (optional)"),
       el("input", { id: "f-spot", name: "spot", maxlength: 40, placeholder: "North cove" })),
+    el("div", { class: "field" }, el("span", null, "Where you caught it"), locBtn, precSel, locRemove, locNote),
     el("label", { class: "field" }, el("span", null, "Tournament"),
       el("select", { id: "f-tour", name: "tour" }, el("option", { value: "" }, "No tournament"),
         myLive.map((t) => el("option", { value: t.id }, t.name))),
@@ -399,13 +472,24 @@ function viewPost(p) {
     const t = S.tournaments.find((x) => x.id === tid);
     const btn = f.querySelector("button[type=submit]"); btn.disabled = true; btn.textContent = "Posting…";
     try {
-      await addDoc(collection(db, "posts"), {
+      const lure = String(fd.get("lure") || "").trim();
+      const ref = await addDoc(collection(db, "posts"), {
         uid: S.user.uid, name: S.name, species, lb, inches,
-        lure: String(fd.get("lure") || "").trim(), spot: String(fd.get("spot") || "").trim(),
+        lure, spot: String(fd.get("spot") || "").trim(),
         photo: draftPhoto || "", tournamentId: t ? t.id : "", tournamentName: t ? t.name : "",
         createdAt: serverTimestamp(),
       });
-      draftPhoto = ""; toast(`Posted your ${species}!`); go("feed");
+      let pinFailed = false;
+      if (draftLoc) {
+        const exact = fd.get("prec") === "exact";
+        const r = (n) => (exact ? Math.round(n * 1e5) / 1e5 : Math.round(n * 100) / 100); // 2 decimals is roughly 1 km
+        try {
+          await setDoc(doc(db, "spots", ref.id), { uid: S.user.uid, name: S.name, species, lb, inches, lure, lat: r(draftLoc.lat), lng: r(draftLoc.lng),
+            precise: exact, thumb: draftPhoto ? await thumbFrom(draftPhoto) : "", createdAt: serverTimestamp() });
+        } catch { pinFailed = true; }
+      }
+      draftPhoto = ""; draftLoc = null;
+      toast(pinFailed ? `Posted your ${species}, but the map pin didn't save.` : `Posted your ${species}!`); go("feed");
     } catch (err) { toast(errText(err)); btn.disabled = false; btn.textContent = "Post catch"; }
   });
   p.append(el("h1", null, "Post a catch"), f);
@@ -507,7 +591,7 @@ function viewTour(p) {
   else board.append(el("ol", { class: "lb" }, rows.map((r, i) =>
     el("li", { class: r.uid === S.user.uid ? "me" : null, tabindex: 0, onclick: () => { S.viewing = r.uid; renderTab(); } },
       el("span", { class: "place " + (i < 3 ? "p" + (i + 1) : "") }, String(i + 1)),
-      el("div", { style: "min-width:0" }, el("div", { style: "font-weight:700;overflow-wrap:anywhere" }, "@" + r.name + (r.uid === S.user.uid ? " (you)" : "")),
+      el("div", { style: "min-width:0" }, el("div", { class: "row", style: "gap:8px;flex-wrap:nowrap;font-weight:700;overflow-wrap:anywhere" }, avatar(r.uid, r.name, 24), el("span", null, "@" + r.name + (r.uid === S.user.uid ? " (you)" : ""))),
         el("div", { class: "hint" }, `${r.fish.length} fish · tap to see them`)),
       el("span", { class: "score" }, `${r.score} ${sc.unit}`)))));
   p.append(board);
@@ -600,7 +684,7 @@ function viewFriends(p) {
     el("div", { class: "stack" }, el("h2", null, "Add a friend"), f, el("span", { class: "hint" }, "Ask your friend for their exact angler name.")));
   if (S.reqIn.length) p.append(el("div", { class: "stack" }, el("h2", null, "Friend requests"),
     el("div", { class: "list" }, S.reqIn.map((r) => el("div", { class: "item", style: "cursor:default" },
-      el("span", { class: "t" }, "@" + r.fromName),
+      el("span", { class: "row", style: "gap:10px;flex-wrap:nowrap" }, avatar(r.from, r.fromName, 34), el("span", { class: "t" }, "@" + r.fromName)),
       el("div", { class: "row" },
         el("button", { class: "btn small", type: "button", onclick: () => acceptRequest(r) }, "Accept"),
         el("button", { class: "link", type: "button", onclick: () => deleteDoc(doc(db, "requests", r.id)).catch((e) => toast(errText(e))) }, "Decline")))))));
@@ -608,13 +692,12 @@ function viewFriends(p) {
     S.friendships.length ? el("div", { class: "list" }, S.friendships.map((fs) => {
       const fr = friendOf(fs);
       return el("button", { class: "item", type: "button", onclick: () => openChat(fs) },
-        el("span", { class: "t" }, "@" + fr.name), el("span", { class: "label" }, "Chat ›"));
+        el("span", { class: "row", style: "gap:10px;flex-wrap:nowrap" }, avatar(fr.uid, fr.name, 34), el("span", { class: "t" }, "@" + fr.name)), el("span", { class: "label" }, "Chat ›"));
     })) : el("p", { class: "empty" }, "No friends yet. Add someone above.")));
   if (S.reqOut.length) p.append(el("div", { class: "stack" }, el("h2", null, "Waiting for them to accept"),
     el("div", { class: "list" }, S.reqOut.map((r) => el("div", { class: "item", style: "cursor:default" },
       el("span", { class: "t" }, "@" + r.toName),
       el("button", { class: "link", type: "button", onclick: () => deleteDoc(doc(db, "requests", r.id)).catch((e) => toast(errText(e))) }, "Cancel"))))));
-  p.append(el("button", { class: "link", type: "button", style: "align-self:flex-start;margin-top:12px", onclick: () => { if (confirm("Sign out of Weigh-In?")) signOut(auth); } }, "Sign out"));
 }
 function openChat(fs) {
   const fr = friendOf(fs);
@@ -639,4 +722,141 @@ function openChat(fs) {
     list.replaceChildren(...rows.map((m) => el("div", { class: "msg" + (m.uid === S.user.uid ? " mine" : "") }, m.text)));
     list.scrollTop = list.scrollHeight;
   }, () => list.replaceChildren(el("p", { class: "muted" }, "Couldn't load messages.")));
+}
+
+
+/* ======================= MAP ======================= */
+let leafletP, mapToken = 0;
+function loadLeaflet() {
+  if (window.L) return Promise.resolve(window.L);
+  leafletP ||= new Promise((res, rej) => {
+    document.head.append(el("link", { rel: "stylesheet", href: "https://unpkg.com/leaflet@1.9.4/dist/leaflet.css", integrity: "sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=", crossorigin: "" }));
+    document.head.append(el("script", { src: "https://unpkg.com/leaflet@1.9.4/dist/leaflet.js", integrity: "sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=", crossorigin: "",
+      onload: () => res(window.L), onerror: () => { leafletP = null; rej(new Error("leaflet")); } }));
+  });
+  return leafletP;
+}
+function destroyMap() { mapToken++; if (S.map) { S.map.remove(); S.map = null; S.markers = null; } }
+function renderMap() {
+  $screen.className = "screen feed-wrap";
+  const box = el("div", { class: "map", id: "map" });
+  const note = el("div", { class: "map-note", id: "map-note" }, "Loading map…");
+  $screen.replaceChildren(el("div", { class: "map-top" }, "Catch map"), box, note);
+  const token = ++mapToken;
+  loadLeaflet().then((L) => {
+    if (S.tab !== "map" || token !== mapToken) return;
+    S.map = L.map(box).setView([39.5, -98.35], 4);
+    L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", { maxZoom: 19,
+      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>' }).addTo(S.map);
+    S.markers = L.layerGroup().addTo(S.map);
+    drawSpots(true);
+    setTimeout(() => S.map?.invalidateSize(), 60);
+  }).catch(() => { note.textContent = "Couldn't load the map. Check your connection and try again."; });
+}
+function spotPopup(s) {
+  return el("div", { class: "pop" },
+    s.thumb ? el("img", { src: s.thumb, alt: `${s.species} caught by ${s.name}` }) : null,
+    el("b", null, s.species), el("span", null, sizeText(s)),
+    el("span", { class: "hint" }, `@${s.name} · ${ago(s.createdAt)}`),
+    s.lure ? el("span", { class: "hint" }, "Caught on " + s.lure) : null,
+    s.precise ? null : el("span", { class: "hint" }, "Approximate area"));
+}
+function drawSpots(fit) {
+  const L = window.L, note = document.getElementById("map-note");
+  if (!L || !S.map || !S.markers) return;
+  S.markers.clearLayers();
+  const pts = [];
+  for (const s of S.spots) {
+    if (typeof s.lat !== "number" || typeof s.lng !== "number") continue;
+    pts.push([s.lat, s.lng]);
+    L.marker([s.lat, s.lng], { title: `${s.species} by @${s.name}`, icon: L.divIcon({ className: "bob-pin", html: "<span></span>", iconSize: [28, 28], iconAnchor: [14, 14], popupAnchor: [0, -12] }) })
+      .bindPopup(spotPopup(s)).addTo(S.markers);
+  }
+  if (note) {
+    note.hidden = pts.length > 0;
+    note.textContent = "No catches with a location yet. When you post a catch, tap “Add my location” to put it on the map.";
+  }
+  if (fit && pts.length) S.map.fitBounds(L.latLngBounds(pts).pad(0.25), { maxZoom: 12 });
+}
+
+/* ======================= ME (profile, log, friends, settings) ======================= */
+function watchMine() {
+  if (meUnsub) return;
+  meUnsub = onSnapshot(query(collection(db, "posts"), where("uid", "==", S.user.uid), limit(60)), (s) => {
+    S.mine = s.docs.map((d) => ({ id: d.id, ...d.data({ serverTimestamps: "estimate" }) }));
+    if (S.tab === "me" && S.meView === "main") renderTab();
+  }, () => {});
+}
+async function setMyPhoto(file) {
+  if (!file) return;
+  toast("Updating your picture…");
+  try {
+    const photo = await squarePhoto(file);
+    await updateDoc(doc(db, "users", S.user.uid), { photo });
+    userCache.delete(S.user.uid); cardCache.clear();
+    toast("Profile picture updated."); renderTab();
+  } catch (e) { toast(e?.code ? errText(e) : "Couldn't read that photo. Try another."); }
+}
+async function clearMyPhoto() {
+  try { await updateDoc(doc(db, "users", S.user.uid), { photo: "" }); userCache.delete(S.user.uid); cardCache.clear(); toast("Profile picture removed."); renderTab(); }
+  catch (e) { toast(errText(e)); }
+}
+const photoInput = (id, label) => el("input", { type: "file", accept: "image/*", id, "aria-label": label, onchange: (e) => { const f = e.target.files?.[0]; e.target.value = ""; setMyPhoto(f); } });
+const backBtn = (text) => el("button", { class: "link", type: "button", style: "align-self:flex-start", onclick: () => { S.meView = "main"; renderTab(); } }, text);
+
+function viewMe(p) {
+  if (S.meView === "log") { p.append(backBtn("‹ Profile")); return viewLog(p); }
+  if (S.meView === "friends") { p.append(backBtn("‹ Profile")); return viewFriends(p); }
+  if (S.meView === "settings") return viewSettings(p);
+  const mine = [...S.mine].sort((a, b) => (b.createdAt?.toMillis?.() || 0) - (a.createdAt?.toMillis?.() || 0));
+  const biggest = Math.max(0, ...mine.map((x) => x.lb || 0));
+  const pins = S.spots.filter((s) => s.uid === S.user.uid).length;
+  const open = (v) => () => { S.meView = v; renderTab(); };
+  p.append(
+    el("div", { class: "profile-head" },
+      el("div", { class: "av-edit" }, avatar(S.user.uid, S.name, 96), photoInput("me-photo", "Change profile picture")),
+      el("div", { class: "stack", style: "gap:2px;min-width:0" }, el("h1", { style: "overflow-wrap:anywhere" }, "@" + S.name),
+        el("span", { class: "hint" }, "Tap your picture to change it"))),
+    el("div", { class: "stats" },
+      el("div", null, el("b", null, String(mine.length)), el("span", null, "Catches")),
+      el("div", null, el("b", null, biggest ? fmtLb(biggest) : "–"), el("span", null, "Biggest")),
+      el("div", null, el("b", null, String(pins)), el("span", null, "Map pins"))),
+    el("div", { class: "list" },
+      el("button", { class: "item", type: "button", onclick: open("friends") },
+        el("span", { class: "row", style: "gap:10px" }, el("span", { class: "t" }, "Friends and chat"), S.reqIn.length ? el("span", { class: "pill live" }, `${S.reqIn.length} new`) : null), el("span", { class: "label" }, "›")),
+      el("button", { class: "item", type: "button", onclick: open("log") }, el("span", { class: "t" }, "My fishing log"), el("span", { class: "label" }, "›")),
+      el("button", { class: "item", type: "button", onclick: open("settings") }, el("span", { class: "t" }, "Settings"), el("span", { class: "label" }, "›"))),
+    el("h2", null, "My catches"));
+  if (!mine.length) { p.append(el("p", { class: "empty" }, "You haven't posted a catch yet. Tap the red Post button.")); return; }
+  p.append(el("div", { class: "list" }, mine.map((c) => el("div", { class: "item", style: "cursor:default" },
+    el("div", { class: "row", style: "gap:12px;flex-wrap:nowrap;min-width:0" },
+      c.photo ? el("img", { src: c.photo, alt: "", style: "width:56px;height:56px;object-fit:cover;border-radius:8px;flex:none" }) : null,
+      el("div", { class: "stack", style: "gap:2px;min-width:0" }, el("span", { class: "t" }, `${c.species}, ${sizeText(c)}`),
+        el("span", { class: "s" }, `${c.lure ? "on " + c.lure + " · " : ""}${ago(c.createdAt)}`))),
+    el("button", { class: "link danger small", type: "button", onclick: () => deletePost(c) }, "Delete")))));
+}
+
+function viewSettings(p) {
+  const prec = el("select", { id: "s-prec", onchange: () => setPref("prec", prec.value) },
+    el("option", { value: "approx" }, "Approximate area (about 1 km)"), el("option", { value: "exact" }, "Exact spot"));
+  prec.value = getPref("prec", "approx");
+  p.append(backBtn("‹ Profile"), el("h1", null, "Settings"),
+    el("section", { class: "stack" }, el("h2", null, "Profile picture"),
+      el("div", { class: "row", style: "gap:14px" }, avatar(S.user.uid, S.name, 64),
+        el("label", { class: "btn ghost small", style: "position:relative;overflow:hidden" }, "Change picture", photoInput("set-photo", "Change profile picture")),
+        el("button", { class: "link", type: "button", onclick: clearMyPhoto }, "Remove"))),
+    el("section", { class: "stack" }, el("h2", null, "Account"),
+      el("div", { class: "kv" }, el("span", null, "Angler name"), el("b", null, "@" + S.name)),
+      el("div", { class: "kv" }, el("span", null, "Email"), el("b", null, auth.currentUser?.email || "")),
+      el("span", { class: "hint" }, "Your angler name can't be changed."),
+      el("button", { class: "btn ghost small", type: "button", style: "align-self:flex-start", onclick: async () => {
+        try { await sendPasswordResetEmail(auth, auth.currentUser.email); toast("Check your email for a reset link."); } catch (e) { toast(errText(e)); }
+      } }, "Email me a password reset link")),
+    el("section", { class: "stack" }, el("h2", null, "Map pins"),
+      el("label", { class: "field" }, el("span", null, "How exact should my pins be?"), prec,
+        el("span", { class: "hint" }, "A pin only goes on the map when you tap “Add my location” on a post. Deleting a post removes its pin.")),
+      el("span", { class: "hint" }, "Everyone using Weigh-In can see map pins. Skip the location for your home or a secret spot.")),
+    el("section", { class: "stack" },
+      el("button", { class: "btn wide", type: "button", onclick: () => { if (confirm("Sign out of Weigh-In?")) signOut(auth); } }, "Sign out")),
+    el("p", { class: "hint" }, "Weigh-In is free. Don't post personal info like your address or school."));
 }
