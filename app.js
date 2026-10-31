@@ -1630,6 +1630,7 @@ function viewMe(p) {
       el("button", { class: "item", type: "button", onclick: open("friends") },
         el("span", { class: "row", style: "gap:10px" }, el("span", { class: "t" }, "Friends and chat"), S.reqIn.length ? el("span", { class: "pill live" }, `${S.reqIn.length} new`) : null), el("span", { class: "label" }, "›")),
       el("button", { class: "item", type: "button", onclick: open("log") }, el("span", { class: "t" }, "My fishing log"), el("span", { class: "label" }, "›")),
+      el("button", { class: "item", type: "button", id: "me-game", onclick: openFishGame }, el("span", { class: "t" }, "Fishing game"), el("span", { class: "label" }, "🎣")),
       isStaff() ? el("button", { class: "item", type: "button", onclick: open("owner") }, el("span", { class: "t" }, S.owner ? "Owner tools" : "Moderator tools"), el("span", { class: "label" }, "›")) : null,
       el("button", { class: "item", type: "button", onclick: open("settings") }, el("span", { class: "t" }, "Settings"), el("span", { class: "label" }, "›"))),
     el("h2", null, "My catches"));
@@ -1703,6 +1704,119 @@ function openInstallHelp() {
         el("p", { class: "muted" }, "Your browser doesn't let a button do this automatically, so here are the steps:"),
         el("ol", { style: "margin:0;padding-left:20px;display:flex;flex-direction:column;gap:6px" }, steps.map((x) => el("li", null, x))))));
   document.body.append(bg);
+}
+
+
+/* ======================= FISHING GAME (Reel Rush) ======================= */
+function openFishGame() {
+  const best0 = +getPref("gamebest", "0") || 0;
+  const canvas = el("canvas", { class: "game-canvas", role: "img", "aria-label": "Fishing game. Drag your finger or mouse, or use the arrow keys, to move the hook into fish." });
+  const ctx = canvas.getContext("2d");
+  const hud = el("div", { class: "game-hud", "aria-live": "off" });
+  const close = () => { cancelAnimationFrame(raf); removeEventListener("keydown", onKey); removeEventListener("resize", resize); bg.remove(); };
+  const bg = el("div", { class: "game-bg", role: "dialog", "aria-label": "Fishing game" },
+    canvas, hud, el("button", { class: "game-x", type: "button", "aria-label": "Close the game", onclick: close }, "✕"));
+  document.body.append(bg);
+  let W = 0, H = 0, raf = 0, dpr = 1;
+  const resize = () => { dpr = Math.min(2, devicePixelRatio || 1); W = bg.clientWidth; H = bg.clientHeight; canvas.width = W * dpr; canvas.height = H * dpr; canvas.style.width = W + "px"; canvas.style.height = H + "px"; ctx.setTransform(dpr, 0, 0, dpr, 0, 0); };
+  resize(); addEventListener("resize", resize);
+  const TYPES = [
+    { n: "Minnow", pts: 2, r: 13, sp: 150, c: "#9fd3e6", w: 5 },
+    { n: "Bass", pts: 5, r: 19, sp: 110, c: "#5f8f3a", w: 4 },
+    { n: "Catfish", pts: 8, r: 25, sp: 70, c: "#7a6a58", w: 2 },
+    { n: "Golden carp", pts: 20, r: 20, sp: 190, c: "#f0b429", w: 1 },
+    { n: "Old boot", pts: -5, r: 17, sp: 90, c: "#6b4a2b", w: 2, boot: true }];
+  const hook = { x: 0, y: 0, tx: 0, ty: 0 };
+  let st = "ready", fish = [], pops = [], score = 0, left = 45, last = 0, combo = 0, comboT = 0, spawnT = 0, shake = 0, t0 = 0;
+  const waterY = () => Math.max(110, H * 0.2);
+  const place = (x, y) => { hook.tx = Math.max(16, Math.min(W - 16, x)); hook.ty = Math.max(waterY() + 20, Math.min(H - 16, y)); };
+  hook.x = hook.tx = W / 2; hook.y = hook.ty = H * 0.5;
+  const rel = (e) => { const r = canvas.getBoundingClientRect(); return [e.clientX - r.left, e.clientY - r.top]; };
+  canvas.addEventListener("pointermove", (e) => { const [x, y] = rel(e); place(x, y); });
+  canvas.addEventListener("pointerdown", (e) => { canvas.setPointerCapture?.(e.pointerId); const [x, y] = rel(e); place(x, y); if (st !== "play") start(); });
+  const onKey = (e) => {
+    if (e.key === "Escape") { close(); return; }
+    const d = 40, k = { ArrowLeft: [-d, 0], ArrowRight: [d, 0], ArrowUp: [0, -d], ArrowDown: [0, d] }[e.key];
+    if (k) { e.preventDefault(); place(hook.tx + k[0], hook.ty + k[1]); }
+    else if ((e.key === "Enter" || e.key === " ") && st !== "play") { e.preventDefault(); start(); }
+  };
+  addEventListener("keydown", onKey);
+  function start() { st = "play"; fish = []; pops = []; score = 0; left = 45; combo = 0; comboT = 0; spawnT = 0; last = performance.now(); t0 = last; hud.replaceChildren(); }
+  function spawn() {
+    const total = TYPES.reduce((a, t) => a + t.w, 0); let r = Math.random() * total, t = TYPES[0];
+    for (const x of TYPES) { if ((r -= x.w) <= 0) { t = x; break; } }
+    const dir = Math.random() < 0.5 ? 1 : -1, wy = waterY();
+    fish.push({ t, dir, x: dir > 0 ? -40 : W + 40, y: wy + 40 + Math.random() * (H - wy - 70), v: t.sp * (0.8 + Math.random() * 0.5) * (1 + (45 - left) / 90), ph: Math.random() * 6 });
+  }
+  function drawFish(f) {
+    const { t, dir } = f, r = t.r;
+    ctx.save(); ctx.translate(f.x, f.y + Math.sin(performance.now() / 250 + f.ph) * 3); ctx.scale(dir, 1);
+    if (t.boot) {
+      ctx.fillStyle = t.c; ctx.fillRect(-r * 0.4, -r, r * 0.8, r * 1.5); ctx.beginPath(); ctx.ellipse(r * 0.2, r * 0.5, r * 1, r * 0.5, 0, 0, 7); ctx.fill();
+      ctx.fillStyle = "#3d2a17"; ctx.fillRect(-r * 0.4, -r, r * 0.8, r * 0.3);
+    } else {
+      ctx.fillStyle = t.c; ctx.beginPath(); ctx.ellipse(0, 0, r, r * 0.62, 0, 0, 7); ctx.fill();
+      ctx.beginPath(); ctx.moveTo(-r * 0.8, 0); ctx.lineTo(-r * 1.5, -r * 0.5); ctx.lineTo(-r * 1.5, r * 0.5); ctx.closePath(); ctx.fill();
+      ctx.fillStyle = "rgba(255,255,255,.35)"; ctx.beginPath(); ctx.ellipse(0, r * 0.2, r * 0.7, r * 0.22, 0, 0, 7); ctx.fill();
+      ctx.fillStyle = "#fff"; ctx.beginPath(); ctx.arc(r * 0.55, -r * 0.12, r * 0.2, 0, 7); ctx.fill();
+      ctx.fillStyle = "#111"; ctx.beginPath(); ctx.arc(r * 0.6, -r * 0.12, r * 0.09, 0, 7); ctx.fill();
+    }
+    ctx.restore();
+  }
+  function frame(now) {
+    raf = requestAnimationFrame(frame);
+    const dt = Math.min(0.05, (now - (last || now)) / 1000); last = now;
+    hook.x += (hook.tx - hook.x) * Math.min(1, dt * 14); hook.y += (hook.ty - hook.y) * Math.min(1, dt * 14);
+    const wy = waterY();
+    if (st === "play") {
+      left -= dt; spawnT -= dt; comboT -= dt; if (comboT <= 0) combo = 0;
+      if (spawnT <= 0) { spawn(); spawnT = 0.45 + Math.random() * 0.5; }
+      for (const f of fish) f.x += f.dir * f.v * dt;
+      for (const f of [...fish]) {
+        if (Math.hypot(f.x - hook.x, f.y - hook.y) < f.t.r + 9) {
+          fish.splice(fish.indexOf(f), 1);
+          if (f.t.pts > 0) { combo = comboT > 0 ? Math.min(4, combo + 1) : 1; comboT = 1.6; const g = f.t.pts * combo; score += g; pops.push({ x: f.x, y: f.y, s: "+" + g + (combo > 1 ? " x" + combo : ""), a: 1, c: "#fff" }); }
+          else { score = Math.max(0, score + f.t.pts); combo = 0; shake = 0.3; pops.push({ x: f.x, y: f.y, s: String(f.t.pts), a: 1, c: "#ff8a80" }); }
+        }
+      }
+      fish = fish.filter((f) => f.x > -80 && f.x < W + 80);
+      if (left <= 0) { left = 0; st = "over"; const best = Math.max(best0, +getPref("gamebest", "0") || 0); if (score > best) setPref("gamebest", String(score)); }
+    }
+    shake = Math.max(0, shake - dt);
+    ctx.save(); if (shake > 0) ctx.translate((Math.random() - 0.5) * 8, (Math.random() - 0.5) * 8);
+    const sky = ctx.createLinearGradient(0, 0, 0, wy); sky.addColorStop(0, "#ffd9a0"); sky.addColorStop(1, "#cfe8ef");
+    ctx.fillStyle = sky; ctx.fillRect(0, 0, W, wy);
+    const wg = ctx.createLinearGradient(0, wy, 0, H); wg.addColorStop(0, "#3a9bb5"); wg.addColorStop(1, "#0e3f4f");
+    ctx.fillStyle = wg; ctx.fillRect(0, wy, W, H - wy);
+    ctx.strokeStyle = "rgba(255,255,255,.35)"; ctx.lineWidth = 2; ctx.beginPath();
+    for (let x = 0; x <= W; x += 12) ctx.lineTo(x, wy + Math.sin(x / 22 + now / 400) * 2.5); ctx.stroke();
+    // boat + line
+    const bx = hook.x; ctx.fillStyle = "#7a4a22"; ctx.beginPath(); ctx.moveTo(bx - 46, wy - 16); ctx.lineTo(bx + 46, wy - 16); ctx.lineTo(bx + 32, wy + 2); ctx.lineTo(bx - 32, wy + 2); ctx.closePath(); ctx.fill();
+    ctx.strokeStyle = "#f4f1ea"; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.moveTo(bx + 10, wy - 16); ctx.lineTo(bx + 10, wy - 46); ctx.lineTo(bx, wy - 16); ctx.stroke();
+    ctx.strokeStyle = "rgba(255,255,255,.8)"; ctx.beginPath(); ctx.moveTo(bx + 10, wy - 46); ctx.lineTo(hook.x, hook.y - 8); ctx.stroke();
+    fish.forEach(drawFish);
+    ctx.strokeStyle = "#e8e8e8"; ctx.lineWidth = 3; ctx.beginPath(); ctx.arc(hook.x, hook.y, 8, 0.2, Math.PI * 1.3, false); ctx.stroke();
+    pops = pops.filter((p) => (p.a -= dt * 1.2) > 0);
+    ctx.font = "bold 20px system-ui,sans-serif"; ctx.textAlign = "center";
+    for (const p of pops) { ctx.globalAlpha = p.a; ctx.fillStyle = p.c; ctx.fillText(p.s, p.x, p.y - (1 - p.a) * 40); } ctx.globalAlpha = 1;
+    ctx.restore();
+    // HUD
+    ctx.fillStyle = "#fff"; ctx.textAlign = "left"; ctx.font = "bold 22px system-ui,sans-serif";
+    ctx.shadowColor = "rgba(0,0,0,.5)"; ctx.shadowBlur = 4;
+    ctx.fillText("Score " + score, 16, 38); ctx.textAlign = "right"; ctx.fillText(Math.ceil(left) + "s", W - 64, 38);
+    ctx.textAlign = "center"; ctx.font = "16px system-ui,sans-serif"; ctx.fillText("Best " + Math.max(best0, +getPref("gamebest", "0") || 0), W / 2, 38);
+    if (st !== "play") {
+      ctx.shadowBlur = 0; ctx.fillStyle = "rgba(6,30,40,.72)"; ctx.fillRect(0, H * 0.28, W, H * 0.4);
+      ctx.fillStyle = "#fff"; ctx.textAlign = "center"; ctx.font = "bold 34px Georgia,serif";
+      ctx.fillText(st === "ready" ? "Reel Rush" : "Time's up!", W / 2, H * 0.28 + 56);
+      ctx.font = "18px system-ui,sans-serif";
+      if (st === "ready") { ctx.fillText("Drag to move your hook into fish.", W / 2, H * 0.28 + 96); ctx.fillText("Catch fast for combos. Dodge the old boots!", W / 2, H * 0.28 + 124); }
+      else { ctx.fillText("You scored " + score + (score >= (+getPref("gamebest", "0") || 0) && score > 0 ? " · new best!" : ""), W / 2, H * 0.28 + 96); }
+      ctx.font = "bold 20px system-ui,sans-serif"; ctx.fillStyle = "#ffd36b"; ctx.fillText(st === "ready" ? "Tap to start" : "Tap to play again", W / 2, H * 0.28 + 172);
+    }
+    ctx.shadowBlur = 0;
+  }
+  raf = requestAnimationFrame(frame);
 }
 
 /* ======================= ABOUT + PRIVACY ======================= */
