@@ -413,6 +413,62 @@ function biteScore(w) {
   return { s, label: s >= 80 ? "Great" : s >= 62 ? "Good" : s >= 42 ? "Fair" : "Slow", why, dP };
 }
 const timeOf = (iso) => new Date(iso).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+function windRating(mph) { return mph < 8 ? ["good", "Good"] : mph <= 15 ? ["ok", "Okay"] : ["bad", "Tough"]; }
+function pressureRating(dP) {
+  if (dP <= -1 && dP > -4) return ["good", "Good"];
+  if (Math.abs(dP) < 1) return ["good", "Good"];
+  if (dP <= -4) return ["ok", "Front coming"];
+  if (dP >= 4) return ["bad", "Slow"];
+  return ["ok", "Okay"];
+}
+function condTile(name, big, sub, [cls, word]) {
+  return el("div", { class: "cond" },
+    el("span", { class: "cond-n" }, name),
+    el("b", { class: "cond-v" }, big),
+    el("span", { class: "cond-s" }, sub),
+    el("span", { class: "tag " + cls }, word));
+}
+/* Rules of thumb only. Fish don't follow a schedule. */
+const FISH_TIPS = [
+  { n: "Largemouth bass", when: ["dawn", "dusk"], tip: "Bites best at first and last light, and on cloudy days. In hot weather they sit in shade and cover at midday. A slow pressure drop before a front often turns them on." },
+  { n: "Catfish", when: ["dusk", "night"], tip: "Mostly feed at night and in the evening. Warm water and a little rise after rain help. Fish deep holes by day, shallows after dark." },
+  { n: "Crappie", when: ["dawn", "dusk"], tip: "Early morning and evening, near brush, docks and fallen trees. Calm, steady weather is best." },
+  { n: "Walleye", when: ["dawn", "dusk", "night"], tip: "Low light is their time: dawn, dusk and after dark. Cloud and a light chop make them bolder in daytime." },
+  { n: "Trout", when: ["dawn", "dusk"], tip: "Morning and evening, in cool water. Overcast days and a light drizzle can keep them biting through the day." },
+  { n: "Bluegill and panfish", when: ["day"], tip: "Mid-morning to mid-afternoon on warm, calm, sunny days, close to shore and weeds." },
+  { n: "Northern pike", when: ["dawn", "day", "dusk"], tip: "Cool, cloudy days are best. They often hit hard just before a front, and feed on and off all day." },
+];
+const WINDOW_NAMES = { dawn: "Sunrise", day: "Midday", dusk: "Sunset", night: "After dark" };
+function dayWindows(w) {
+  const H = 3600000, out = [];
+  const rise = w.daily.sunrise || [], set = w.daily.sunset || [];
+  rise.forEach((t) => { const x = new Date(t).getTime(); out.push({ k: "dawn", a: x - H, b: x + 1.5 * H }); out.push({ k: "day", a: x + 4 * H, b: x + 8 * H }); });
+  set.forEach((t) => { const x = new Date(t).getTime(); out.push({ k: "dusk", a: x - 1.5 * H, b: x + H }); out.push({ k: "night", a: x + H, b: x + 4 * H }); });
+  return out.sort((p, q) => p.a - q.a);
+}
+function bestTimes(w) {
+  const now = new Date(w.current.time).getTime();
+  const wins = dayWindows(w).filter((x) => x.b > now);
+  const range = (x) => timeOf(new Date(Math.max(x.a, now))) + " to " + timeOf(new Date(x.b));
+  const dayName = (x) => { const d = new Date(x.a), n = new Date(now); return d.getDate() === n.getDate() ? "Today" : "Tomorrow"; };
+  const sel = el("select", { "aria-label": "Fish type for best times" }, FISH_TIPS.map((f, i) => el("option", { value: String(i) }, f.n)));
+  const out = el("div", { class: "stack", style: "gap:8px" });
+  const draw = () => {
+    const f = FISH_TIPS[+sel.value || 0];
+    const mine = wins.filter((x) => f.when.includes(x.k)).slice(0, 4);
+    out.replaceChildren(
+      el("ul", { class: "times" }, mine.length
+        ? mine.map((x) => el("li", null, el("b", null, `${dayName(x)} ${WINDOW_NAMES[x.k].toLowerCase()}`), el("span", null, range(x))))
+        : [el("li", null, el("span", null, "No good windows left in this forecast. Check again later."))]),
+      el("p", { class: "small" }, f.tip));
+  };
+  sel.addEventListener("change", draw);
+  draw();
+  return el("div", { class: "bite" },
+    el("b", null, "Best times to fish"),
+    sel, out,
+    el("p", { class: "muted small" }, "Rules of thumb, not guarantees. Times come from sunrise and sunset where you picked."));
+}
 function viewBite(p) {
   p.append(el("h1", null, "Bite"));
   const box = el("div", { class: "stack" });
@@ -465,14 +521,17 @@ function drawWx(box, w, loc, onPick) {
       el("div", { class: "wx-temp" }, Math.round(c.temperature_2m) + "°"),
       el("div", { class: "stack", style: "gap:2px" }, el("b", null, wxName(c.weather_code)), el("span", { class: "muted" }, `Wind ${Math.round(c.wind_speed_10m)} mph ${compass(c.wind_direction_10m)}`))),
     el("div", { class: "stats wx" },
-      el("div", null, el("b", null, inHg), el("span", null, "Pressure " + trend)),
       el("div", null, el("b", null, timeOf(w.daily.sunrise[0])), el("span", null, "Sunrise")),
       el("div", null, el("b", null, timeOf(w.daily.sunset[0])), el("span", null, "Sunset"))),
     el("div", { class: "bite" },
       el("div", { class: "row spread" }, el("b", null, "Bite forecast"), el("span", { class: "bite-label" }, b.label)),
       el("div", { class: "meter", role: "img", "aria-label": "Bite score " + b.s + " out of 100" }, el("i", { style: "width:" + b.s + "%" })),
+      el("div", { class: "cond-grid" },
+        condTile("Wind", Math.round(c.wind_speed_10m) + " mph", compass(c.wind_direction_10m), windRating(c.wind_speed_10m)),
+        condTile("Pressure", inHg + " inHg", trend, pressureRating(b.dP))),
       el("ul", { class: "why" }, b.why.map((x) => el("li", null, x))),
       el("p", { class: "muted small" }, "A rough guide from pressure, wind, clouds, and time of day. Fish don't read forecasts, so use your own judgment.")),
+    bestTimes(w),
     el("div", { class: "hours", "aria-label": "Next 12 hours" }, next.map((x) => el("div", { class: "hr" },
       el("small", null, new Date(x.t).toLocaleTimeString([], { hour: "numeric" })), el("b", null, Math.round(x.temp) + "°"), el("small", null, (x.rain ?? 0) + "% rain")))),
     el("p", { class: "muted small" }, "Weather from Open-Meteo. Your location is only used to ask for the forecast and is not saved to your account."));
@@ -518,24 +577,75 @@ let $feed;
 function renderFeed() {
   $screen.className = "screen feed-wrap";
   $feed = el("div", { class: "feed", "aria-label": "Catch feed. Swipe up for the next catch." });
-  $screen.replaceChildren(el("div", { class: "feed-top" }, el("span", { class: "brand" }, "Weigh-In")), $feed);
+  $screen.replaceChildren(el("div", { class: "feed-top" }, el("span", { class: "brand" }, "Weigh-In"),
+    el("button", { class: "scope-btn", type: "button", id: "scope-btn", "aria-label": "Choose whose catches to show", onclick: openScopeSheet }, scopeLabel() + " ▾")), $feed);
   renderFeedCards();
+}
+/* Feed area: everyone, near me (opt-in location, kept only on this device), or one state */
+const FEED_MILES = 50;
+function scopeLabel() {
+  const sc = getPref("feedScope", "all");
+  if (sc === "near" && myFeedLoc()) return "Near me";
+  if (sc === "state") { const st = getPref("feedState", ""); const n = (US_STATES.find((x) => x[0] === st) || [])[1]; if (n) return n; }
+  return "Everyone";
+}
+function myFeedLoc() { try { const l = JSON.parse(getPref("feedLoc", "null")); return l && typeof l.lat === "number" ? l : null; } catch { return null; } }
+function feedPosts() {
+  const sc = getPref("feedScope", "all");
+  if (sc === "state") { const st = getPref("feedState", ""); if (st) return S.posts.filter((x) => x.state === st); }
+  if (sc === "near") {
+    const me = myFeedLoc();
+    if (me) {
+      const ids = new Set(S.spots.filter((x) => typeof x.lat === "number" && typeof x.lng === "number" && km(me, x) <= FEED_MILES * 1.609).map((x) => x.id));
+      return S.posts.filter((x) => ids.has(x.id));
+    }
+  }
+  return S.posts;
+}
+function openScopeSheet() {
+  const close = () => bg.remove();
+  const pick = (scope) => { setPref("feedScope", scope); close(); if (S.tab === "feed") renderFeed(); };
+  const msg = el("p", { class: "muted small", "aria-live": "polite" });
+  const stSel = el("select", { "aria-label": "State", onchange: (e) => { if (!e.target.value) return; setPref("feedState", e.target.value); pick("state"); } },
+    el("option", { value: "" }, "Pick a state"), US_STATES.map(([c, n]) => el("option", { value: c }, n)));
+  stSel.value = getPref("feedState", "");
+  const sc = getPref("feedScope", "all");
+  const bg = el("div", { class: "sheet-bg", onclick: (e) => { if (e.target === bg) close(); } },
+    el("div", { class: "sheet", role: "dialog", "aria-label": "Feed area", style: "height:auto;max-height:90%" },
+      el("div", { class: "sheet-h" }, el("h2", null, "Show catches from"), el("button", { class: "link", type: "button", onclick: close }, "Close")),
+      el("div", { class: "msgs about" },
+        el("button", { class: "chip wide", type: "button", id: "sc-all", "aria-pressed": String(sc === "all"), onclick: () => pick("all") }, "Everyone"),
+        el("button", { class: "chip wide", type: "button", id: "sc-near", "aria-pressed": String(sc === "near"), onclick: () => {
+          if (!navigator.geolocation) { msg.textContent = "This browser can't share your location. Pick a state instead."; return; }
+          msg.textContent = "Asking for your location…";
+          navigator.geolocation.getCurrentPosition(
+            (pos) => { setPref("feedLoc", JSON.stringify({ lat: Math.round(pos.coords.latitude * 10) / 10, lng: Math.round(pos.coords.longitude * 10) / 10 })); pick("near"); },
+            () => { msg.textContent = "Couldn't get your location. You can pick a state instead."; }, { timeout: 10000 });
+        } }, "Near me (within " + FEED_MILES + " miles)"),
+        stSel, msg,
+        el("p", { class: "muted small" }, "Near me uses your location only when you tap it. It is rounded, kept on this device, and never saved to your account. It shows catches that were posted with a map pin. A state shows catches posted with that state."))));
+  document.body.append(bg);
 }
 const cardCache = new Map();
 function renderFeedCards() {
   if (!$feed || S.tab !== "feed") return;
-  if (!S.posts.length) {
+  const list = feedPosts();
+  const sb = document.getElementById("scope-btn"); if (sb) sb.textContent = scopeLabel() + " ▾";
+  if (!list.length) {
+    const filtered = S.posts.length > 0;
     $feed.replaceChildren(el("div", { class: "feed-empty" }, el("div", { class: "stack" },
-      el("h2", null, "No catches yet"), el("p", null, "Be the first. Tap the red Post button."))));
+      el("h2", null, filtered ? "No catches here yet" : "No catches yet"),
+      el("p", null, filtered ? "Nobody has posted in this area. Be the first, or look at everyone's catches." : "Be the first. Tap the red Post button."),
+      filtered ? el("button", { class: "btn", type: "button", id: "scope-all", onclick: () => { setPref("feedScope", "all"); renderFeed(); } }, "Show everyone") : null)));
     return;
   }
   // Keep the card you're looking at in view when new posts arrive.
   const cards = [...$feed.querySelectorAll(".card")];
   const h = $feed.clientHeight || 1;
   const currentId = cards[Math.round($feed.scrollTop / h)]?.dataset.id;
-  const nodes = S.posts.map((p) => { let n = cardCache.get(p.id); if (!n) { n = makeCard(p); cardCache.set(p.id, n); } return n; });
+  const nodes = list.map((p) => { let n = cardCache.get(p.id); if (!n) { n = makeCard(p); cardCache.set(p.id, n); } return n; });
   $feed.replaceChildren(...nodes);
-  const idx = currentId ? S.posts.findIndex((p) => p.id === currentId) : 0;
+  const idx = currentId ? list.findIndex((p) => p.id === currentId) : 0;
   if (idx > 0) $feed.scrollTop = idx * $feed.clientHeight;
   paintLikes(); paintSpotBtns();
 }

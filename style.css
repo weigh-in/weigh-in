@@ -97,6 +97,7 @@ form{display:flex;flex-direction:column;gap:14px}
 .side button svg{width:26px;height:26px}
 .side small{display:block;text-align:center;font-size:.72rem;margin-top:3px;opacity:.9}
 .feed-top{position:absolute;top:0;left:0;right:0;padding:calc(12px + env(safe-area-inset-top)) 18px 10px;display:flex;justify-content:space-between;align-items:center;z-index:2;pointer-events:none;color:#fff}
+.feed-top .scope-btn{pointer-events:auto;border:0;border-radius:999px;background:rgba(0,0,0,.45);color:#fff;font-weight:700;padding:7px 14px;min-height:36px;cursor:pointer;backdrop-filter:blur(4px)}
 .feed-top .brand{font-family:var(--display);font-size:1.3rem;text-shadow:0 1px 6px rgba(0,0,0,.5)}
 .feed-wrap{position:relative;flex:1;min-height:0;display:flex;flex-direction:column}
 .feed-empty{height:100%;display:grid;place-items:center;text-align:center;color:#cfe3dc;padding:24px}
@@ -238,3 +239,17 @@ button.who{background:none;border:0;padding:0;color:inherit;text-align:left;curs
 .map-card-t{font-family:var(--display);font-weight:400;font-size:1.1rem}
 .map-card-x{position:absolute;top:6px;right:6px;width:34px;height:34px;border-radius:50%;border:2px solid var(--ink);background:var(--surface);color:var(--ink);cursor:pointer;font-size:1rem}
 .map-note.open .pop-near{border-top:1px solid var(--line);padding-top:6px}
+
+.chip.wide{width:100%;text-align:center;min-height:44px}
+.cond-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.cond{display:flex;flex-direction:column;gap:2px;padding:12px;border:1px solid var(--line);border-radius:12px;background:var(--surface)}
+.cond-n{font-size:.8rem;color:var(--muted,#667);font-weight:700;text-transform:uppercase;letter-spacing:.04em}
+.cond-v{font-family:var(--display);font-size:1.6rem;line-height:1.1}
+.cond-s{font-size:.9rem;color:var(--muted,#667)}
+.tag{align-self:flex-start;margin-top:4px;padding:3px 10px;border-radius:999px;font-size:.8rem;font-weight:800}
+.tag.good{background:#d9f2e0;color:#0b5a26}
+.tag.ok{background:#fdf0c9;color:#6b4e00}
+.tag.bad{background:#fbdcd9;color:#8f1d12}
+.times{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:6px}
+.times li{display:flex;justify-content:space-between;gap:10px;padding:8px 10px;border-radius:10px;background:var(--surface);border:1px solid var(--line)}
+@media (prefers-color-scheme:dark){.tag.good{background:#14402a;color:#bff0cc}.tag.ok{background:#4a3c10;color:#fbe4a0}.tag.bad{background:#4d1d19;color:#fbc9c4}}
