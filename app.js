@@ -164,6 +164,8 @@ function badText(text) {
 }
 const NO_SLURS = "That includes language that isn't allowed here. Please change it.";
 const PERMS = [["deletePosts", "Delete catches"], ["deleteComments", "Delete comments"], ["reports", "See and handle reports"], ["ban", "Ban and unban anglers"]];
+const OWNER_UID = "whNN0b8nbhdQiK8osrBa48SEtm82"; // moderators can't delete or ban this account
+const canOn = (perm, ownerUid) => !!(S.owner || (S.mod && S.mod[perm] && ownerUid !== OWNER_UID));
 const can = (perm) => !!(S.owner || (S.mod && S.mod[perm]));
 const isStaff = () => !!(S.owner || S.mod);
 const isBad = (...parts) => parts.some((x) => badText(x));
@@ -309,12 +311,12 @@ function startApp() {
   }, () => {}));
   unsubs.push(onSnapshot(query(collection(db, "spots"), orderBy("createdAt", "desc"), limit(300)), (s) => {
     S.spots = s.docs.map((d) => ({ id: d.id, ...d.data({ serverTimestamps: "estimate" }) }));
-    if (S.tab === "map" && S.map) drawSpots(false);
+    if (S.tab === "map" && S.map) { S.paintMapBar?.(); drawSpots(false); }
   }, () => {}));
   unsubs.push(onSnapshot(query(collection(db, "likes"), orderBy("createdAt", "desc"), limit(1000)), (s) => {
     const m = new Map();
     for (const d of s.docs) { const x = d.data({ serverTimestamps: "estimate" }); if (!m.has(x.postId)) m.set(x.postId, new Set()); m.get(x.postId).add(x.uid); }
-    S.likes = m; paintLikes();
+    S.likes = m; paintLikes(); if (S.tab === "me" && S.meView === "main") renderTab();
   }, () => {}));
   unsubs.push(onSnapshot(doc(db, "mods", uid), (d) => {
     const next = d.exists() ? (d.data().perms || {}) : null;
@@ -546,9 +548,9 @@ function makeCard(p) {
     el("div", { class: "side" },
       el("div", null, el("button", { type: "button", class: "like", "data-like": p.id, "aria-pressed": "false", "aria-label": "Like", html: ICON.heart, onclick: () => toggleLike(p) }), el("small", { "data-like-n": p.id }, "0")),
       el("div", null, el("button", { type: "button", "aria-label": "Comments", html: ICON.chat, onclick: () => openComments(p) }), el("small", null, "Comments")),
-      mine || can("deletePosts") ? el("div", null, el("button", { type: "button", "aria-label": "Delete this post", html: ICON.trash, onclick: () => deletePost(p) }), el("small", null, "Delete")) : null,
+      mine || canOn("deletePosts", p.uid) ? el("div", null, el("button", { type: "button", "aria-label": "Delete this post", html: ICON.trash, onclick: () => deletePost(p) }), el("small", null, "Delete")) : null,
       !mine ? el("div", null, el("button", { type: "button", "aria-label": "Report this post", html: ICON.flag, onclick: () => reportPost(p) }), el("small", null, "Report")) : null,
-      can("ban") && !mine ? el("div", null, el("button", { type: "button", "aria-label": "Ban this angler", html: ICON.ban, onclick: () => banUser(p.uid, p.name) }), el("small", null, "Ban")) : null));
+      can("ban") && !mine && p.uid !== OWNER_UID ? el("div", null, el("button", { type: "button", "aria-label": "Ban this angler", html: ICON.ban, onclick: () => banUser(p.uid, p.name) }), el("small", null, "Ban")) : null));
 }
 function paintLikes() {
   const me = S.user?.uid;
@@ -678,7 +680,7 @@ function openAngler(uid, name) {
         el("div", null, el("b", null, biggest ? fmtLb(biggest) : "–"), el("span", null, "Biggest")),
         el("div", null, el("b", null, String(likes)), el("span", null, "Likes"))),
       fav ? el("p", { class: "muted small" }, `Most catches on: ${fav[0].charAt(0).toUpperCase() + fav[0].slice(1)} · ${pins} map pin${pins === 1 ? "" : "s"}`) : null,
-      can("ban") && uid !== S.user.uid ? el("button", { class: "link danger small", type: "button", style: "align-self:flex-start", onclick: () => banUser(uid, name) }, `Ban @${name}`) : null,
+      can("ban") && uid !== S.user.uid && uid !== OWNER_UID ? el("button", { class: "link danger small", type: "button", style: "align-self:flex-start", onclick: () => banUser(uid, name) }, `Ban @${name}`) : null,
       ...(rows.length ? rows.map((c) => el("div", { class: "comment", style: "flex-direction:row;gap:12px;align-items:center" },
         c.photo ? el("img", { src: c.photo, alt: `${c.species} photo`, style: "width:72px;height:72px;object-fit:cover;border-radius:10px;flex:none" }) : null,
         el("div", { class: "stack", style: "gap:2px;min-width:0" }, el("b", null, `${c.species}, ${sizeText(c)}`),
@@ -712,7 +714,7 @@ function openComments(p) {
     list.replaceChildren(...rows.map((c) => el("div", { class: "comment" },
       el("div", { class: "row spread" }, el("span", { class: "row", style: "gap:8px;flex-wrap:nowrap" }, avatar(c.uid, c.name, 24), el("b", null, "@" + c.name)), el("span", { class: "hint" }, ago(c.createdAt))),
       el("span", null, c.text),
-      c.uid === S.user.uid || can("deleteComments") ? el("button", { class: "link danger small", type: "button", style: "align-self:flex-start", onclick: () => deleteDoc(doc(db, "posts", p.id, "comments", c.id)).catch((e) => toast(errText(e))) }, "Delete") : null)));
+      c.uid === S.user.uid || canOn("deleteComments", c.uid) ? el("button", { class: "link danger small", type: "button", style: "align-self:flex-start", onclick: () => deleteDoc(doc(db, "posts", p.id, "comments", c.id)).catch((e) => toast(errText(e))) }, "Delete") : null)));
     list.scrollTop = list.scrollHeight;
   }, () => list.replaceChildren(el("p", { class: "muted" }, "Couldn't load comments.")));
 }
@@ -762,7 +764,7 @@ function catchCounts(t, p) {
   return !(ph?.lure && !lureOk(ph.lure, p.lure));
 }
 let tick = null;
-let draftPhoto = "", draftLoc = null;
+let draftPhoto = "", draftLoc = null, draftSrc = "", draftWhere = "";   // draftSrc: "auto" (found from the typed name) or "manual" (GPS or picked)
 function viewPost(p) {
   const myLive = S.tournaments.filter((t) => tourStatus(t) === "live" && (t.members || []).includes(S.user.uid));
   const preview = el("div", { class: "photo-pick" });
@@ -780,25 +782,50 @@ function viewPost(p) {
     removeBtn.hidden = !draftPhoto;
   }
   paintPhoto();
+  if (draftSrc === "auto") { draftLoc = null; draftSrc = ""; draftWhere = ""; }   // the typed name starts empty on a fresh form
   const locNote = el("span", { class: "hint" });
   const precSel = el("select", { id: "f-prec", name: "prec", "aria-label": "How exact the map pin is", onchange: () => setPref("prec", precSel.value) },
     el("option", { value: "approx" }, "Approximate area (about 1 km)"), el("option", { value: "exact" }, "Exact spot"));
   precSel.value = getPref("prec", "approx");
+  const pickBtn = el("button", { class: "btn ghost small", type: "button", id: "f-pick", onclick: () => {
+    const spotInput = document.getElementById("f-spot");
+    openMapPicker(spotInput?.value.trim() || "", draftLoc, (loc, name) => {
+      draftLoc = loc; draftSrc = "manual"; draftWhere = ""; setPref("lastloc", JSON.stringify(loc));
+      if (name && spotInput && !spotInput.value.trim()) spotInput.value = name.slice(0, 40);
+      paintLoc();
+    });
+  } }, "🗺 Find or pick on map");
   const locBtn = el("button", { class: "btn ghost small", type: "button", id: "f-loc", onclick: () => {
     if (!navigator.geolocation) { toast("This phone can't share location."); return; }
     locBtn.disabled = true; locBtn.textContent = "Finding you…";
-    navigator.geolocation.getCurrentPosition((pos) => { draftLoc = { lat: pos.coords.latitude, lng: pos.coords.longitude }; locBtn.disabled = false; paintLoc(); },
+    navigator.geolocation.getCurrentPosition((pos) => { draftLoc = { lat: pos.coords.latitude, lng: pos.coords.longitude }; draftSrc = "manual"; draftWhere = ""; setPref("lastloc", JSON.stringify(draftLoc)); locBtn.disabled = false; paintLoc(); },
       () => { locBtn.disabled = false; paintLoc(); toast("Couldn't get your location. Make sure location is allowed for this app."); },
       { enableHighAccuracy: true, timeout: 12000, maximumAge: 60000 });
-  } }, "📍 Add my location");
-  const locRemove = el("button", { class: "link", type: "button", style: "align-self:flex-start", onclick: () => { draftLoc = null; paintLoc(); } }, "Remove location");
+  } }, "📍 Use my location");
+  const locRemove = el("button", { class: "link", type: "button", style: "align-self:flex-start", onclick: () => { draftLoc = null; draftSrc = ""; draftWhere = ""; paintLoc(); } }, "Remove location");
   function paintLoc() {
-    locBtn.hidden = !!draftLoc; locBtn.textContent = "📍 Add my location"; locRemove.hidden = !draftLoc; precSel.hidden = !draftLoc;
+    locBtn.hidden = !!draftLoc; locBtn.textContent = "📍 Use my location"; pickBtn.textContent = draftLoc ? "🗺 Change spot on map" : "🗺 Find or pick on map";
+    locRemove.hidden = !draftLoc; precSel.hidden = !draftLoc;
     locNote.textContent = draftLoc
-      ? "Location added. Everyone using Weigh-In will see this pin on the map."
-      : "Optional. Everyone using Weigh-In can see map pins, so skip it for your home or a secret spot.";
+      ? (draftSrc === "auto" ? `Pinned on the map near ${draftWhere}. Wrong place? Tap "Change spot on map".` : "Pin added. Everyone using Weigh-In will see it on the map.")
+      : "Type the spot's name and I'll put it on the map for you. Skip the name for your home or a secret spot.";
   }
   paintLoc();
+  // As they type a place name, find it and pin it automatically (unless they picked a spot themselves).
+  let spotTimer = 0, spotSeq = 0;
+  function onSpotInput(e) {
+    clearTimeout(spotTimer);
+    const text = e.target.value.trim(), seq = ++spotSeq;
+    if (draftSrc === "manual") return;
+    if (text.length < 3) { if (draftSrc === "auto") { draftLoc = null; draftSrc = ""; draftWhere = ""; paintLoc(); } return; }
+    spotTimer = setTimeout(async () => {
+      const hit = (await findPlaces(text, 1))[0];
+      if (seq !== spotSeq || draftSrc === "manual") return;   // they kept typing or picked a spot themselves
+      if (hit) { draftLoc = { lat: hit.lat, lng: hit.lng }; draftSrc = "auto"; draftWhere = hit.full; }
+      else if (draftSrc === "auto") { draftLoc = null; draftSrc = ""; draftWhere = ""; }
+      paintLoc();
+    }, 900);
+  }
   const tourHint = el("span", { class: "hint", id: "f-tour-hint" }, myLive.length ? "Only tournaments you've joined that are happening now show up here." : "Join a tournament in Tourneys to count this catch.");
   const paintTourHint = (tid) => {
     const t = myLive.find((x) => x.id === tid);
@@ -821,9 +848,9 @@ function viewPost(p) {
     el("div", { class: "ruler", "aria-hidden": "true" }),
     el("label", { class: "field" }, el("span", null, "Lure or bait"),
       el("input", { id: "f-lure", name: "lure", list: "lures", maxlength: 40, placeholder: "Crankbait", autocomplete: "off" })),
-    el("label", { class: "field" }, el("span", null, "Spot (optional)"),
-      el("input", { id: "f-spot", name: "spot", maxlength: 40, placeholder: "North cove" })),
-    el("div", { class: "field" }, el("span", null, "Where you caught it"), locBtn, precSel, locRemove, locNote),
+    el("div", { class: "field" }, el("span", null, "Where you caught it"),
+      el("input", { id: "f-spot", name: "spot", maxlength: 40, placeholder: "Lake or spot name, like Lake Creve Coeur", autocomplete: "off", oninput: onSpotInput }),
+      el("div", { class: "row" }, locBtn, pickBtn), precSel, locRemove, locNote),
     el("label", { class: "field" }, el("span", null, "Tournament"),
       el("select", { id: "f-tour", name: "tour", onchange: (e) => paintTourHint(e.target.value) }, el("option", { value: "" }, "No tournament"),
         myLive.map((t) => el("option", { value: t.id }, t.name))),
@@ -847,6 +874,14 @@ function viewPost(p) {
       if (!confirm(`This phase is "${rule.lure}" only. Your lure doesn't match, so this catch won't count in the tournament. Post it anyway?`)) return;
     }
     const btn = f.querySelector("button[type=submit]"); btn.disabled = true; btn.textContent = "Posting…";
+    let pin = draftLoc, autoPinned = "";
+    const spotText = String(fd.get("spot") || "").trim();
+    if (!pin && spotText.length >= 3) {   // they typed a place name but didn't pin it: offer to find it
+      btn.textContent = "Finding that spot…";
+      const hit = (await findPlaces(spotText, 1))[0];
+      if (hit) { pin = { lat: hit.lat, lng: hit.lng }; autoPinned = hit.full; }
+      btn.textContent = "Posting…";
+    }
     try {
       const lure = String(fd.get("lure") || "").trim();
       const ref = await addDoc(collection(db, "posts"), {
@@ -856,16 +891,16 @@ function viewPost(p) {
         phase: phaseIdx, createdAt: serverTimestamp(),
       });
       let pinFailed = false;
-      if (draftLoc) {
+      if (pin) {
         const exact = fd.get("prec") === "exact";
         const r = (n) => (exact ? Math.round(n * 1e5) / 1e5 : Math.round(n * 100) / 100); // 2 decimals is roughly 1 km
         try {
-          await setDoc(doc(db, "spots", ref.id), { uid: S.user.uid, name: S.name, species, lb, inches, lure, lat: r(draftLoc.lat), lng: r(draftLoc.lng),
+          await setDoc(doc(db, "spots", ref.id), { uid: S.user.uid, name: S.name, species, lb, inches, lure, lat: r(pin.lat), lng: r(pin.lng),
             precise: exact, catchDate: dateStr, thumb: draftPhoto ? await thumbFrom(draftPhoto) : "", createdAt: serverTimestamp() });
         } catch { pinFailed = true; }
       }
-      draftPhoto = ""; draftLoc = null;
-      toast(pinFailed ? `Posted your ${species}, but the map pin didn't save.` : `Posted your ${species}!`); go("feed");
+      draftPhoto = ""; draftLoc = null; draftSrc = ""; draftWhere = "";
+      toast(pinFailed ? `Posted your ${species}, but the map pin didn't save.` : pin ? `Posted your ${species} and put it on the map!` : `Posted your ${species}!`); go("feed");
     } catch (err) { toast(errText(err)); btn.disabled = false; btn.textContent = "Post catch"; }
   });
   p.append(el("h1", null, "Post a catch"), f);
@@ -1175,6 +1210,27 @@ function linkify(text) {
   return String(text).split(/(https:\/\/[^\s]+)/g).map((part, i) => i % 2
     ? el("a", { href: part, target: "_blank", rel: "noopener noreferrer" }, part) : part);
 }
+function openMeetSheet(send, friendName) {
+  const input = el("input", { id: "meet-link", type: "url", placeholder: "https://meet.google.com/abc-defg-hij", autocomplete: "off", "aria-label": "Google Meet link" });
+  const close = () => bg.remove();
+  const go = async () => {
+    const link = input.value.trim();
+    if (!/^https:\/\/meet\.google\.com\/[A-Za-z0-9\-_\/?=&]+$/.test(link)) { toast("That doesn't look like a Google Meet link. It starts with https://meet.google.com/"); return; }
+    try { await send("📹 Google Meet: " + link); toast("Sent to " + friendName + ". Join your meeting."); close(); } catch (e) { toast(errText(e)); }
+  };
+  const bg = el("div", { class: "sheet-bg", onclick: (e) => { if (e.target === bg) close(); } },
+    el("div", { class: "sheet", role: "dialog", "aria-label": "Google Meet call", style: "height:auto;max-height:90%" },
+      el("div", { class: "sheet-h" }, el("h2", null, "Google Meet call"), el("button", { class: "link", type: "button", onclick: close }, "Close")),
+      el("div", { class: "msgs about" },
+        el("ol", { style: "margin:0;padding-left:20px;display:flex;flex-direction:column;gap:6px" },
+          el("li", null, "Tap the button below. Google Meet opens in a new tab and starts a meeting. You may need to sign in to Google."),
+          el("li", null, "Copy the meeting link it gives you."),
+          el("li", null, "Come back here, paste the link, and tap Send.")),
+        el("button", { class: "btn wide", type: "button", id: "meet-open", onclick: () => window.open("https://meet.google.com/new", "_blank", "noopener,noreferrer") }, "1. Open Google Meet"),
+        el("label", { class: "field" }, el("span", null, "2. Paste the meeting link"), input),
+        el("button", { class: "btn ghost wide", type: "button", id: "meet-send", onclick: go }, `3. Send link to ${friendName}`))));
+  document.body.append(bg);
+}
 function openChat(fs) {
   const fr = friendOf(fs);
   const list = el("div", { class: "msgs" }, el("p", { class: "muted" }, "Loading…"));
@@ -1183,14 +1239,14 @@ function openChat(fs) {
   const close = () => { un(); bg.remove(); };
   const send = (text) => addDoc(collection(db, "friendships", fs.id, "messages"), { uid: S.user.uid, text, createdAt: serverTimestamp() });
   const callRow = el("div", { class: "callrow" },
-    el("button", { class: "btn ghost small", type: "button", id: "m-call", onclick: () => {
+    el("button", { class: "btn ghost small", type: "button", id: "m-call", onclick: () => openMeetSheet(send, fr.name) }, "📹 Google Meet call"),
+    el("button", { class: "link small", type: "button", id: "m-jitsi", onclick: () => {
       const bytes = crypto.getRandomValues(new Uint8Array(12));
-      const room = "WeighIn" + [...bytes].map((b) => b.toString(36).padStart(2, "0")).join("");
+      const room = "WeighIn" + [...bytes].map((x) => x.toString(36).padStart(2, "0")).join("");
       const url = "https://meet.jit.si/" + room;
       window.open(url, "_blank", "noopener,noreferrer");
       send("📹 Video call: " + url).catch((err) => toast(errText(err)));
-    } }, "📹 Start video call"),
-    el("button", { class: "link small", type: "button", onclick: () => { window.open("https://meet.google.com/new", "_blank", "noopener,noreferrer"); toast("Start a meeting, copy its link, then paste it here."); } }, "Use Google Meet instead"));
+    } }, "No Google account? Quick link"));
   form.addEventListener("submit", async (e) => {
     e.preventDefault();
     const text = input.value.trim(); if (!text) return;
@@ -1213,6 +1269,62 @@ function openChat(fs) {
 
 
 /* ======================= MAP ======================= */
+/* ======================= place search + map picker ======================= */
+async function findPlaces(q, n = 6) {
+  const ctl = new AbortController(), t = setTimeout(() => ctl.abort(), 6000);
+  try {
+    const r = await fetch("https://nominatim.openstreetmap.org/search?format=jsonv2&limit=" + n + "&q=" + encodeURIComponent(q), { signal: ctl.signal, headers: { Accept: "application/json" } });
+    if (!r.ok) return [];
+    return (await r.json()).map((x) => ({ lat: +x.lat, lng: +x.lon, name: String(x.name || x.display_name || "").split(",")[0], full: String(x.display_name || "").split(",").slice(0, 3).join(",").trim() }))
+      .filter((x) => Number.isFinite(x.lat) && Number.isFinite(x.lng));
+  } catch { return []; } finally { clearTimeout(t); }
+}
+function openMapPicker(startQuery, startLoc, onDone) {
+  let map = null, marker = null, pick = null, pickName = "";
+  const mapBox = el("div", { class: "map", id: "pick-map", style: "min-height:240px" });
+  const q = el("input", { type: "search", id: "pick-q", placeholder: "Search a lake, park, boat ramp, or town", value: startQuery || "", "aria-label": "Search for a place" });
+  const results = el("div", { class: "list" });
+  const status = el("p", { class: "hint", id: "pick-status" }, "Search above, or tap the map where you caught it.");
+  const done = el("button", { class: "btn wide", type: "button", id: "pick-done", disabled: true, onclick: () => { if (pick) { onDone({ ...pick }, pickName); close(); } } }, "Use this spot");
+  const close = () => { try { map?.remove(); } catch { /* gone */ } bg.remove(); };
+  function setPick(lat, lng, name) {
+    pick = { lat, lng }; if (name) pickName = name;
+    const L = window.L; if (!map || !L) return;
+    if (marker) marker.setLatLng([lat, lng]); else marker = L.marker([lat, lng]).addTo(map);
+    done.disabled = false; status.textContent = "Pin set. Tap the map to move it, then tap Use this spot.";
+  }
+  async function search() {
+    const text = q.value.trim(); if (text.length < 2) return;
+    results.replaceChildren(el("p", { class: "muted" }, "Searching…"));
+    const hits = await findPlaces(text, 6);
+    if (!hits.length) { results.replaceChildren(el("p", { class: "muted" }, "Nothing found. Try a bigger town nearby, or tap the map.")); return; }
+    results.replaceChildren(...hits.map((h) => el("button", { class: "item", type: "button", onclick: () => {
+      results.replaceChildren(); map?.setView([h.lat, h.lng], 14); setPick(h.lat, h.lng, h.name);
+    } }, el("div", { class: "stack", style: "gap:2px;min-width:0" }, el("span", { class: "t" }, h.name || h.full), el("span", { class: "s" }, h.full)))));
+  }
+  q.addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); search(); } });
+  const bg = el("div", { class: "sheet-bg", onclick: (e) => { if (e.target === bg) close(); } },
+    el("div", { class: "sheet full", role: "dialog", "aria-label": "Pick where you caught it" },
+      el("div", { class: "sheet-h top" }, el("h2", null, "Where did you catch it?"), el("button", { class: "link", type: "button", onclick: close }, "Close")),
+      el("div", { class: "pick-bar" }, el("div", { class: "row", style: "flex-wrap:nowrap" }, q, el("button", { class: "btn small", type: "button", id: "pick-go", onclick: search }, "Search")),
+        el("button", { class: "link small", type: "button", style: "align-self:flex-start", onclick: () => {
+          if (!navigator.geolocation) { toast("This phone can't share location."); return; }
+          navigator.geolocation.getCurrentPosition((pos) => { map?.setView([pos.coords.latitude, pos.coords.longitude], 14); setPick(pos.coords.latitude, pos.coords.longitude, ""); },
+            () => toast("Couldn't get your location."), { timeout: 10000 });
+        } }, "📍 Jump to my location"), results),
+      mapBox, el("div", { class: "pick-foot" }, status, done)));
+  document.body.append(bg);
+  loadLeaflet().then((L) => {
+    let c = startLoc || (() => { try { return JSON.parse(getPref("lastloc", "null")); } catch { return null; } })();
+    map = L.map(mapBox).setView(c ? [c.lat, c.lng] : [39.5, -98.35], c ? 13 : 4);
+    L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", { maxZoom: 19, attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>' }).addTo(map);
+    map.on("click", (e) => setPick(e.latlng.lat, e.latlng.lng, ""));
+    if (startLoc) setPick(startLoc.lat, startLoc.lng, "");
+    setTimeout(() => map?.invalidateSize(), 80);
+    if (startQuery && !startLoc) search();
+  }).catch(() => { status.textContent = "Couldn't load the map. Check your connection."; });
+}
+
 let leafletP, mapToken = 0;
 function loadLeaflet() {
   if (window.L) return Promise.resolve(window.L);
@@ -1220,62 +1332,118 @@ function loadLeaflet() {
     document.head.append(el("link", { rel: "stylesheet", href: "https://unpkg.com/leaflet@1.9.4/dist/leaflet.css", integrity: "sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=", crossorigin: "" }));
     document.head.append(el("script", { src: "https://unpkg.com/leaflet@1.9.4/dist/leaflet.js", integrity: "sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=", crossorigin: "",
       onload: () => res(window.L), onerror: () => { leafletP = null; rej(new Error("leaflet")); } }));
-  });
+  }).then((L) => new Promise((res) => {
+    // Pin clustering is a nice extra. If it doesn't load, the map still works.
+    if (L.markerClusterGroup) { res(L); return; }
+    document.head.append(el("link", { rel: "stylesheet", href: "https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css", integrity: "sha256-YU3qCpj/P06tdPBJGPax0bm6Q1wltfwjsho5TR4+TYc=", crossorigin: "" }));
+    document.head.append(el("link", { rel: "stylesheet", href: "https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css", integrity: "sha256-YSWCMtmNZNwqex4CEw1nQhvFub2lmU7vcCKP+XVwwXA=", crossorigin: "" }));
+    document.head.append(el("script", { src: "https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js", integrity: "sha256-Hk4dIpcqOSb0hZjgyvFOP+cEmDXUKKNE/tT542ZbNQg=", crossorigin: "", onload: () => res(window.L), onerror: () => res(window.L) }));
+  }));
   return leafletP;
 }
-function destroyMap() { mapToken++; if (S.map) { S.map.remove(); S.map = null; S.markers = null; } }
+function destroyMap() { mapToken++; if (S.map) { S.map.remove(); S.map = null; S.markers = null; S.me = null; } }
+const lureKey = (x) => String(x.lure || "").trim().toLowerCase().replace(/\s+/g, " ");
+const nameCase = (t) => t.charAt(0).toUpperCase() + t.slice(1);
 function renderMap() {
   $screen.className = "screen feed-wrap";
+  const f = S.mapFilter || (S.mapFilter = { species: "", lure: "", mine: false });
+  const bar = el("div", { class: "map-filters" });
   const box = el("div", { class: "map", id: "map" });
   const note = el("div", { class: "map-note", id: "map-note" }, "Loading map…");
-  $screen.replaceChildren(el("div", { class: "map-top" }, "Catch map"), box, note);
+  const fab = el("button", { class: "map-fab", type: "button", id: "map-locate", "aria-label": "Show where I am", onclick: () => {
+    if (!navigator.geolocation) { toast("This phone can't share location."); return; }
+    navigator.geolocation.getCurrentPosition((pos) => {
+      const L = window.L; if (!L || !S.map) return;
+      const ll = [pos.coords.latitude, pos.coords.longitude];
+      S.map.setView(ll, 13);
+      if (S.me) S.me.setLatLng(ll); else S.me = L.circleMarker(ll, { radius: 8, color: "#fff", weight: 3, fillColor: "#1F5C4D", fillOpacity: 1 }).addTo(S.map);
+    }, () => toast("Couldn't get your location. Make sure location is allowed for this app."), { timeout: 10000, maximumAge: 60000 });
+  } }, "📍");
+  function paintBar() {
+    const valid = S.spots.filter((x) => typeof x.lat === "number");
+    const species = [...new Set(valid.map((x) => String(x.species).trim()))].sort();
+    const lures = new Map(); valid.forEach((x) => { const k = lureKey(x); if (k) lures.set(k, nameCase(k)); });
+    if (f.species && !species.includes(f.species)) f.species = "";
+    if (f.lure && !lures.has(f.lure)) f.lure = "";
+    const sel = (id, label, value, opts, onchange) => el("select", { id, "aria-label": label, onchange: (e) => onchange(e.target.value) },
+      el("option", { value: "" }, label), opts.map(([v, t]) => el("option", { value: v, selected: v === value ? "" : null }, t)));
+    bar.replaceChildren(...[
+      sel("mf-species", "All fish", f.species, species.map((x) => [x, x]), (v) => { f.species = v; drawSpots(true); }),
+      sel("mf-lure", "All lures", f.lure, [...lures].sort((a, b) => a[1].localeCompare(b[1])), (v) => { f.lure = v; drawSpots(true); }),
+      el("button", { class: "chip", type: "button", id: "mf-mine", "aria-pressed": String(f.mine), onclick: () => { f.mine = !f.mine; paintBar(); drawSpots(true); } }, "Mine")].filter(Boolean));
+  }
+  S.paintMapBar = paintBar;
+  paintBar();
+  $screen.replaceChildren(bar, box, fab, note);
   const token = ++mapToken;
   loadLeaflet().then((L) => {
     if (S.tab !== "map" || token !== mapToken) return;
     S.map = L.map(box).setView([39.5, -98.35], 4);
-    L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", { maxZoom: 19,
-      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>' }).addTo(S.map);
-    S.markers = L.layerGroup().addTo(S.map);
+    const streets = L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", { maxZoom: 19,
+      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>' });
+    const sat = L.tileLayer("https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}", { maxZoom: 19, attribution: "Tiles &copy; Esri" });
+    streets.addTo(S.map);
+    L.control.layers({ "Map": streets, "Satellite": sat }, null, { position: "topright" }).addTo(S.map);
+    S.markers = (L.markerClusterGroup ? L.markerClusterGroup({ maxClusterRadius: 40, showCoverageOnHover: false }) : L.layerGroup()).addTo(S.map);
     drawSpots(true);
     setTimeout(() => S.map?.invalidateSize(), 60);
   }).catch(() => { note.textContent = "Couldn't load the map. Check your connection and try again."; });
 }
 const km = (a, b) => { const r = (x) => x * Math.PI / 180, dLat = r(b.lat - a.lat), dLng = r(b.lng - a.lng);
   const h = Math.sin(dLat / 2) ** 2 + Math.cos(r(a.lat)) * Math.cos(r(b.lat)) * Math.sin(dLng / 2) ** 2; return 12742 * Math.asin(Math.sqrt(h)); };
-function spotPopup(s) {
-  // Everyone who has a pin within about 2 km, and which lures worked there.
-  const near = S.spots.filter((x) => typeof x.lat === "number" && typeof x.lng === "number" && km(s, x) <= 2);
+function mapSummary(shown) {
+  if (!S.spots.length) return "No catches with a location yet. When you post a catch, add where you caught it and it shows up here.";
+  if (!shown.length) return "No catches match those filters.";
+  const lures = new Map(); shown.forEach((x) => { const k = lureKey(x); if (k) lures.set(k, (lures.get(k) || 0) + 1); });
+  const top = [...lures.entries()].sort((a, b) => b[1] - a[1]).slice(0, 3).map(([k, n]) => `${nameCase(k)} (${n})`);
+  const anglers = new Set(shown.map((x) => x.uid)).size;
+  return `${shown.length} catch${shown.length === 1 ? "" : "es"} by ${anglers} angler${anglers === 1 ? "" : "s"}` + (top.length ? ` · Popular lures: ${top.join(", ")}` : "") + ". Tap a pin to see the catch.";
+}
+// Tapping a pin shows that catch in the bar at the bottom of the map.
+function showSpotCard(sp) {
+  const note = document.getElementById("map-note"); if (!note) return;
+  S.map?.panTo?.([sp.lat, sp.lng]);
+  const post = S.posts.find((x) => x.id === sp.id);
+  const near = S.spots.filter((x) => typeof x.lat === "number" && typeof x.lng === "number" && km(sp, x) <= 2);
   const anglers = new Map(); near.forEach((x) => anglers.set(x.uid, x.name));
   const lures = new Map();
-  near.forEach((x) => { const t = String(x.lure || "").trim(); if (!t) return; const k = t.toLowerCase().replace(/\s+/g, " "); const g = lures.get(k) || { name: t.charAt(0).toUpperCase() + t.slice(1), n: 0 }; g.n++; lures.set(k, g); });
+  near.forEach((x) => { const k = lureKey(x); if (!k) return; const g = lures.get(k) || { name: nameCase(k), n: 0 }; g.n++; lures.set(k, g); });
   const top = [...lures.values()].sort((a, b) => b.n - a.n).slice(0, 4);
-  return el("div", { class: "pop" },
-    s.thumb ? el("img", { src: s.thumb, alt: `${s.species} caught by ${s.name}` }) : null,
-    el("b", null, s.species), el("span", null, sizeText(s)),
-    el("span", { class: "hint" }, `@${s.name} · ${s.catchDate ? "caught " + fmtDayY(s.catchDate) : ago(s.createdAt)}`),
-    s.lure ? el("span", { class: "hint" }, "Caught on " + s.lure) : null,
-    s.precise ? null : el("span", { class: "hint" }, "Approximate area"),
+  const likeN = S.likes.get(sp.id)?.size || 0;
+  const photo = post?.photo || sp.thumb;
+  note.className = "map-note open";
+  const fab = document.getElementById("map-locate"); if (fab) fab.hidden = true;
+  note.replaceChildren(...[
+    el("button", { class: "map-card-x", type: "button", "aria-label": "Close", onclick: () => drawSpots(false) }, "✕"),
+    el("div", { class: "map-card" },
+      photo ? el("img", { src: photo, alt: `${sp.species} caught by ${sp.name}` }) : null,
+      el("div", { class: "stack", style: "gap:2px;min-width:0" },
+        el("b", { class: "map-card-t" }, sp.species), el("span", null, sizeText(sp)),
+        el("button", { class: "link small", type: "button", style: "align-self:flex-start", onclick: () => openAngler(sp.uid, sp.name) }, "@" + sp.name),
+        el("span", { class: "hint" }, sp.catchDate ? "Caught " + fmtDayY(sp.catchDate) : ago(sp.createdAt)),
+        sp.lure ? el("span", { class: "hint" }, "On " + sp.lure) : null,
+        el("span", { class: "hint" }, `♥ ${likeN}${sp.precise ? "" : " · approximate area"}`),
+        post ? el("button", { class: "link small", type: "button", style: "align-self:flex-start", onclick: () => openComments(post) }, "Comments") : null)),
     el("div", { class: "pop-near" },
       el("b", null, "Around here"),
       el("span", null, `${near.length} catch${near.length === 1 ? "" : "es"} by ${anglers.size} angler${anglers.size === 1 ? "" : "s"} within about 1 mile`),
       el("div", { class: "pop-people" }, [...anglers].slice(0, 6).map(([uid, name]) => el("button", { class: "link small", type: "button", onclick: () => openAngler(uid, name) }, "@" + name))),
-      top.length ? el("span", null, "Popular lures: " + top.map((g) => `${g.name} (${g.n})`).join(", ")) : null));
+      top.length ? el("span", null, "Popular lures: " + top.map((g) => `${g.name} (${g.n})`).join(", ")) : null)].filter(Boolean));
 }
 function drawSpots(fit) {
-  const L = window.L, note = document.getElementById("map-note");
+  const L = window.L, note = document.getElementById("map-note"), f = S.mapFilter || {};
   if (!L || !S.map || !S.markers) return;
   S.markers.clearLayers();
+  const shown = S.spots.filter((x) => typeof x.lat === "number" && typeof x.lng === "number"
+    && (!f.species || String(x.species).trim() === f.species) && (!f.lure || lureKey(x) === f.lure) && (!f.mine || x.uid === S.user.uid));
   const pts = [];
-  for (const s of S.spots) {
-    if (typeof s.lat !== "number" || typeof s.lng !== "number") continue;
-    pts.push([s.lat, s.lng]);
-    L.marker([s.lat, s.lng], { title: `${s.species} by @${s.name}`, icon: L.divIcon({ className: "bob-pin", html: "<span></span>", iconSize: [28, 28], iconAnchor: [14, 14], popupAnchor: [0, -12] }) })
-      .bindPopup(spotPopup(s)).addTo(S.markers);
+  for (const sp of shown) {
+    pts.push([sp.lat, sp.lng]);
+    L.marker([sp.lat, sp.lng], { title: `${sp.species} by @${sp.name}`, icon: L.divIcon({ className: "bob-pin", html: "<span></span>", iconSize: [28, 28], iconAnchor: [14, 14], popupAnchor: [0, -12] }) })
+      .on("click", () => showSpotCard(sp)).addTo(S.markers);
   }
-  if (note) {
-    note.hidden = pts.length > 0;
-    note.textContent = "No catches with a location yet. When you post a catch, tap “Add my location” to put it on the map.";
-  }
+  if (note) { note.className = "map-note"; note.textContent = mapSummary(shown); }
+  const fab = document.getElementById("map-locate"); if (fab) fab.hidden = false;
   if (fit && pts.length) S.map.fitBounds(L.latLngBounds(pts).pad(0.25), { maxZoom: 12 });
 }
 
@@ -1318,8 +1486,9 @@ function viewMe(p) {
       el("div", { class: "av-edit" }, avatar(S.user.uid, S.name, 96), photoInput("me-photo", "Change profile picture")),
       el("div", { class: "stack", style: "gap:2px;min-width:0" }, el("h1", { style: "overflow-wrap:anywhere" }, "@" + S.name),
         el("span", { class: "hint" }, "Tap your picture to change it"))),
-    el("div", { class: "stats" },
+    el("div", { class: "stats four" },
       el("div", null, el("b", null, String(mine.length)), el("span", null, "Catches")),
+      el("div", null, el("b", null, String(mine.reduce((n, x) => n + (S.likes.get(x.id)?.size || 0), 0))), el("span", null, "Likes")),
       el("div", null, el("b", null, biggest ? fmtLb(biggest) : "–"), el("span", null, "Biggest")),
       el("div", null, el("b", null, String(pins)), el("span", null, "Map pins"))),
     el("div", { class: "list" },
@@ -1334,7 +1503,7 @@ function viewMe(p) {
     el("div", { class: "row", style: "gap:12px;flex-wrap:nowrap;min-width:0" },
       c.photo ? el("img", { src: c.photo, alt: "", style: "width:56px;height:56px;object-fit:cover;border-radius:8px;flex:none" }) : null,
       el("div", { class: "stack", style: "gap:2px;min-width:0" }, el("span", { class: "t" }, `${c.species}, ${sizeText(c)}`),
-        el("span", { class: "s" }, `${c.lure ? "on " + c.lure + " · " : ""}${ago(c.createdAt)}`))),
+        el("span", { class: "s" }, `${c.lure ? "on " + c.lure + " · " : ""}${catchLabel(c)} · ♥ ${S.likes.get(c.id)?.size || 0}`))),
     el("button", { class: "link danger small", type: "button", onclick: () => deletePost(c) }, "Delete")))));
 }
 
