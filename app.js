@@ -164,6 +164,9 @@ function badText(text) {
 }
 const NO_SLURS = "That includes language that isn't allowed here. Please change it.";
 const PERMS = [["deletePosts", "Delete catches"], ["deleteComments", "Delete comments"], ["reports", "See and handle reports"], ["ban", "Ban and unban anglers"]];
+const US_STATES = [["AL","Alabama"],["AK","Alaska"],["AZ","Arizona"],["AR","Arkansas"],["CA","California"],["CO","Colorado"],["CT","Connecticut"],["DE","Delaware"],["DC","District of Columbia"],["FL","Florida"],["GA","Georgia"],["HI","Hawaii"],["ID","Idaho"],["IL","Illinois"],["IN","Indiana"],["IA","Iowa"],["KS","Kansas"],["KY","Kentucky"],["LA","Louisiana"],["ME","Maine"],["MD","Maryland"],["MA","Massachusetts"],["MI","Michigan"],["MN","Minnesota"],["MS","Mississippi"],["MO","Missouri"],["MT","Montana"],["NE","Nebraska"],["NV","Nevada"],["NH","New Hampshire"],["NJ","New Jersey"],["NM","New Mexico"],["NY","New York"],["NC","North Carolina"],["ND","North Dakota"],["OH","Ohio"],["OK","Oklahoma"],["OR","Oregon"],["PA","Pennsylvania"],["RI","Rhode Island"],["SC","South Carolina"],["SD","South Dakota"],["TN","Tennessee"],["TX","Texas"],["UT","Utah"],["VT","Vermont"],["VA","Virginia"],["WA","Washington"],["WV","West Virginia"],["WI","Wisconsin"],["WY","Wyoming"]];
+const US_BOUNDS = [[17, -180], [72, -64]];   // the map stays on the USA (including Alaska and Hawaii)
+const placeLabel = (x) => [x.city, x.state].filter(Boolean).join(", ");
 const OWNER_UID = "whNN0b8nbhdQiK8osrBa48SEtm82"; // moderators can't delete or ban this account
 const canOn = (perm, ownerUid) => !!(S.owner || (S.mod && S.mod[perm] && ownerUid !== OWNER_UID));
 const can = (perm) => !!(S.owner || (S.mod && S.mod[perm]));
@@ -312,6 +315,7 @@ function startApp() {
   unsubs.push(onSnapshot(query(collection(db, "spots"), orderBy("createdAt", "desc"), limit(300)), (s) => {
     S.spots = s.docs.map((d) => ({ id: d.id, ...d.data({ serverTimestamps: "estimate" }) }));
     if (S.tab === "map" && S.map) { S.paintMapBar?.(); drawSpots(false); }
+    if (S.tab === "feed") paintSpotBtns();
   }, () => {}));
   unsubs.push(onSnapshot(query(collection(db, "likes"), orderBy("createdAt", "desc"), limit(1000)), (s) => {
     const m = new Map();
@@ -533,7 +537,7 @@ function renderFeedCards() {
   $feed.replaceChildren(...nodes);
   const idx = currentId ? S.posts.findIndex((p) => p.id === currentId) : 0;
   if (idx > 0) $feed.scrollTop = idx * $feed.clientHeight;
-  paintLikes();
+  paintLikes(); paintSpotBtns();
 }
 function makeCard(p) {
   const mine = p.uid === S.user.uid;
@@ -544,9 +548,10 @@ function makeCard(p) {
       el("button", { class: "who", type: "button", "aria-label": `See ${p.name}'s catches`, onclick: () => openAngler(p.uid, p.name) }, avatar(p.uid, p.name, 30), el("span", null, "@" + p.name + "  ·  " + catchLabel(p))),
       el("div", { class: "species" }, p.species),
       el("div", { class: "size" }, sizeText(p)),
-      el("div", { class: "meta" }, [p.lure ? "Caught on " + p.lure : null, p.spot || null, p.tournamentName ? "🏆 " + p.tournamentName : null].filter(Boolean).join("  ·  "))),
+      el("div", { class: "meta" }, [p.lure ? "Caught on " + p.lure : null, p.spot || null, placeLabel(p) || null, p.tournamentName ? "🏆 " + p.tournamentName : null].filter(Boolean).join("  ·  "))),
     el("div", { class: "side" },
       el("div", null, el("button", { type: "button", class: "like", "data-like": p.id, "aria-pressed": "false", "aria-label": "Like", html: ICON.heart, onclick: () => toggleLike(p) }), el("small", { "data-like-n": p.id }, "0")),
+      el("div", { "data-spotbtn": p.id, hidden: true }, el("button", { type: "button", "aria-label": "See where this was caught on the map", html: ICON.map, onclick: () => seeOnMap(p) }), el("small", null, "Map")),
       el("div", null, el("button", { type: "button", "aria-label": "Comments", html: ICON.chat, onclick: () => openComments(p) }), el("small", null, "Comments")),
       mine || canOn("deletePosts", p.uid) ? el("div", null, el("button", { type: "button", "aria-label": "Delete this post", html: ICON.trash, onclick: () => deletePost(p) }), el("small", null, "Delete")) : null,
       !mine ? el("div", null, el("button", { type: "button", "aria-label": "Report this post", html: ICON.flag, onclick: () => reportPost(p) }), el("small", null, "Report")) : null,
@@ -560,6 +565,8 @@ function paintLikes() {
     const n = document.querySelector(`[data-like-n="${CSS.escape(b.dataset.like)}"]`); if (n) n.textContent = String(set ? set.size : 0);
   });
 }
+function paintSpotBtns() { document.querySelectorAll("[data-spotbtn]").forEach((d) => { d.hidden = !S.spots.some((x) => x.id === d.dataset.spotbtn); }); }
+function seeOnMap(p) { S.mapFilter = { species: "", lure: "", mine: false }; S.focusSpot = p.id; go("map"); }
 async function toggleLike(p) {
   const id = p.id + "_" + S.user.uid, set = S.likes.get(p.id) || new Set(), on = set.has(S.user.uid);
   const next = new Set(set); on ? next.delete(S.user.uid) : next.add(S.user.uid); S.likes.set(p.id, next); paintLikes(); // show it right away
@@ -783,13 +790,16 @@ function viewPost(p) {
   }
   paintPhoto();
   if (draftSrc === "auto") { draftLoc = null; draftSrc = ""; draftWhere = ""; }   // the typed name starts empty on a fresh form
+  const stateSel = el("select", { id: "f-state", name: "state", "aria-label": "State", onchange: (e) => { setPref("state", e.target.value); onSpotInput(); } },
+    el("option", { value: "" }, "State"), US_STATES.map(([c, n]) => el("option", { value: c }, n)));
+  stateSel.value = getPref("state", "");
   const locNote = el("span", { class: "hint" });
   const precSel = el("select", { id: "f-prec", name: "prec", "aria-label": "How exact the map pin is", onchange: () => setPref("prec", precSel.value) },
     el("option", { value: "approx" }, "Approximate area (about 1 km)"), el("option", { value: "exact" }, "Exact spot"));
   precSel.value = getPref("prec", "approx");
   const pickBtn = el("button", { class: "btn ghost small", type: "button", id: "f-pick", onclick: () => {
     const spotInput = document.getElementById("f-spot");
-    openMapPicker(spotInput?.value.trim() || "", draftLoc, (loc, name) => {
+    openMapPicker(placeQuery(), draftLoc, (loc, name) => {
       draftLoc = loc; draftSrc = "manual"; draftWhere = ""; setPref("lastloc", JSON.stringify(loc));
       if (name && spotInput && !spotInput.value.trim()) spotInput.value = name.slice(0, 40);
       paintLoc();
@@ -813,11 +823,18 @@ function viewPost(p) {
   paintLoc();
   // As they type a place name, find it and pin it automatically (unless they picked a spot themselves).
   let spotTimer = 0, spotSeq = 0;
-  function onSpotInput(e) {
+  const placeQuery = () => {
+    const v = (id) => (document.getElementById(id)?.value || "").trim();
+    const stName = US_STATES.find(([c]) => c === v("f-state"))?.[1] || "";
+    const spot = v("f-spot"), city = v("f-city");
+    if (spot.length < 3 && city.length < 2) return "";
+    return [spot, city, stName].filter(Boolean).join(", ");
+  };
+  function onSpotInput() {
     clearTimeout(spotTimer);
-    const text = e.target.value.trim(), seq = ++spotSeq;
+    const text = placeQuery(), seq = ++spotSeq;
     if (draftSrc === "manual") return;
-    if (text.length < 3) { if (draftSrc === "auto") { draftLoc = null; draftSrc = ""; draftWhere = ""; paintLoc(); } return; }
+    if (!text) { if (draftSrc === "auto") { draftLoc = null; draftSrc = ""; draftWhere = ""; paintLoc(); } return; }
     spotTimer = setTimeout(async () => {
       const hit = (await findPlaces(text, 1))[0];
       if (seq !== spotSeq || draftSrc === "manual") return;   // they kept typing or picked a spot themselves
@@ -849,6 +866,9 @@ function viewPost(p) {
     el("label", { class: "field" }, el("span", null, "Lure or bait"),
       el("input", { id: "f-lure", name: "lure", list: "lures", maxlength: 40, placeholder: "Crankbait", autocomplete: "off" })),
     el("div", { class: "field" }, el("span", null, "Where you caught it"),
+      el("div", { class: "two" },
+        stateSel,
+        el("input", { id: "f-city", name: "city", maxlength: 40, placeholder: "City", autocomplete: "off", "aria-label": "City", oninput: onSpotInput })),
       el("input", { id: "f-spot", name: "spot", maxlength: 40, placeholder: "Lake or spot name, like Lake Creve Coeur", autocomplete: "off", oninput: onSpotInput }),
       el("div", { class: "row" }, locBtn, pickBtn), precSel, locRemove, locNote),
     el("label", { class: "field" }, el("span", null, "Tournament"),
@@ -863,7 +883,7 @@ function viewPost(p) {
     const lb = parseFloat(fd.get("lb")) || 0, inches = parseFloat(fd.get("inches")) || 0;
     if (!species) { toast("Enter what kind of fish it is."); return; }
     if (!draftPhoto) { toast("Add a photo of your fish. Fishing photos only."); return; }
-    if (isBad(species, fd.get("lure"), fd.get("spot"))) { toast(NO_SLURS); return; }
+    if (isBad(species, fd.get("lure"), fd.get("spot"), fd.get("city"))) { toast(NO_SLURS); return; }
     if (!lb && !inches) { toast("Add a weight or a length."); return; }
     const dateStr = String(fd.get("date") || localDate(new Date()));
     if (!/^\d{4}-\d{2}-\d{2}$/.test(dateStr) || dateStr > localDate(new Date())) { toast("Pick a date that isn't in the future."); return; }
@@ -875,10 +895,11 @@ function viewPost(p) {
     }
     const btn = f.querySelector("button[type=submit]"); btn.disabled = true; btn.textContent = "Posting…";
     let pin = draftLoc, autoPinned = "";
-    const spotText = String(fd.get("spot") || "").trim();
-    if (!pin && spotText.length >= 3) {   // they typed a place name but didn't pin it: offer to find it
+    const spotText = String(fd.get("spot") || "").trim(), cityText = String(fd.get("city") || "").trim(), stateCode = String(fd.get("state") || "");
+    const pq = placeQuery();
+    if (!pin && pq) {   // they typed a place but didn't pin it yet: find it now
       btn.textContent = "Finding that spot…";
-      const hit = (await findPlaces(spotText, 1))[0];
+      const hit = (await findPlaces(pq, 1))[0];
       if (hit) { pin = { lat: hit.lat, lng: hit.lng }; autoPinned = hit.full; }
       btn.textContent = "Posting…";
     }
@@ -886,7 +907,7 @@ function viewPost(p) {
       const lure = String(fd.get("lure") || "").trim();
       const ref = await addDoc(collection(db, "posts"), {
         uid: S.user.uid, name: S.name, species, lb, inches,
-        lure, spot: String(fd.get("spot") || "").trim(),
+        lure, spot: spotText, city: cityText, state: stateCode,
         catchDate: dateStr, photo: draftPhoto || "", tournamentId: t ? t.id : "", tournamentName: t ? t.name : "",
         phase: phaseIdx, createdAt: serverTimestamp(),
       });
@@ -896,7 +917,7 @@ function viewPost(p) {
         const r = (n) => (exact ? Math.round(n * 1e5) / 1e5 : Math.round(n * 100) / 100); // 2 decimals is roughly 1 km
         try {
           await setDoc(doc(db, "spots", ref.id), { uid: S.user.uid, name: S.name, species, lb, inches, lure, lat: r(pin.lat), lng: r(pin.lng),
-            precise: exact, catchDate: dateStr, thumb: draftPhoto ? await thumbFrom(draftPhoto) : "", createdAt: serverTimestamp() });
+            precise: exact, catchDate: dateStr, spot: spotText, city: cityText, state: stateCode, thumb: draftPhoto ? await thumbFrom(draftPhoto) : "", createdAt: serverTimestamp() });
         } catch { pinFailed = true; }
       }
       draftPhoto = ""; draftLoc = null; draftSrc = ""; draftWhere = "";
@@ -1273,7 +1294,7 @@ function openChat(fs) {
 async function findPlaces(q, n = 6) {
   const ctl = new AbortController(), t = setTimeout(() => ctl.abort(), 6000);
   try {
-    const r = await fetch("https://nominatim.openstreetmap.org/search?format=jsonv2&limit=" + n + "&q=" + encodeURIComponent(q), { signal: ctl.signal, headers: { Accept: "application/json" } });
+    const r = await fetch("https://nominatim.openstreetmap.org/search?format=jsonv2&countrycodes=us&limit=" + n + "&q=" + encodeURIComponent(q), { signal: ctl.signal, headers: { Accept: "application/json" } });
     if (!r.ok) return [];
     return (await r.json()).map((x) => ({ lat: +x.lat, lng: +x.lon, name: String(x.name || x.display_name || "").split(",")[0], full: String(x.display_name || "").split(",").slice(0, 3).join(",").trim() }))
       .filter((x) => Number.isFinite(x.lat) && Number.isFinite(x.lng));
@@ -1316,7 +1337,7 @@ function openMapPicker(startQuery, startLoc, onDone) {
   document.body.append(bg);
   loadLeaflet().then((L) => {
     let c = startLoc || (() => { try { return JSON.parse(getPref("lastloc", "null")); } catch { return null; } })();
-    map = L.map(mapBox).setView(c ? [c.lat, c.lng] : [39.5, -98.35], c ? 13 : 4);
+    map = L.map(mapBox, { maxBounds: US_BOUNDS, maxBoundsViscosity: 0.9, minZoom: 3 }).setView(c ? [c.lat, c.lng] : [39.5, -98.35], c ? 13 : 4);
     L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", { maxZoom: 19, attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>' }).addTo(map);
     map.on("click", (e) => setPick(e.latlng.lat, e.latlng.lng, ""));
     if (startLoc) setPick(startLoc.lat, startLoc.lng, "");
@@ -1378,7 +1399,7 @@ function renderMap() {
   const token = ++mapToken;
   loadLeaflet().then((L) => {
     if (S.tab !== "map" || token !== mapToken) return;
-    S.map = L.map(box).setView([39.5, -98.35], 4);
+    S.map = L.map(box, { maxBounds: US_BOUNDS, maxBoundsViscosity: 0.9, minZoom: 3 }).setView([39.5, -98.35], 4);
     const streets = L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", { maxZoom: 19,
       attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>' });
     const sat = L.tileLayer("https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}", { maxZoom: 19, attribution: "Tiles &copy; Esri" });
@@ -1386,6 +1407,9 @@ function renderMap() {
     L.control.layers({ "Map": streets, "Satellite": sat }, null, { position: "topright" }).addTo(S.map);
     S.markers = (L.markerClusterGroup ? L.markerClusterGroup({ maxClusterRadius: 40, showCoverageOnHover: false }) : L.layerGroup()).addTo(S.map);
     drawSpots(true);
+    const fs = S.focusSpot; S.focusSpot = null;           // came here from "see on the map" on a post
+    const target = fs && S.spots.find((x) => x.id === fs);
+    if (target) { S.map.setView([target.lat, target.lng], 14); showSpotCard(target); }
     setTimeout(() => S.map?.invalidateSize(), 60);
   }).catch(() => { note.textContent = "Couldn't load the map. Check your connection and try again."; });
 }
@@ -1421,6 +1445,7 @@ function showSpotCard(sp) {
         el("b", { class: "map-card-t" }, sp.species), el("span", null, sizeText(sp)),
         el("button", { class: "link small", type: "button", style: "align-self:flex-start", onclick: () => openAngler(sp.uid, sp.name) }, "@" + sp.name),
         el("span", { class: "hint" }, sp.catchDate ? "Caught " + fmtDayY(sp.catchDate) : ago(sp.createdAt)),
+        [sp.spot, placeLabel(sp)].filter(Boolean).length ? el("span", { class: "hint" }, "📍 " + [sp.spot, placeLabel(sp)].filter(Boolean).join(", ")) : null,
         sp.lure ? el("span", { class: "hint" }, "On " + sp.lure) : null,
         el("span", { class: "hint" }, `♥ ${likeN}${sp.precise ? "" : " · approximate area"}`),
         post ? el("button", { class: "link small", type: "button", style: "align-self:flex-start", onclick: () => openComments(post) }, "Comments") : null)),
