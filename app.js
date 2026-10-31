@@ -6,7 +6,7 @@ import {
   signOut, sendPasswordResetEmail, GoogleAuthProvider, signInWithPopup
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 import {
-  getFirestore, collection, doc, setDoc, getDoc, addDoc, deleteDoc, updateDoc, onSnapshot,
+  getFirestore, collection, doc, setDoc, getDoc, getDocs, addDoc, deleteDoc, updateDoc, onSnapshot,
   query, where, orderBy, limit, serverTimestamp, arrayUnion
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
@@ -39,6 +39,14 @@ function toast(msg) {
 }
 const pad2 = (n) => String(n).padStart(2, "0");
 const localDate = (d) => `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
+const fmtDayY = (s) => { const d = new Date(s + "T12:00:00"); return d.toLocaleDateString(undefined, d.getFullYear() === new Date().getFullYear() ? { month: "short", day: "numeric" } : { month: "short", day: "numeric", year: "numeric" }); };
+// "2h ago", or "caught Oct 12" when the angler picked an earlier date
+function catchLabel(p) {
+  if (!p.catchDate) return ago(p.createdAt);
+  const made = p.createdAt?.toMillis ? localDate(new Date(p.createdAt.toMillis())) : localDate(new Date());
+  return p.catchDate === made ? ago(p.createdAt) : "caught " + fmtDayY(p.catchDate);
+}
+const catchMs = (p) => (p.catchDate ? new Date(p.catchDate + "T12:00:00").getTime() : (p.createdAt?.toMillis?.() ?? Date.now()));
 const fmtDay = (s) => new Date(s + "T12:00:00").toLocaleDateString(undefined, { month: "short", day: "numeric" });
 function ago(ts) {
   if (!ts) return "just now";
@@ -77,6 +85,7 @@ const ICON = {
   sun: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="9" r="3.5"/><path d="M9 2.5v1.5M2.5 9H4M4.4 4.4l1 1M13.6 4.4l-1 1"/><path d="M8 20h10a3.5 3.5 0 0 0 .5-7 5 5 0 0 0-9.4 1A3 3 0 0 0 8 20z"/></svg>',
   flag: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 21V4M5 4h11l-2 4 2 4H5"/></svg>',
   ban: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M5.6 5.6l12.8 12.8"/></svg>',
+  heart: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20.5S3 15 3 8.8A4.8 4.8 0 0 1 12 6.6a4.8 4.8 0 0 1 9 2.2C21 15 12 20.5 12 20.5z"/></svg>',
   trash: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13"/></svg>',
 };
 
@@ -133,7 +142,7 @@ const S = {
   posts: [], tournaments: [], log: [],
   reqIn: [], reqOut: [], friendships: [],
   openTournament: null, tourPosts: [], viewing: null, creatingTour: false,
-  meView: "main", mine: [], spots: [], map: null, markers: null,
+  meView: "main", mine: [], spots: [], map: null, markers: null, likes: new Map(), mod: null,
 };
 const unsubs = [];
 let tourUnsub = null, meUnsub = null;
@@ -154,6 +163,9 @@ function badText(text) {
   return leet.split(/[^a-z]+/).some((w) => BLOCK_WORDS.has(w));
 }
 const NO_SLURS = "That includes language that isn't allowed here. Please change it.";
+const PERMS = [["deletePosts", "Delete catches"], ["deleteComments", "Delete comments"], ["reports", "See and handle reports"], ["ban", "Ban and unban anglers"]];
+const can = (perm) => !!(S.owner || (S.mod && S.mod[perm]));
+const isStaff = () => !!(S.owner || S.mod);
 const isBad = (...parts) => parts.some((x) => badText(x));
 
 function renderAuth(mode = "signin") {
@@ -197,6 +209,7 @@ function renderAuth(mode = "signin") {
       catch (err) { if (!/popup-closed|cancelled-popup/.test(err?.code || "")) msg.textContent = "Google sign-in didn't work here. Use your email and password instead."; }
     } }, "Continue with Google"),
     el("button", { class: "link", type: "button", style: "align-self:flex-start", onclick: openPrivacy }, "How Weigh-In uses your info"),
+    isInstalled() ? null : el("button", { class: "link", type: "button", style: "align-self:flex-start", id: "a-install", onclick: installApp }, "Install the app"),
     el("div", { class: "row spread" },
       el("button", { class: "link", type: "button", onclick: () => renderAuth(isNew ? "signin" : "signup") },
         isNew ? "I already have an account" : "Create an account"),
@@ -246,7 +259,7 @@ onAuthStateChanged(auth, async (user) => {
   stopAll();
   S.user = user;
   S.owner = !!(user && user.emailVerified && String(user.email || "").toLowerCase() === OWNER_EMAIL);
-  S.banned = false;
+  S.banned = false; S.mod = null;
   if (!user) { renderAuth(); return; }
   $app.replaceChildren(el("div", { class: "boot" }, "Loading…"));
   try {
@@ -298,7 +311,18 @@ function startApp() {
     S.spots = s.docs.map((d) => ({ id: d.id, ...d.data({ serverTimestamps: "estimate" }) }));
     if (S.tab === "map" && S.map) drawSpots(false);
   }, () => {}));
-  unsubs.push(onSnapshot(doc(db, "bans", uid), (d) => { if (d.exists()) showBanned(); }, () => {}));
+  unsubs.push(onSnapshot(query(collection(db, "likes"), orderBy("createdAt", "desc"), limit(1000)), (s) => {
+    const m = new Map();
+    for (const d of s.docs) { const x = d.data({ serverTimestamps: "estimate" }); if (!m.has(x.postId)) m.set(x.postId, new Set()); m.get(x.postId).add(x.uid); }
+    S.likes = m; paintLikes();
+  }, () => {}));
+  unsubs.push(onSnapshot(doc(db, "mods", uid), (d) => {
+    const next = d.exists() ? (d.data().perms || {}) : null;
+    if (JSON.stringify(next) === JSON.stringify(S.mod)) return;
+    S.mod = next; cardCache.clear();
+    if (S.tab === "feed") renderFeedCards(); else if (S.tab === "me") renderTab();
+  }, () => {}));
+  unsubs.push(onSnapshot(doc(db, "bans", uid), (d) => { if (d.exists() && !S.owner) showBanned(); }, () => {}));
   buildShell();
 }
 function showBanned() {
@@ -454,7 +478,7 @@ function lureChart() {
   const draw = () => {
     const f = S.biteFilter || (S.biteFilter = { days: 30, species: "" });
     const since = f.days ? Date.now() - f.days * dayMs : 0;
-    const inWin = S.posts.filter((x) => (x.createdAt?.toMillis?.() ?? Date.now()) >= since && x.lure && String(x.lure).trim());
+    const inWin = S.posts.filter((x) => catchMs(x) >= since && x.lure && String(x.lure).trim());
     const species = [...new Set(inWin.map((x) => String(x.species).trim()))].sort();
     if (f.species && !species.includes(f.species)) f.species = "";
     const rows = inWin.filter((x) => !f.species || String(x.species).trim() === f.species);
@@ -507,6 +531,7 @@ function renderFeedCards() {
   $feed.replaceChildren(...nodes);
   const idx = currentId ? S.posts.findIndex((p) => p.id === currentId) : 0;
   if (idx > 0) $feed.scrollTop = idx * $feed.clientHeight;
+  paintLikes();
 }
 function makeCard(p) {
   const mine = p.uid === S.user.uid;
@@ -514,15 +539,30 @@ function makeCard(p) {
     p.photo ? el("img", { src: p.photo, alt: `${p.species} caught by ${p.name}`, loading: "lazy" }) : el("div", { class: "nophoto" }, "No photo"),
     el("div", { class: "shade" }),
     el("div", { class: "info" },
-      el("div", { class: "who" }, avatar(p.uid, p.name, 30), el("span", null, "@" + p.name + "  ·  " + ago(p.createdAt))),
+      el("button", { class: "who", type: "button", "aria-label": `See ${p.name}'s catches`, onclick: () => openAngler(p.uid, p.name) }, avatar(p.uid, p.name, 30), el("span", null, "@" + p.name + "  ·  " + catchLabel(p))),
       el("div", { class: "species" }, p.species),
       el("div", { class: "size" }, sizeText(p)),
       el("div", { class: "meta" }, [p.lure ? "Caught on " + p.lure : null, p.spot || null, p.tournamentName ? "🏆 " + p.tournamentName : null].filter(Boolean).join("  ·  "))),
     el("div", { class: "side" },
+      el("div", null, el("button", { type: "button", class: "like", "data-like": p.id, "aria-pressed": "false", "aria-label": "Like", html: ICON.heart, onclick: () => toggleLike(p) }), el("small", { "data-like-n": p.id }, "0")),
       el("div", null, el("button", { type: "button", "aria-label": "Comments", html: ICON.chat, onclick: () => openComments(p) }), el("small", null, "Comments")),
-      mine || S.owner ? el("div", null, el("button", { type: "button", "aria-label": "Delete this post", html: ICON.trash, onclick: () => deletePost(p) }), el("small", null, "Delete")) : null,
+      mine || can("deletePosts") ? el("div", null, el("button", { type: "button", "aria-label": "Delete this post", html: ICON.trash, onclick: () => deletePost(p) }), el("small", null, "Delete")) : null,
       !mine ? el("div", null, el("button", { type: "button", "aria-label": "Report this post", html: ICON.flag, onclick: () => reportPost(p) }), el("small", null, "Report")) : null,
-      S.owner && !mine ? el("div", null, el("button", { type: "button", "aria-label": "Ban this angler", html: ICON.ban, onclick: () => banUser(p.uid, p.name) }), el("small", null, "Ban")) : null));
+      can("ban") && !mine ? el("div", null, el("button", { type: "button", "aria-label": "Ban this angler", html: ICON.ban, onclick: () => banUser(p.uid, p.name) }), el("small", null, "Ban")) : null));
+}
+function paintLikes() {
+  const me = S.user?.uid;
+  document.querySelectorAll("[data-like]").forEach((b) => {
+    const set = S.likes.get(b.dataset.like), on = !!(set && set.has(me));
+    b.setAttribute("aria-pressed", String(on)); b.setAttribute("aria-label", on ? "Unlike" : "Like");
+    const n = document.querySelector(`[data-like-n="${CSS.escape(b.dataset.like)}"]`); if (n) n.textContent = String(set ? set.size : 0);
+  });
+}
+async function toggleLike(p) {
+  const id = p.id + "_" + S.user.uid, set = S.likes.get(p.id) || new Set(), on = set.has(S.user.uid);
+  const next = new Set(set); on ? next.delete(S.user.uid) : next.add(S.user.uid); S.likes.set(p.id, next); paintLikes(); // show it right away
+  try { on ? await deleteDoc(doc(db, "likes", id)) : await setDoc(doc(db, "likes", id), { postId: p.id, uid: S.user.uid, createdAt: serverTimestamp() }); }
+  catch (e) { S.likes.set(p.id, set); paintLikes(); toast(errText(e)); }
 }
 async function deletePost(p) {
   if (!confirm("Delete this catch? This can't be undone.")) return;
@@ -537,7 +577,7 @@ async function deletePost(p) {
 let ownerUns = [];
 function stopOwner() { ownerUns.splice(0).forEach((u) => u()); }
 async function banUser(uid, name) {
-  if (!S.owner) return;
+  if (!can("ban")) return;
   if (uid === S.user.uid) { toast("You can't ban yourself."); return; }
   if (!confirm(`Ban @${name}? They won't be able to post, comment, or chat. You can undo it in Owner tools.`)) return;
   try { await setDoc(doc(db, "bans", uid), { name, by: S.user.uid, createdAt: serverTimestamp() }); toast(`@${name} is banned.`); }
@@ -553,35 +593,98 @@ async function reportPost(p) {
   } catch (e) { toast(/permission|insufficient/i.test(String(e?.message)) ? "You already reported this one." : errText(e)); }
 }
 async function ownerDeletePost(r, all = []) {
+  if (!can("deletePosts")) return;
   if (!confirm(`Delete @${r.postName}'s ${r.species} post for everyone?`)) return;
   try { await deleteDoc(doc(db, "posts", r.postId)); cardCache.delete(r.postId); deleteDoc(doc(db, "spots", r.postId)).catch(() => {}); all.filter((x) => x.postId === r.postId).forEach((x) => deleteDoc(doc(db, "reports", x.id)).catch(() => {})); toast("Post deleted."); }
   catch (e) { toast(errText(e)); }
+}
+function openModEditor(uid, name, current) {
+  const boxes = PERMS.map(([k, label]) => ({ k, label, input: el("input", { type: "checkbox", id: "perm-" + k, checked: current?.[k] ? "" : null }) }));
+  const close = () => bg.remove();
+  const save = async () => {
+    const perms = {}; boxes.forEach((x) => { perms[x.k] = x.input.checked; });
+    if (!Object.values(perms).some(Boolean)) { toast("Pick at least one thing, or tap Remove moderator."); return; }
+    try { await setDoc(doc(db, "mods", uid), { name, perms, by: S.user.uid, createdAt: serverTimestamp() }); toast(`@${name} is now a moderator.`); close(); }
+    catch (e) { toast(errText(e)); }
+  };
+  const bg = el("div", { class: "sheet-bg", onclick: (e) => { if (e.target === bg) close(); } },
+    el("div", { class: "sheet", role: "dialog", "aria-label": "Moderator permissions", style: "height:auto;max-height:90%" },
+      el("div", { class: "sheet-h" }, el("h2", { style: "overflow-wrap:anywhere" }, `Moderator: @${name}`), el("button", { class: "link", type: "button", onclick: close }, "Close")),
+      el("div", { class: "msgs about" },
+        el("p", { class: "muted small" }, "Choose what this person can do. They can never ban you or other moderators, and only you can change this list."),
+        ...boxes.map((x) => el("label", { class: "row", style: "gap:12px;flex-wrap:nowrap" }, x.input, el("span", null, x.label))),
+        el("button", { class: "btn wide", type: "button", onclick: save }, current ? "Save changes" : "Make moderator"),
+        current ? el("button", { class: "link danger", type: "button", style: "align-self:flex-start", onclick: async () => {
+          if (!confirm(`Remove @${name} as a moderator?`)) return;
+          try { await deleteDoc(doc(db, "mods", uid)); toast(`@${name} is no longer a moderator.`); close(); } catch (e) { toast(errText(e)); }
+        } }, "Remove moderator") : null)));
+  document.body.append(bg);
 }
 function viewOwner(p) {
   stopOwner();
   const reportsBox = el("div", { class: "list" }, el("p", { class: "muted" }, "Loading…"));
   const membersBox = el("div", { class: "list" }, el("p", { class: "muted" }, "Loading…"));
-  let bans = new Set(), users = [], reports = [];
+  let bans = new Set(), users = [], reports = [], mods = new Map();
   const paintReports = () => reportsBox.replaceChildren(...(reports.length ? reports.map((r) => el("div", { class: "item", style: "cursor:default;align-items:flex-start" },
     el("div", { class: "row", style: "gap:12px;flex-wrap:nowrap;min-width:0" },
       r.thumb ? el("img", { src: r.thumb, alt: "", style: "width:64px;height:64px;object-fit:cover;border-radius:8px;flex:none" }) : null,
       el("div", { class: "stack", style: "gap:2px;min-width:0" }, el("span", { class: "t" }, `@${r.postName}: ${r.species}`), el("span", { class: "s" }, `Reported by @${r.byName} · ${ago(r.createdAt)}`),
         el("div", { class: "row", style: "gap:12px" },
-          el("button", { class: "link danger small", type: "button", onclick: () => ownerDeletePost(r, reports) }, "Delete post"),
-          el("button", { class: "link danger small", type: "button", onclick: () => banUser(r.postUid, r.postName) }, "Ban"),
+          can("deletePosts") ? el("button", { class: "link danger small", type: "button", onclick: () => ownerDeletePost(r, reports) }, "Delete post") : null,
+          can("ban") ? el("button", { class: "link danger small", type: "button", onclick: () => banUser(r.postUid, r.postName) }, "Ban") : null,
           el("button", { class: "link small", type: "button", onclick: () => deleteDoc(doc(db, "reports", r.id)).catch((e) => toast(errText(e))) }, "Dismiss")))))) : [el("p", { class: "empty" }, "No reports. All quiet.")]));
   const paintMembers = () => { const rows = users.filter((u) => u.id !== S.user.uid);
-    membersBox.replaceChildren(...(rows.length ? rows.map((u) => el("div", { class: "item", style: "cursor:default" },
-      el("span", { class: "row", style: "gap:8px;flex-wrap:nowrap;min-width:0" }, avatar(u.id, u.name, 28), el("span", { class: "t" }, "@" + u.name), bans.has(u.id) ? el("span", { class: "pill final" }, "Banned") : null),
-      bans.has(u.id) ? el("button", { class: "btn ghost small", type: "button", onclick: () => unbanUser(u.id, u.name) }, "Unban")
-        : el("button", { class: "btn small", type: "button", onclick: () => banUser(u.id, u.name) }, "Ban"))) : [el("p", { class: "empty" }, "No other anglers yet.")])); };
-  ownerUns.push(onSnapshot(query(collection(db, "reports"), orderBy("createdAt", "desc"), limit(50)), (s) => { reports = s.docs.map((d) => ({ id: d.id, ...d.data({ serverTimestamps: "estimate" }) })); paintReports(); }, () => reportsBox.replaceChildren(el("p", { class: "muted" }, "Couldn't load reports. Make sure you signed in with Google using the owner email."))));
-  ownerUns.push(onSnapshot(collection(db, "bans"), (s) => { bans = new Set(s.docs.map((d) => d.id)); paintMembers(); }, () => {}));
-  ownerUns.push(onSnapshot(query(collection(db, "users"), limit(300)), (s) => { users = s.docs.map((d) => ({ id: d.id, ...d.data() })).sort((a, b) => String(a.name).localeCompare(String(b.name))); paintMembers(); }, () => {}));
-  p.append(backBtn("‹ Profile"), el("h1", null, "Owner tools"),
-    el("p", { class: "muted small" }, "You can delete anyone's catch or comment with the Delete button, and ban from the feed or the list below. Banned people can't post, comment, or chat."),
-    el("section", { class: "stack" }, el("h2", null, "Reports"), reportsBox),
-    el("section", { class: "stack" }, el("h2", null, "Anglers"), membersBox));
+    membersBox.replaceChildren(...(rows.length ? rows.map((u) => el("div", { class: "item", style: "cursor:default;flex-wrap:wrap" },
+      el("span", { class: "row", style: "gap:8px;flex-wrap:nowrap;min-width:0" }, avatar(u.id, u.name, 28), el("span", { class: "t" }, "@" + u.name),
+        bans.has(u.id) ? el("span", { class: "pill final" }, "Banned") : null, mods.has(u.id) ? el("span", { class: "pill soon" }, "Mod") : null),
+      el("span", { class: "row", style: "gap:8px" },
+        S.owner ? el("button", { class: "btn ghost small", type: "button", onclick: () => openModEditor(u.id, u.name, mods.get(u.id)) }, mods.has(u.id) ? "Edit mod" : "Make mod") : null,
+        can("ban") ? (bans.has(u.id) ? el("button", { class: "btn ghost small", type: "button", onclick: () => unbanUser(u.id, u.name) }, "Unban")
+          : el("button", { class: "btn small", type: "button", onclick: () => banUser(u.id, u.name) }, "Ban")) : null))) : [el("p", { class: "empty" }, "No other anglers yet.")])); };
+  if (can("reports")) ownerUns.push(onSnapshot(query(collection(db, "reports"), orderBy("createdAt", "desc"), limit(50)), (s) => { reports = s.docs.map((d) => ({ id: d.id, ...d.data({ serverTimestamps: "estimate" }) })); paintReports(); }, () => reportsBox.replaceChildren(el("p", { class: "muted" }, "Couldn't load reports."))));
+  if (can("ban")) ownerUns.push(onSnapshot(collection(db, "bans"), (s) => { bans = new Set(s.docs.map((d) => d.id)); paintMembers(); }, () => {}));
+  if (S.owner) ownerUns.push(onSnapshot(collection(db, "mods"), (s) => { mods = new Map(s.docs.map((d) => [d.id, d.data().perms || {}])); paintMembers(); }, () => {}));
+  if (can("ban") || S.owner) ownerUns.push(onSnapshot(query(collection(db, "users"), limit(300)), (s) => { users = s.docs.map((d) => ({ id: d.id, ...d.data() })).sort((a, b) => String(a.name).localeCompare(String(b.name))); paintMembers(); }, () => {}));
+  const mine = PERMS.filter(([k]) => can(k)).map(([, l]) => l);
+  p.append(backBtn("‹ Profile"), el("h1", null, S.owner ? "Owner tools" : "Moderator tools"),
+    el("p", { class: "muted small" }, S.owner
+      ? "You can delete anyone's catch or comment with the Delete button, ban from the feed or the list below, and make moderators with the permissions you choose."
+      : "You're a moderator. You can: " + (mine.join(", ") || "nothing yet") + ". Delete buttons show up right on catches and comments."),
+    can("reports") ? el("section", { class: "stack" }, el("h2", null, "Reports"), reportsBox) : null,
+    can("ban") || S.owner ? el("section", { class: "stack" }, el("h2", null, S.owner ? "Anglers and moderators" : "Anglers"), membersBox) : null);
+}
+
+/* ======================= someone's profile + their catches ======================= */
+function openAngler(uid, name) {
+  const body = el("div", { class: "msgs" }, el("p", { class: "muted" }, "Loading…"));
+  const close = () => bg.remove();
+  const bg = el("div", { class: "sheet-bg", onclick: (e) => { if (e.target === bg) close(); } },
+    el("div", { class: "sheet", role: "dialog", "aria-label": `@${name}'s catches` },
+      el("div", { class: "sheet-h" }, el("span", { class: "row", style: "gap:10px;flex-wrap:nowrap;min-width:0" }, avatar(uid, name, 40), el("h2", { style: "overflow-wrap:anywhere" }, "@" + name)),
+        el("button", { class: "link", type: "button", onclick: close }, "Close")),
+      body));
+  document.body.append(bg);
+  getDocs(query(collection(db, "posts"), where("uid", "==", uid), limit(20))).then((snap) => {
+    const rows = snap.docs.map((d) => ({ id: d.id, ...d.data({ serverTimestamps: "estimate" }) })).sort((a, b) => (b.createdAt?.toMillis?.() || 0) - (a.createdAt?.toMillis?.() || 0));
+    const biggest = Math.max(0, ...rows.map((x) => x.lb || 0));
+    const likes = rows.reduce((n, x) => n + (S.likes.get(x.id)?.size || 0), 0);
+    const pins = S.spots.filter((x) => x.uid === uid).length;
+    const lureCount = new Map();
+    rows.forEach((x) => { const t = String(x.lure || "").trim(); if (t) lureCount.set(t.toLowerCase(), (lureCount.get(t.toLowerCase()) || 0) + 1); });
+    const fav = [...lureCount.entries()].sort((a, b) => b[1] - a[1])[0];
+    body.replaceChildren(...[
+      el("div", { class: "stats" },
+        el("div", null, el("b", null, String(rows.length)), el("span", null, "Catches")),
+        el("div", null, el("b", null, biggest ? fmtLb(biggest) : "–"), el("span", null, "Biggest")),
+        el("div", null, el("b", null, String(likes)), el("span", null, "Likes"))),
+      fav ? el("p", { class: "muted small" }, `Most catches on: ${fav[0].charAt(0).toUpperCase() + fav[0].slice(1)} · ${pins} map pin${pins === 1 ? "" : "s"}`) : null,
+      can("ban") && uid !== S.user.uid ? el("button", { class: "link danger small", type: "button", style: "align-self:flex-start", onclick: () => banUser(uid, name) }, `Ban @${name}`) : null,
+      ...(rows.length ? rows.map((c) => el("div", { class: "comment", style: "flex-direction:row;gap:12px;align-items:center" },
+        c.photo ? el("img", { src: c.photo, alt: `${c.species} photo`, style: "width:72px;height:72px;object-fit:cover;border-radius:10px;flex:none" }) : null,
+        el("div", { class: "stack", style: "gap:2px;min-width:0" }, el("b", null, `${c.species}, ${sizeText(c)}`),
+          el("span", { class: "hint" }, `${c.lure ? "on " + c.lure + " · " : ""}${catchLabel(c)}${c.spot ? " · " + c.spot : ""}`),
+          el("span", { class: "hint" }, `♥ ${S.likes.get(c.id)?.size || 0}`)))) : [el("p", { class: "empty" }, "No catches yet.")])].filter(Boolean));
+  }).catch(() => body.replaceChildren(el("p", { class: "muted" }, "Couldn't load their catches.")));
 }
 
 /* ======================= comments sheet ======================= */
@@ -609,7 +712,7 @@ function openComments(p) {
     list.replaceChildren(...rows.map((c) => el("div", { class: "comment" },
       el("div", { class: "row spread" }, el("span", { class: "row", style: "gap:8px;flex-wrap:nowrap" }, avatar(c.uid, c.name, 24), el("b", null, "@" + c.name)), el("span", { class: "hint" }, ago(c.createdAt))),
       el("span", null, c.text),
-      c.uid === S.user.uid || S.owner ? el("button", { class: "link danger small", type: "button", style: "align-self:flex-start", onclick: () => deleteDoc(doc(db, "posts", p.id, "comments", c.id)).catch((e) => toast(errText(e))) }, "Delete") : null)));
+      c.uid === S.user.uid || can("deleteComments") ? el("button", { class: "link danger small", type: "button", style: "align-self:flex-start", onclick: () => deleteDoc(doc(db, "posts", p.id, "comments", c.id)).catch((e) => toast(errText(e))) }, "Delete") : null)));
     list.scrollTop = list.scrollHeight;
   }, () => list.replaceChildren(el("p", { class: "muted" }, "Couldn't load comments.")));
 }
@@ -711,6 +814,10 @@ function viewPost(p) {
     el("div", { class: "two" },
       el("label", { class: "field" }, el("span", null, "Weight (lb)"), el("input", { id: "f-lb", name: "lb", type: "number", inputmode: "decimal", min: 0, max: 500, step: 0.01, placeholder: "4.5" })),
       el("label", { class: "field" }, el("span", null, "Length (in)"), el("input", { id: "f-in", name: "inches", type: "number", inputmode: "decimal", min: 0, max: 200, step: 0.25, placeholder: "18.5" }))),
+    el("label", { class: "field" }, el("span", null, "Date caught"),
+      el("input", { id: "f-date", name: "date", type: "date", value: localDate(new Date()), max: localDate(new Date()), min: localDate(new Date(Date.now() - 5 * 365 * 86400000)), required: true,
+        onchange: (e) => { const old = e.target.value !== localDate(new Date()); const sel = document.getElementById("f-tour"); if (sel) { if (old) sel.value = ""; sel.disabled = old; } } }),
+      el("span", { class: "hint" }, "Pick an earlier day if you're posting an older catch. Older catches can't count in a tournament.")),
     el("div", { class: "ruler", "aria-hidden": "true" }),
     el("label", { class: "field" }, el("span", null, "Lure or bait"),
       el("input", { id: "f-lure", name: "lure", list: "lures", maxlength: 40, placeholder: "Crankbait", autocomplete: "off" })),
@@ -731,7 +838,9 @@ function viewPost(p) {
     if (!draftPhoto) { toast("Add a photo of your fish. Fishing photos only."); return; }
     if (isBad(species, fd.get("lure"), fd.get("spot"))) { toast(NO_SLURS); return; }
     if (!lb && !inches) { toast("Add a weight or a length."); return; }
-    const tid = String(fd.get("tour") || "");
+    const dateStr = String(fd.get("date") || localDate(new Date()));
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(dateStr) || dateStr > localDate(new Date())) { toast("Pick a date that isn't in the future."); return; }
+    const tid = dateStr === localDate(new Date()) ? String(fd.get("tour") || "") : "";
     const t = S.tournaments.find((x) => x.id === tid);
     const phaseIdx = t ? phaseAt(t) : -1, rule = t ? phasesOf(t)[phaseIdx] : null;
     if (rule?.lure && !lureOk(rule.lure, fd.get("lure"))) {
@@ -743,7 +852,7 @@ function viewPost(p) {
       const ref = await addDoc(collection(db, "posts"), {
         uid: S.user.uid, name: S.name, species, lb, inches,
         lure, spot: String(fd.get("spot") || "").trim(),
-        photo: draftPhoto || "", tournamentId: t ? t.id : "", tournamentName: t ? t.name : "",
+        catchDate: dateStr, photo: draftPhoto || "", tournamentId: t ? t.id : "", tournamentName: t ? t.name : "",
         phase: phaseIdx, createdAt: serverTimestamp(),
       });
       let pinFailed = false;
@@ -752,7 +861,7 @@ function viewPost(p) {
         const r = (n) => (exact ? Math.round(n * 1e5) / 1e5 : Math.round(n * 100) / 100); // 2 decimals is roughly 1 km
         try {
           await setDoc(doc(db, "spots", ref.id), { uid: S.user.uid, name: S.name, species, lb, inches, lure, lat: r(draftLoc.lat), lng: r(draftLoc.lng),
-            precise: exact, thumb: draftPhoto ? await thumbFrom(draftPhoto) : "", createdAt: serverTimestamp() });
+            precise: exact, catchDate: dateStr, thumb: draftPhoto ? await thumbFrom(draftPhoto) : "", createdAt: serverTimestamp() });
         } catch { pinFailed = true; }
       }
       draftPhoto = ""; draftLoc = null;
@@ -1131,13 +1240,26 @@ function renderMap() {
     setTimeout(() => S.map?.invalidateSize(), 60);
   }).catch(() => { note.textContent = "Couldn't load the map. Check your connection and try again."; });
 }
+const km = (a, b) => { const r = (x) => x * Math.PI / 180, dLat = r(b.lat - a.lat), dLng = r(b.lng - a.lng);
+  const h = Math.sin(dLat / 2) ** 2 + Math.cos(r(a.lat)) * Math.cos(r(b.lat)) * Math.sin(dLng / 2) ** 2; return 12742 * Math.asin(Math.sqrt(h)); };
 function spotPopup(s) {
+  // Everyone who has a pin within about 2 km, and which lures worked there.
+  const near = S.spots.filter((x) => typeof x.lat === "number" && typeof x.lng === "number" && km(s, x) <= 2);
+  const anglers = new Map(); near.forEach((x) => anglers.set(x.uid, x.name));
+  const lures = new Map();
+  near.forEach((x) => { const t = String(x.lure || "").trim(); if (!t) return; const k = t.toLowerCase().replace(/\s+/g, " "); const g = lures.get(k) || { name: t.charAt(0).toUpperCase() + t.slice(1), n: 0 }; g.n++; lures.set(k, g); });
+  const top = [...lures.values()].sort((a, b) => b.n - a.n).slice(0, 4);
   return el("div", { class: "pop" },
     s.thumb ? el("img", { src: s.thumb, alt: `${s.species} caught by ${s.name}` }) : null,
     el("b", null, s.species), el("span", null, sizeText(s)),
-    el("span", { class: "hint" }, `@${s.name} · ${ago(s.createdAt)}`),
+    el("span", { class: "hint" }, `@${s.name} · ${s.catchDate ? "caught " + fmtDayY(s.catchDate) : ago(s.createdAt)}`),
     s.lure ? el("span", { class: "hint" }, "Caught on " + s.lure) : null,
-    s.precise ? null : el("span", { class: "hint" }, "Approximate area"));
+    s.precise ? null : el("span", { class: "hint" }, "Approximate area"),
+    el("div", { class: "pop-near" },
+      el("b", null, "Around here"),
+      el("span", null, `${near.length} catch${near.length === 1 ? "" : "es"} by ${anglers.size} angler${anglers.size === 1 ? "" : "s"} within about 1 mile`),
+      el("div", { class: "pop-people" }, [...anglers].slice(0, 6).map(([uid, name]) => el("button", { class: "link small", type: "button", onclick: () => openAngler(uid, name) }, "@" + name))),
+      top.length ? el("span", null, "Popular lures: " + top.map((g) => `${g.name} (${g.n})`).join(", ")) : null));
 }
 function drawSpots(fit) {
   const L = window.L, note = document.getElementById("map-note");
@@ -1186,7 +1308,7 @@ function viewMe(p) {
   if (S.meView === "log") { p.append(backBtn("‹ Profile")); return viewLog(p); }
   if (S.meView === "friends") { p.append(backBtn("‹ Profile")); return viewFriends(p); }
   if (S.meView === "settings") return viewSettings(p);
-  if (S.meView === "owner" && S.owner) return viewOwner(p);
+  if (S.meView === "owner" && isStaff()) return viewOwner(p);
   const mine = [...S.mine].sort((a, b) => (b.createdAt?.toMillis?.() || 0) - (a.createdAt?.toMillis?.() || 0));
   const biggest = Math.max(0, ...mine.map((x) => x.lb || 0));
   const pins = S.spots.filter((s) => s.uid === S.user.uid).length;
@@ -1204,7 +1326,7 @@ function viewMe(p) {
       el("button", { class: "item", type: "button", onclick: open("friends") },
         el("span", { class: "row", style: "gap:10px" }, el("span", { class: "t" }, "Friends and chat"), S.reqIn.length ? el("span", { class: "pill live" }, `${S.reqIn.length} new`) : null), el("span", { class: "label" }, "›")),
       el("button", { class: "item", type: "button", onclick: open("log") }, el("span", { class: "t" }, "My fishing log"), el("span", { class: "label" }, "›")),
-      S.owner ? el("button", { class: "item", type: "button", onclick: open("owner") }, el("span", { class: "t" }, "Owner tools"), el("span", { class: "label" }, "›")) : null,
+      isStaff() ? el("button", { class: "item", type: "button", onclick: open("owner") }, el("span", { class: "t" }, S.owner ? "Owner tools" : "Moderator tools"), el("span", { class: "label" }, "›")) : null,
       el("button", { class: "item", type: "button", onclick: open("settings") }, el("span", { class: "t" }, "Settings"), el("span", { class: "label" }, "›"))),
     el("h2", null, "My catches"));
   if (!mine.length) { p.append(el("p", { class: "empty" }, "You haven't posted a catch yet. Tap the red Post button.")); return; }
@@ -1221,6 +1343,10 @@ function viewSettings(p) {
     el("option", { value: "approx" }, "Approximate area (about 1 km)"), el("option", { value: "exact" }, "Exact spot"));
   prec.value = getPref("prec", "approx");
   p.append(backBtn("‹ Profile"), el("h1", null, "Settings"),
+    el("section", { class: "stack" }, el("h2", null, "Install the app"),
+      isInstalled() ? el("p", { class: "muted" }, "You're using the installed app.")
+        : el("button", { class: "btn wide", type: "button", id: "s-install", onclick: installApp }, "Install Weigh-In on this device"),
+      isInstalled() ? null : el("span", { class: "hint" }, "Puts a Weigh-In icon on your home screen or desktop so it opens like a normal app.")),
     el("section", { class: "stack" }, el("h2", null, "Profile picture"),
       el("div", { class: "row", style: "gap:14px" }, avatar(S.user.uid, S.name, 64),
         el("label", { class: "btn ghost small", style: "position:relative;overflow:hidden" }, "Change picture", photoInput("set-photo", "Change profile picture")),
@@ -1243,6 +1369,38 @@ function viewSettings(p) {
 }
 
 
+/* ======================= install the app ======================= */
+let installEvt = null;
+window.addEventListener("beforeinstallprompt", (e) => { e.preventDefault(); installEvt = e; });
+window.addEventListener("appinstalled", () => { installEvt = null; toast("Installed! Look for Weigh-In on your home screen."); });
+const isInstalled = () => { try { return matchMedia("(display-mode: standalone)").matches || navigator.standalone === true; } catch { return false; } };
+async function installApp() {
+  if (installEvt) {
+    const e = installEvt; installEvt = null;
+    try { e.prompt(); await e.userChoice; } catch { /* closed */ }
+    return;
+  }
+  openInstallHelp();
+}
+function openInstallHelp() {
+  const ua = navigator.userAgent || "";
+  const ios = /iphone|ipad|ipod/i.test(ua) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+  const android = /android/i.test(ua);
+  const steps = ios
+    ? ["Open this page in Safari. It won't work from inside another app.", "Tap the Share button, the square with an arrow pointing up.", "Scroll down and tap Add to Home Screen.", "Tap Add. Weigh-In now has an icon like any other app."]
+    : android
+      ? ["Open this page in Chrome.", "Tap the ⋮ menu at the top right.", "Tap Install app (or Add to Home screen).", "Tap Install."]
+      : ["Use Chrome or Edge.", "Click the install icon at the right end of the address bar. It looks like a small screen with a down arrow.", "If you don't see it, open the ⋮ menu and choose Install Weigh-In (or Cast, save, and share, then Install page as app)."];
+  const close = () => bg.remove();
+  const bg = el("div", { class: "sheet-bg", onclick: (e) => { if (e.target === bg) close(); } },
+    el("div", { class: "sheet", role: "dialog", "aria-label": "Install the app", style: "height:auto;max-height:90%" },
+      el("div", { class: "sheet-h" }, el("h2", null, "Install Weigh-In"), el("button", { class: "link", type: "button", onclick: close }, "Close")),
+      el("div", { class: "msgs about" },
+        el("p", { class: "muted" }, "Your browser doesn't let a button do this automatically, so here are the steps:"),
+        el("ol", { style: "margin:0;padding-left:20px;display:flex;flex-direction:column;gap:6px" }, steps.map((x) => el("li", null, x))))));
+  document.body.append(bg);
+}
+
 /* ======================= ABOUT + PRIVACY ======================= */
 function openPrivacy() {
   const close = () => bg.remove();
@@ -1259,7 +1417,7 @@ function openPrivacy() {
         item("Map pins", "A pin is only added when you tap Add my location on a post. The default is an approximate area of about 1 km. Deleting the post removes the pin."),
         item("Weather", "The Bite tab asks a free weather service (Open-Meteo) for a forecast using the town you pick or your location if you allow it. That location is not saved to your account."),
         item("What the app doesn't do", "No ads, no tracking, no selling your info, no payments."),
-        item("House rules", "Fishing photos only. No slurs, hate, or bullying. The person who runs the app can delete any post or comment and can ban accounts. Tap the flag on a catch to report it."),
+        item("House rules", "Fishing photos only. No slurs, hate, or bullying. The person who runs the app, and moderators they choose, can delete posts or comments and can ban accounts. Tap the flag on a catch to report it."),
         item("Staying safe", "Don't post your address, school, or a spot you want to keep secret. Skip the location on catches near your home."),
         item("Deleting things", "You can delete any of your catches or comments yourself. To remove your whole account, ask the person who runs the app.")))); 
   document.body.append(bg);
