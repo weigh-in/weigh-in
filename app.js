@@ -75,6 +75,8 @@ const ICON = {
   map: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s7-6.2 7-12a7 7 0 0 0-14 0c0 5.8 7 12 7 12z"/><circle cx="12" cy="10" r="2.5"/></svg>',
   me: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/></svg>',
   sun: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="9" r="3.5"/><path d="M9 2.5v1.5M2.5 9H4M4.4 4.4l1 1M13.6 4.4l-1 1"/><path d="M8 20h10a3.5 3.5 0 0 0 .5-7 5 5 0 0 0-9.4 1A3 3 0 0 0 8 20z"/></svg>',
+  flag: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 21V4M5 4h11l-2 4 2 4H5"/></svg>',
+  ban: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M5.6 5.6l12.8 12.8"/></svg>',
   trash: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13"/></svg>',
 };
 
@@ -135,10 +137,24 @@ const S = {
 };
 const unsubs = [];
 let tourUnsub = null, meUnsub = null;
-function stopAll() { unsubs.splice(0).forEach((u) => u()); tourUnsub?.(); tourUnsub = null; meUnsub?.(); meUnsub = null; destroyMap(); S.mine = []; }
+function stopAll() { unsubs.splice(0).forEach((u) => u()); tourUnsub?.(); tourUnsub = null; meUnsub?.(); meUnsub = null; destroyMap(); stopOwner(); cardCache.clear(); S.mine = []; }
 
 /* ======================= auth screens ======================= */
 const NAME_RE = /^[A-Za-z0-9_]{2,20}$/;
+
+/* ---------- house rules: keep slurs out of names, posts, comments and chat ---------- */
+const OWNER_EMAIL = "teokosuge8@gmail.com"; // the person who runs the app (must sign in with a verified Google account)
+const BLOCK_PATTERNS = [/n+i+g{2,}[ea]+/, /f+a+g{2,}o+t/, /t+r+a+n+n+y+/, /w+e+t+b+a+c+k/];  // always bad, even inside other words
+const BLOCK_WORDS = new Set(["kike", "kikes", "spic", "spics", "chink", "chinks", "gook", "gooks", "coon", "coons", "beaner", "beaners", "dyke", "dykes", "paki", "retard", "retards", "retarded", "fag", "fags"]);
+function badText(text) {
+  const base = String(text || "").toLowerCase().normalize("NFKD").replace(/[\u0300-\u036f]/g, "");
+  const leet = base.replace(/[013457@$!|]/g, (c) => ({ "0": "o", "1": "i", "3": "e", "4": "a", "5": "s", "7": "t", "@": "a", "$": "s", "!": "i", "|": "i" }[c]));
+  const squashed = leet.replace(/[^a-z]/g, "");
+  if (BLOCK_PATTERNS.some((re) => re.test(squashed))) return true;
+  return leet.split(/[^a-z]+/).some((w) => BLOCK_WORDS.has(w));
+}
+const NO_SLURS = "That includes language that isn't allowed here. Please change it.";
+const isBad = (...parts) => parts.some((x) => badText(x));
 
 function renderAuth(mode = "signin") {
   const isNew = mode === "signup";
@@ -162,6 +178,7 @@ function renderAuth(mode = "signin") {
       if (isNew) {
         const name = String(fd.get("name") || "").trim();
         if (!NAME_RE.test(name)) { msg.textContent = "Angler name must be 2 to 20 letters, numbers or _."; return; }
+        if (badText(name)) { msg.textContent = "That name isn't allowed. Pick another one."; return; }
         pendingName = name;
         await createUserWithEmailAndPassword(auth, email, pw);
       } else {
@@ -201,6 +218,7 @@ function renderPickName(note) {
     e.preventDefault();
     const name = String(new FormData(f).get("name") || "").trim();
     if (!NAME_RE.test(name)) { msg.textContent = "Use 2 to 20 letters, numbers or _."; return; }
+    if (badText(name)) { msg.textContent = "That name isn't allowed. Pick another one."; return; }
     const ok = await claimName(name);
     if (ok) startApp(); else msg.textContent = `"${name}" is taken. Try another.`;
   });
@@ -227,6 +245,8 @@ async function claimName(name) {
 onAuthStateChanged(auth, async (user) => {
   stopAll();
   S.user = user;
+  S.owner = !!(user && user.emailVerified && String(user.email || "").toLowerCase() === OWNER_EMAIL);
+  S.banned = false;
   if (!user) { renderAuth(); return; }
   $app.replaceChildren(el("div", { class: "boot" }, "Loading…"));
   try {
@@ -278,7 +298,15 @@ function startApp() {
     S.spots = s.docs.map((d) => ({ id: d.id, ...d.data({ serverTimestamps: "estimate" }) }));
     if (S.tab === "map" && S.map) drawSpots(false);
   }, () => {}));
+  unsubs.push(onSnapshot(doc(db, "bans", uid), (d) => { if (d.exists()) showBanned(); }, () => {}));
   buildShell();
+}
+function showBanned() {
+  S.banned = true; stopAll();
+  $app.replaceChildren(el("div", { class: "auth" }, el("div", { class: "box" },
+    el("h1", null, "Account removed"),
+    el("p", null, "The person who runs Weigh-In removed this account for breaking the rules (fishing photos only, no slurs or hate, be kind). You can't post, comment, or chat anymore."),
+    el("button", { class: "btn", type: "button", onclick: () => signOut(auth) }, "Sign out"))));
 }
 function refreshMe(view) { if (S.tab === "me" && (S.meView === view || S.meView === "main")) renderTab(); }
 
@@ -303,6 +331,7 @@ function go(tab) {
 function updateDot() { $nav?.querySelector(".dot")?.toggleAttribute("hidden", S.reqIn.length === 0); }
 function renderTab() {
   clearInterval(tick);
+  if (S.tab !== "me" || S.meView !== "owner") stopOwner();
   if (S.tab !== "map") destroyMap();
   if (S.tab === "feed") return renderFeed();
   if (S.tab === "map") return renderMap();
@@ -491,7 +520,9 @@ function makeCard(p) {
       el("div", { class: "meta" }, [p.lure ? "Caught on " + p.lure : null, p.spot || null, p.tournamentName ? "🏆 " + p.tournamentName : null].filter(Boolean).join("  ·  "))),
     el("div", { class: "side" },
       el("div", null, el("button", { type: "button", "aria-label": "Comments", html: ICON.chat, onclick: () => openComments(p) }), el("small", null, "Comments")),
-      mine ? el("div", null, el("button", { type: "button", "aria-label": "Delete this post", html: ICON.trash, onclick: () => deletePost(p) }), el("small", null, "Delete")) : null));
+      mine || S.owner ? el("div", null, el("button", { type: "button", "aria-label": "Delete this post", html: ICON.trash, onclick: () => deletePost(p) }), el("small", null, "Delete")) : null,
+      !mine ? el("div", null, el("button", { type: "button", "aria-label": "Report this post", html: ICON.flag, onclick: () => reportPost(p) }), el("small", null, "Report")) : null,
+      S.owner && !mine ? el("div", null, el("button", { type: "button", "aria-label": "Ban this angler", html: ICON.ban, onclick: () => banUser(p.uid, p.name) }), el("small", null, "Ban")) : null));
 }
 async function deletePost(p) {
   if (!confirm("Delete this catch? This can't be undone.")) return;
@@ -500,6 +531,57 @@ async function deletePost(p) {
     deleteDoc(doc(db, "spots", p.id)).catch(() => {}); // its map pin, if it had one
     toast("Catch deleted.");
   } catch (e) { toast(errText(e)); }
+}
+
+/* ======================= owner tools: reports, bans ======================= */
+let ownerUns = [];
+function stopOwner() { ownerUns.splice(0).forEach((u) => u()); }
+async function banUser(uid, name) {
+  if (!S.owner) return;
+  if (uid === S.user.uid) { toast("You can't ban yourself."); return; }
+  if (!confirm(`Ban @${name}? They won't be able to post, comment, or chat. You can undo it in Owner tools.`)) return;
+  try { await setDoc(doc(db, "bans", uid), { name, by: S.user.uid, createdAt: serverTimestamp() }); toast(`@${name} is banned.`); }
+  catch (e) { toast(errText(e)); }
+}
+function unbanUser(uid, name) { return deleteDoc(doc(db, "bans", uid)).then(() => toast(`@${name} is unbanned.`)).catch((e) => toast(errText(e))); }
+async function reportPost(p) {
+  if (!confirm("Report this catch to the owner? Use this for photos that aren't fishing, slurs, or anything rude.")) return;
+  try {
+    await setDoc(doc(db, "reports", p.id + "_" + S.user.uid), { postId: p.id, postUid: p.uid, postName: p.name, species: p.species,
+      thumb: p.photo ? await thumbFrom(p.photo) : "", by: S.user.uid, byName: S.name, createdAt: serverTimestamp() });
+    toast("Thanks. The owner will take a look.");
+  } catch (e) { toast(/permission|insufficient/i.test(String(e?.message)) ? "You already reported this one." : errText(e)); }
+}
+async function ownerDeletePost(r, all = []) {
+  if (!confirm(`Delete @${r.postName}'s ${r.species} post for everyone?`)) return;
+  try { await deleteDoc(doc(db, "posts", r.postId)); cardCache.delete(r.postId); deleteDoc(doc(db, "spots", r.postId)).catch(() => {}); all.filter((x) => x.postId === r.postId).forEach((x) => deleteDoc(doc(db, "reports", x.id)).catch(() => {})); toast("Post deleted."); }
+  catch (e) { toast(errText(e)); }
+}
+function viewOwner(p) {
+  stopOwner();
+  const reportsBox = el("div", { class: "list" }, el("p", { class: "muted" }, "Loading…"));
+  const membersBox = el("div", { class: "list" }, el("p", { class: "muted" }, "Loading…"));
+  let bans = new Set(), users = [], reports = [];
+  const paintReports = () => reportsBox.replaceChildren(...(reports.length ? reports.map((r) => el("div", { class: "item", style: "cursor:default;align-items:flex-start" },
+    el("div", { class: "row", style: "gap:12px;flex-wrap:nowrap;min-width:0" },
+      r.thumb ? el("img", { src: r.thumb, alt: "", style: "width:64px;height:64px;object-fit:cover;border-radius:8px;flex:none" }) : null,
+      el("div", { class: "stack", style: "gap:2px;min-width:0" }, el("span", { class: "t" }, `@${r.postName}: ${r.species}`), el("span", { class: "s" }, `Reported by @${r.byName} · ${ago(r.createdAt)}`),
+        el("div", { class: "row", style: "gap:12px" },
+          el("button", { class: "link danger small", type: "button", onclick: () => ownerDeletePost(r, reports) }, "Delete post"),
+          el("button", { class: "link danger small", type: "button", onclick: () => banUser(r.postUid, r.postName) }, "Ban"),
+          el("button", { class: "link small", type: "button", onclick: () => deleteDoc(doc(db, "reports", r.id)).catch((e) => toast(errText(e))) }, "Dismiss")))))) : [el("p", { class: "empty" }, "No reports. All quiet.")]));
+  const paintMembers = () => { const rows = users.filter((u) => u.id !== S.user.uid);
+    membersBox.replaceChildren(...(rows.length ? rows.map((u) => el("div", { class: "item", style: "cursor:default" },
+      el("span", { class: "row", style: "gap:8px;flex-wrap:nowrap;min-width:0" }, avatar(u.id, u.name, 28), el("span", { class: "t" }, "@" + u.name), bans.has(u.id) ? el("span", { class: "pill final" }, "Banned") : null),
+      bans.has(u.id) ? el("button", { class: "btn ghost small", type: "button", onclick: () => unbanUser(u.id, u.name) }, "Unban")
+        : el("button", { class: "btn small", type: "button", onclick: () => banUser(u.id, u.name) }, "Ban"))) : [el("p", { class: "empty" }, "No other anglers yet.")])); };
+  ownerUns.push(onSnapshot(query(collection(db, "reports"), orderBy("createdAt", "desc"), limit(50)), (s) => { reports = s.docs.map((d) => ({ id: d.id, ...d.data({ serverTimestamps: "estimate" }) })); paintReports(); }, () => reportsBox.replaceChildren(el("p", { class: "muted" }, "Couldn't load reports. Make sure you signed in with Google using the owner email."))));
+  ownerUns.push(onSnapshot(collection(db, "bans"), (s) => { bans = new Set(s.docs.map((d) => d.id)); paintMembers(); }, () => {}));
+  ownerUns.push(onSnapshot(query(collection(db, "users"), limit(300)), (s) => { users = s.docs.map((d) => ({ id: d.id, ...d.data() })).sort((a, b) => String(a.name).localeCompare(String(b.name))); paintMembers(); }, () => {}));
+  p.append(backBtn("‹ Profile"), el("h1", null, "Owner tools"),
+    el("p", { class: "muted small" }, "You can delete anyone's catch or comment with the Delete button, and ban from the feed or the list below. Banned people can't post, comment, or chat."),
+    el("section", { class: "stack" }, el("h2", null, "Reports"), reportsBox),
+    el("section", { class: "stack" }, el("h2", null, "Anglers"), membersBox));
 }
 
 /* ======================= comments sheet ======================= */
@@ -511,6 +593,7 @@ function openComments(p) {
   form.addEventListener("submit", async (e) => {
     e.preventDefault();
     const text = input.value.trim(); if (!text) return;
+    if (badText(text)) { toast(NO_SLURS); return; }
     input.value = "";
     try { await addDoc(collection(db, "posts", p.id, "comments"), { uid: S.user.uid, name: S.name, text, createdAt: serverTimestamp() }); }
     catch (err) { toast(errText(err)); input.value = text; }
@@ -526,7 +609,7 @@ function openComments(p) {
     list.replaceChildren(...rows.map((c) => el("div", { class: "comment" },
       el("div", { class: "row spread" }, el("span", { class: "row", style: "gap:8px;flex-wrap:nowrap" }, avatar(c.uid, c.name, 24), el("b", null, "@" + c.name)), el("span", { class: "hint" }, ago(c.createdAt))),
       el("span", null, c.text),
-      c.uid === S.user.uid ? el("button", { class: "link danger small", type: "button", style: "align-self:flex-start", onclick: () => deleteDoc(doc(db, "posts", p.id, "comments", c.id)).catch((e) => toast(errText(e))) }, "Delete") : null)));
+      c.uid === S.user.uid || S.owner ? el("button", { class: "link danger small", type: "button", style: "align-self:flex-start", onclick: () => deleteDoc(doc(db, "posts", p.id, "comments", c.id)).catch((e) => toast(errText(e))) }, "Delete") : null)));
     list.scrollTop = list.scrollHeight;
   }, () => list.replaceChildren(el("p", { class: "muted" }, "Couldn't load comments.")));
 }
@@ -621,7 +704,8 @@ function viewPost(p) {
     tourHint.textContent = ph ? `Now: ${ph.name}${ph.where ? " at " + ph.where : ""}${ph.lure ? ". Lure rule: " + ph.lure + " only" : ""}.` : "This catch will count in this tournament.";
   };
   const f = el("form", { novalidate: true },
-    el("div", { class: "field" }, el("span", null, "Photo"), preview, removeBtn),
+    el("div", { class: "field" }, el("span", null, "Photo"), preview, removeBtn,
+      el("span", { class: "hint" }, "Fishing photos only. Anything else gets removed and the account can be banned.")),
     el("label", { class: "field" }, el("span", null, "Fish type"),
       el("input", { id: "f-species", name: "species", list: "species", maxlength: 40, placeholder: "Largemouth Bass", autocomplete: "off", required: true })),
     el("div", { class: "two" },
@@ -644,6 +728,8 @@ function viewPost(p) {
     const species = String(fd.get("species") || "").trim();
     const lb = parseFloat(fd.get("lb")) || 0, inches = parseFloat(fd.get("inches")) || 0;
     if (!species) { toast("Enter what kind of fish it is."); return; }
+    if (!draftPhoto) { toast("Add a photo of your fish. Fishing photos only."); return; }
+    if (isBad(species, fd.get("lure"), fd.get("spot"))) { toast(NO_SLURS); return; }
     if (!lb && !inches) { toast("Add a weight or a length."); return; }
     const tid = String(fd.get("tour") || "");
     const t = S.tournaments.find((x) => x.id === tid);
@@ -746,12 +832,14 @@ function viewCreateTour(p) {
     e.preventDefault();
     const fd = new FormData(f);
     const name = String(fd.get("name") || "").trim();
+    if (badText(name)) { toast(NO_SLURS); return; }
     const startAt = new Date(startInput.value).getTime();
     if (!name) { toast("Give the tournament a name."); return; }
     if (!startAt) { toast("Pick a start date and time."); return; }
     let endAt, phases = [];
     if (splitBox.checked) {
       phases = phaseRows.map((r, i) => ({ name: r.name.value.trim() || "Phase " + (i + 1), where: r.where.value.trim(), lure: r.lure.value.trim(), mins: parseInt(r.mins.value) || 0 }));
+      if (phases.some((x) => isBad(x.name, x.where, x.lure))) { toast(NO_SLURS); return; }
       if (phases.some((x) => x.mins < 5 || x.mins > 1440)) { toast("Each phase needs 5 to 1440 minutes."); return; }
       endAt = startAt + phases.reduce((a, x) => a + x.mins, 0) * 60000;
     } else {
@@ -997,6 +1085,7 @@ function openChat(fs) {
   form.addEventListener("submit", async (e) => {
     e.preventDefault();
     const text = input.value.trim(); if (!text) return;
+    if (badText(text)) { toast(NO_SLURS); return; }
     input.value = "";
     try { await addDoc(collection(db, "friendships", fs.id, "messages"), { uid: S.user.uid, text, createdAt: serverTimestamp() }); }
     catch (err) { toast(errText(err)); input.value = text; }
@@ -1097,6 +1186,7 @@ function viewMe(p) {
   if (S.meView === "log") { p.append(backBtn("‹ Profile")); return viewLog(p); }
   if (S.meView === "friends") { p.append(backBtn("‹ Profile")); return viewFriends(p); }
   if (S.meView === "settings") return viewSettings(p);
+  if (S.meView === "owner" && S.owner) return viewOwner(p);
   const mine = [...S.mine].sort((a, b) => (b.createdAt?.toMillis?.() || 0) - (a.createdAt?.toMillis?.() || 0));
   const biggest = Math.max(0, ...mine.map((x) => x.lb || 0));
   const pins = S.spots.filter((s) => s.uid === S.user.uid).length;
@@ -1114,6 +1204,7 @@ function viewMe(p) {
       el("button", { class: "item", type: "button", onclick: open("friends") },
         el("span", { class: "row", style: "gap:10px" }, el("span", { class: "t" }, "Friends and chat"), S.reqIn.length ? el("span", { class: "pill live" }, `${S.reqIn.length} new`) : null), el("span", { class: "label" }, "›")),
       el("button", { class: "item", type: "button", onclick: open("log") }, el("span", { class: "t" }, "My fishing log"), el("span", { class: "label" }, "›")),
+      S.owner ? el("button", { class: "item", type: "button", onclick: open("owner") }, el("span", { class: "t" }, "Owner tools"), el("span", { class: "label" }, "›")) : null,
       el("button", { class: "item", type: "button", onclick: open("settings") }, el("span", { class: "t" }, "Settings"), el("span", { class: "label" }, "›"))),
     el("h2", null, "My catches"));
   if (!mine.length) { p.append(el("p", { class: "empty" }, "You haven't posted a catch yet. Tap the red Post button.")); return; }
@@ -1168,6 +1259,7 @@ function openPrivacy() {
         item("Map pins", "A pin is only added when you tap Add my location on a post. The default is an approximate area of about 1 km. Deleting the post removes the pin."),
         item("Weather", "The Bite tab asks a free weather service (Open-Meteo) for a forecast using the town you pick or your location if you allow it. That location is not saved to your account."),
         item("What the app doesn't do", "No ads, no tracking, no selling your info, no payments."),
+        item("House rules", "Fishing photos only. No slurs, hate, or bullying. The person who runs the app can delete any post or comment and can ban accounts. Tap the flag on a catch to report it."),
         item("Staying safe", "Don't post your address, school, or a spot you want to keep secret. Skip the location on catches near your home."),
         item("Deleting things", "You can delete any of your catches or comments yourself. To remove your whole account, ask the person who runs the app.")))); 
   document.body.append(bg);
