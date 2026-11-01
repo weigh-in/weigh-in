@@ -1708,8 +1708,236 @@ function openInstallHelp() {
 }
 
 
-/* ======================= FISHING GAME (Reel Rush) ======================= */
+/* ======================= LAKE DUEL (cast, hook, reel) ======================= */
+const FC_LOCS = [
+  { id: "pond", n: "Pond", lvl: 1, sky: ["#ffe2b0", "#d6ecf2"], water: ["#4aa6b9", "#1d6577"], fish: ["Bluegill", "Largemouth bass", "Channel catfish"] },
+  { id: "lake", n: "Lake", lvl: 3, sky: ["#c9d6ff", "#e3f0f5"], water: ["#3a7fb0", "#123e5f"], fish: ["Crappie", "Largemouth bass", "Walleye", "Northern pike"] },
+  { id: "river", n: "River", lvl: 5, sky: ["#ffd0b0", "#f1e6d6"], water: ["#4b9a8a", "#17463f"], fish: ["Rainbow trout", "Smallmouth bass", "Channel catfish", "Common carp"] }];
+const FC_LURES = [["spinner", "Spinner"], ["worm", "Worm"], ["crank", "Crankbait"], ["jig", "Minnow jig"]];
+const FC_FISH = {
+  "Bluegill": { min: 0.3, max: 1.6, c: "#4a7fb5", r: 16, w: { spinner: 1, worm: 3, crank: 0.4, jig: 2 } },
+  "Largemouth bass": { min: 1, max: 9, c: "#5f8f3a", r: 22, w: { spinner: 2, worm: 2, crank: 3, jig: 1 } },
+  "Channel catfish": { min: 1, max: 14, c: "#7a6a58", r: 26, w: { spinner: 0.5, worm: 3, crank: 0.5, jig: 1 } },
+  "Crappie": { min: 0.4, max: 2.5, c: "#b9b99a", r: 17, w: { spinner: 1, worm: 1, crank: 0.5, jig: 3 } },
+  "Walleye": { min: 1.5, max: 10, c: "#b59a3a", r: 24, w: { spinner: 1, worm: 1, crank: 3, jig: 2 } },
+  "Northern pike": { min: 2, max: 20, c: "#6f8a4a", r: 30, w: { spinner: 2, worm: 0.5, crank: 3, jig: 1 } },
+  "Rainbow trout": { min: 0.5, max: 8, c: "#d98fa3", r: 21, w: { spinner: 3, worm: 1.5, crank: 1, jig: 2 } },
+  "Smallmouth bass": { min: 0.8, max: 6, c: "#8a7a4a", r: 21, w: { spinner: 2, worm: 2, crank: 2, jig: 2 } },
+  "Common carp": { min: 2, max: 25, c: "#c79b4a", r: 29, w: { spinner: 0.4, worm: 3, crank: 0.3, jig: 0.6 } }};
+const fcXp = () => +getPref("fcxp", "0") || 0;
+const fcLevel = () => 1 + Math.floor(Math.sqrt(fcXp() / 40));
+const fcDex = () => { try { return JSON.parse(getPref("fcdex", "{}")) || {}; } catch { return {}; } };
+const lbText = (w) => w.toFixed(2) + " lb";
+
 function openFishGame() {
+  let loc = getPref("fcloc", "pond"), lure = getPref("fclure", "spinner");
+  if (!FC_LOCS.some((l) => l.id === loc && l.lvl <= fcLevel())) loc = "pond";
+  const box = el("div", { class: "fc-menu-in" });
+  const bg = el("div", { class: "game-bg fc-menu", role: "dialog", "aria-label": "Fishing game menu" }, box);
+  document.body.append(bg);
+  const close = () => bg.remove();
+  const draw = () => {
+    const lv = fcLevel(), xp = fcXp(), lo = 40 * (lv - 1) ** 2, hi = 40 * lv ** 2, dex = fcDex();
+    const names = Object.keys(FC_FISH);
+    box.replaceChildren(
+      el("div", { class: "row spread" }, el("h1", null, "Lake Duel"), el("button", { class: "link", type: "button", onclick: close }, "Close")),
+      el("div", { class: "fc-card" }, el("div", { class: "row spread" }, el("b", null, "Level " + lv), el("span", { class: "muted small" }, xp + " / " + hi + " XP")),
+        el("div", { class: "meter" }, el("i", { style: "width:" + Math.round((xp - lo) / (hi - lo) * 100) + "%" }))),
+      el("h2", null, "Where"),
+      el("div", { class: "chips" }, FC_LOCS.map((l) => el("button", { class: "chip", type: "button", disabled: l.lvl > lv ? "" : null, "aria-pressed": String(loc === l.id),
+        onclick: () => { loc = l.id; setPref("fcloc", loc); draw(); } }, l.n + (l.lvl > lv ? " 🔒 Lv " + l.lvl : "")))),
+      el("h2", null, "Lure"),
+      el("div", { class: "chips" }, FC_LURES.map(([id, n]) => el("button", { class: "chip", type: "button", "aria-pressed": String(lure === id), onclick: () => { lure = id; setPref("fclure", id); draw(); } }, n))),
+      el("p", { class: "muted small" }, "Different lures attract different fish. Here you can catch: " + FC_LOCS.find((l) => l.id === loc).fish.join(", ") + "."),
+      el("button", { class: "btn wide", type: "button", id: "fc-duel", onclick: () => playClash("duel", loc, lure, draw) }, "Duel a rival (3 casts)"),
+      el("button", { class: "btn ghost wide", type: "button", id: "fc-free", onclick: () => playClash("free", loc, lure, draw) }, "Free fishing"),
+      el("button", { class: "btn ghost wide", type: "button", id: "fc-rush", onclick: openReelRush }, "Quick game: Reel Rush"),
+      el("h2", null, `My fish (${Object.keys(dex).length}/${names.length})`),
+      el("div", { class: "list" }, names.map((n) => el("div", { class: "item", style: "cursor:default" },
+        el("span", { class: "t" }, dex[n] ? n : "???"), el("span", { class: "s" }, dex[n] ? `best ${lbText(dex[n].best)} · caught ${dex[n].n}` : "not caught yet")))),
+      el("p", { class: "muted small" }, "How to play: tap to cast. Wait for the bobber to dip, then tap fast to hook the fish. Hold to reel and let go when the line turns red. Keep the line in the green."));
+  };
+  draw();
+}
+
+function playClash(mode, locId, lureId, onExit) {
+  const L = FC_LOCS.find((l) => l.id === locId) || FC_LOCS[0];
+  const canvas = el("canvas", { class: "game-canvas", role: "img", "aria-label": "Fishing game. Tap to cast and hook. Hold to reel." });
+  const ctx = canvas.getContext("2d");
+  const bg = el("div", { class: "game-bg", role: "dialog", "aria-label": "Fishing" }, canvas,
+    el("button", { class: "game-x", type: "button", "aria-label": "Leave the game", onclick: () => end() }, "✕"));
+  document.body.append(bg);
+  let W = 0, H = 0, raf = 0, dpr = 1, last = 0;
+  const resize = () => { dpr = Math.min(2, devicePixelRatio || 1); W = bg.clientWidth; H = bg.clientHeight; canvas.width = W * dpr; canvas.height = H * dpr; canvas.style.width = W + "px"; canvas.style.height = H + "px"; ctx.setTransform(dpr, 0, 0, dpr, 0, 0); };
+  resize(); addEventListener("resize", resize);
+  const end = () => { cancelAnimationFrame(raf); removeEventListener("resize", resize); removeEventListener("keydown", onKey); removeEventListener("keyup", onKeyUp); bg.remove(); onExit && onExit(); };
+
+  const CASTS = 3, rivalName = ["Lakeside Lou", "Big Mike", "Sunny", "Cody", "Captain Pete"][Math.floor(Math.random() * 5)];
+  let st = "cast", ci = 0, mine = [], rival = [], down = false, powerT = 0, power = 0, great = false, timer = 0, biteAt = 0, msg = "", fish = null, weight = 0, F = null, rec = false, flash = 0, resText = "";
+  const setSt = (s) => { st = s; bg.dataset.state = s; };
+  setSt("cast");
+  const pickFish = () => {
+    const ws = L.fish.map((n) => FC_FISH[n].w[lureId]); let r = Math.random() * ws.reduce((a, b) => a + b, 0), i = 0;
+    for (; i < ws.length - 1; i++) { if ((r -= ws[i]) <= 0) break; }
+    return L.fish[i];
+  };
+  const rollWeight = (n, good) => { const f = FC_FISH[n]; return Math.round((f.min + (f.max - f.min) * Math.pow(Math.random(), good ? 1.7 : 2.6)) * 100) / 100; };
+  if (mode === "duel") for (let i = 0; i < CASTS; i++) rival.push(Math.random() < 0.15 ? 0 : rollWeight(pickFish(), Math.random() < 0.4));
+
+  const bobber = () => ({ x: W / 2 + Math.sin(ci * 2.1) * W * 0.12, y: H * (0.62 - 0.3 * power) });
+  const shore = () => ({ x: W / 2, y: H * 0.86 });
+
+  function doCast() { power = powerT; great = power > 0.6 && power < 0.9; timer = 1.6 + Math.random() * 2.6; setSt("wait"); }
+  function hook() {
+    fish = pickFish(); weight = rollWeight(fish, great); const f = FC_FISH[fish];
+    const s = 0.35 + 0.65 * (weight - f.min) / (f.max - f.min);
+    F = { t: 0.35, d: 100, s, surge: false, surgeT: 0.8, slack: 0, time: 0 }; setSt("fight");
+  }
+  function finish(win) {
+    flash = 0; rec = false; resText = "";
+    if (win) {
+      mine[ci] = weight; const dex = fcDex(), d = dex[fish] || { best: 0, n: 0 };
+      rec = weight > d.best; d.best = Math.max(d.best, weight); d.n++; dex[fish] = d; setPref("fcdex", JSON.stringify(dex));
+      setPref("fcxp", String(fcXp() + Math.round(weight * 8) + 5));
+    } else { mine[ci] = 0; }
+    setSt("result");
+  }
+  function lose(text) { msg = text; fish = null; finish(false); }
+  function advance() {
+    if (mode === "duel" && ci >= CASTS - 1) {
+      const a = mine.reduce((x, y) => x + y, 0), b = rival.reduce((x, y) => x + y, 0);
+      const out = a > b ? "win" : a < b ? "lose" : "draw";
+      setPref("fcxp", String(fcXp() + (out === "win" ? 60 : out === "draw" ? 30 : 15)));
+      resText = out; setSt("over"); return;
+    }
+    ci++; fish = null; setSt("cast"); powerT = 0;
+  }
+  const act = () => {
+    if (st === "cast") doCast();
+    else if (st === "wait") { lose("Too early! The fish got spooked."); }
+    else if (st === "bite") hook();
+    else if (st === "result") advance();
+    else if (st === "over") end();
+  };
+  canvas.addEventListener("pointerdown", (e) => { canvas.setPointerCapture?.(e.pointerId); down = true; act(); });
+  canvas.addEventListener("pointerup", () => { down = false; });
+  canvas.addEventListener("pointercancel", () => { down = false; });
+  const onKey = (e) => { if (e.key === "Escape") { end(); return; } if (e.key === " " || e.key === "Enter") { e.preventDefault(); if (!e.repeat) { down = true; act(); } } };
+  const onKeyUp = (e) => { if (e.key === " " || e.key === "Enter") down = false; };
+  addEventListener("keydown", onKey); addEventListener("keyup", onKeyUp);
+
+  function drawFish(x, y, r, c, dir, wob) {
+    ctx.save(); ctx.translate(x, y); ctx.scale(dir, 1); ctx.rotate(wob || 0);
+    ctx.fillStyle = c; ctx.beginPath(); ctx.ellipse(0, 0, r, r * 0.58, 0, 0, 7); ctx.fill();
+    ctx.beginPath(); ctx.moveTo(-r * 0.8, 0); ctx.lineTo(-r * 1.5, -r * 0.5); ctx.lineTo(-r * 1.5, r * 0.5); ctx.closePath(); ctx.fill();
+    ctx.beginPath(); ctx.moveTo(-r * 0.2, -r * 0.5); ctx.lineTo(r * 0.1, -r * 0.95); ctx.lineTo(r * 0.4, -r * 0.45); ctx.closePath(); ctx.fill();
+    ctx.fillStyle = "rgba(255,255,255,.35)"; ctx.beginPath(); ctx.ellipse(0, r * 0.2, r * 0.7, r * 0.2, 0, 0, 7); ctx.fill();
+    ctx.fillStyle = "#fff"; ctx.beginPath(); ctx.arc(r * 0.55, -r * 0.1, r * 0.17, 0, 7); ctx.fill();
+    ctx.fillStyle = "#111"; ctx.beginPath(); ctx.arc(r * 0.6, -r * 0.1, r * 0.08, 0, 7); ctx.fill();
+    ctx.restore();
+  }
+  const text = (s, x, y, size, color, align) => { ctx.font = `bold ${size}px system-ui,sans-serif`; ctx.textAlign = align || "center"; ctx.fillStyle = color || "#fff"; ctx.fillText(s, x, y); };
+
+  function update(dt) {
+    if (st === "cast") { powerT += dt * 0.9; if (powerT > 2) powerT = 0; power = powerT <= 1 ? powerT : 2 - powerT; }
+    if (st === "wait") { timer -= dt; if (timer <= 0) { biteAt = 0; setSt("bite"); } }
+    if (st === "bite") { biteAt += dt; if (biteAt > 0.95) lose("Too slow. It got away."); }
+    if (st === "fight") {
+      const s = F.s; F.time += dt; F.surgeT -= dt;
+      if (F.surgeT <= 0) { F.surge = !F.surge; F.surgeT = F.surge ? 0.6 + Math.random() * 0.9 : 0.8 + Math.random() * 1.4; }
+      if (down) F.t += (0.42 + (F.surge ? 0.55 * s : 0.1 * s)) * dt; else F.t -= (0.55 - (F.surge ? 0.3 * s : 0)) * dt;
+      F.t = Math.max(0, F.t);
+      const green = F.t >= 0.3 && F.t <= 0.72;
+      if (down) F.d -= (green ? 20 : F.t > 0.72 ? 8 : 5) * dt * (1.1 - 0.5 * s);
+      if (F.surge) F.d += (down ? 3 : 9) * s * dt;
+      F.d = Math.min(100, F.d);
+      bg.dataset.tension = F.t.toFixed(2);
+      F.slack = F.t < 0.1 ? F.slack + dt : Math.max(0, F.slack - dt);
+      if (F.t >= 1) lose("The line snapped!");
+      else if (F.slack > 2.2) lose("It shook the hook!");
+      else if (F.d <= 0) finish(true);
+    }
+    flash += dt;
+  }
+  function scene(now) {
+    const wy = H * 0.25;
+    let g = ctx.createLinearGradient(0, 0, 0, wy); g.addColorStop(0, L.sky[0]); g.addColorStop(1, L.sky[1]); ctx.fillStyle = g; ctx.fillRect(0, 0, W, wy);
+    g = ctx.createLinearGradient(0, wy, 0, H); g.addColorStop(0, L.water[0]); g.addColorStop(1, L.water[1]); ctx.fillStyle = g; ctx.fillRect(0, wy, W, H - wy);
+    ctx.fillStyle = "rgba(20,50,30,.55)"; ctx.beginPath(); ctx.moveTo(0, wy); for (let x = 0; x <= W; x += 20) ctx.lineTo(x, wy - 18 - ((x * 7) % 31)); ctx.lineTo(W, wy); ctx.fill();
+    ctx.strokeStyle = "rgba(255,255,255,.22)"; ctx.lineWidth = 2;
+    for (let i = 0; i < 6; i++) { const y = wy + 30 + i * (H - wy) / 6.5; ctx.beginPath(); for (let x = 0; x <= W; x += 14) ctx.lineTo(x, y + Math.sin(x / 30 + now / 500 + i) * 3); ctx.stroke(); }
+    ctx.fillStyle = "#6f5a3a"; ctx.fillRect(0, H * 0.9, W, H * 0.1);
+  }
+  function frame(now) {
+    raf = requestAnimationFrame(frame);
+    const dt = Math.min(0.05, (now - (last || now)) / 1000); last = now; update(dt);
+    scene(now);
+    const sh = shore(), tip = { x: W / 2 + 30, y: H * 0.8 };
+    // rod
+    ctx.strokeStyle = "#3b2a18"; ctx.lineWidth = 6; ctx.lineCap = "round"; ctx.beginPath(); ctx.moveTo(W / 2 + 70, H + 10); ctx.lineTo(tip.x, tip.y); ctx.stroke();
+    const b = bobber();
+    if (st === "wait" || st === "bite") {
+      const dip = st === "bite" ? 7 + Math.sin(now / 40) * 3 : Math.sin(now / 500) * 2;
+      ctx.strokeStyle = "rgba(255,255,255,.8)"; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.moveTo(tip.x, tip.y); ctx.quadraticCurveTo((tip.x + b.x) / 2, (tip.y + b.y) / 2 + 30, b.x, b.y + dip); ctx.stroke();
+      ctx.fillStyle = "#e5352b"; ctx.beginPath(); ctx.arc(b.x, b.y + dip, 9, Math.PI, 0); ctx.fill(); ctx.fillStyle = "#fff"; ctx.beginPath(); ctx.arc(b.x, b.y + dip, 9, 0, Math.PI); ctx.fill();
+      if (st === "bite") { ctx.strokeStyle = "rgba(255,255,255,.7)"; ctx.beginPath(); ctx.ellipse(b.x, b.y + 4, 18 + (biteAt * 40), 7 + biteAt * 14, 0, 0, 7); ctx.stroke(); text("!", b.x, b.y - 34, 54, "#ffd36b"); }
+    }
+    if (st === "fight") {
+      const k = 1 - F.d / 100, fx = b.x + (sh.x - b.x) * k + Math.sin(F.time * (F.surge ? 14 : 4)) * (F.surge ? 24 : 10) * F.s, fy = b.y + (sh.y - 40 - b.y) * k;
+      const col = F.t > 0.72 ? "#ff6b5e" : F.t < 0.3 ? "#cfd8dc" : "#fff";
+      ctx.strokeStyle = col; ctx.lineWidth = 2 + F.t * 3; ctx.beginPath(); ctx.moveTo(tip.x, tip.y); ctx.lineTo(fx, fy); ctx.stroke();
+      drawFish(fx, fy, FC_FISH[fish].r, FC_FISH[fish].c, fx < tip.x ? 1 : -1, Math.sin(F.time * 9) * 0.25 * (F.surge ? 1.4 : 0.6));
+      if (F.surge) { ctx.strokeStyle = "rgba(255,255,255,.55)"; ctx.beginPath(); ctx.ellipse(fx, fy, 40 + (now % 400) / 10, 14 + (now % 400) / 28, 0, 0, 7); ctx.stroke(); }
+      // tension gauge
+      const gx = W - 44, gy = H * 0.3, gh = H * 0.42;
+      ctx.fillStyle = "rgba(0,0,0,.4)"; ctx.fillRect(gx, gy, 26, gh);
+      ctx.fillStyle = "#4caf50"; ctx.fillRect(gx, gy + gh * (1 - 0.72), 26, gh * 0.42); ctx.fillStyle = "#d9423a"; ctx.fillRect(gx, gy, 26, gh * 0.28);
+      const ty = gy + gh * (1 - Math.min(1, F.t)); ctx.fillStyle = "#fff"; ctx.fillRect(gx - 6, ty - 3, 38, 6);
+      text("LINE", gx + 13, gy - 8, 13);
+      // distance
+      ctx.fillStyle = "rgba(0,0,0,.4)"; ctx.fillRect(16, H * 0.3, 14, H * 0.42); ctx.fillStyle = "#ffd36b"; const dh = H * 0.42 * (1 - F.d / 100); ctx.fillRect(16, H * 0.3 + H * 0.42 - dh, 14, dh);
+      text(F.surge ? "It's pulling! Let go!" : down ? "Reeling..." : "Hold to reel", W / 2, H * 0.2, 22, F.surge ? "#ffd36b" : "#fff");
+    }
+    // top bar
+    ctx.shadowColor = "rgba(0,0,0,.5)"; ctx.shadowBlur = 4;
+    if (mode === "duel") {
+      const a = mine.reduce((x, y) => x + y, 0), r = rival.slice(0, st === "over" ? CASTS : ci + (st === "result" ? 1 : 0)).reduce((x, y) => x + y, 0);
+      text(`Cast ${Math.min(ci + 1, CASTS)} of ${CASTS}`, W / 2, 34, 20);
+      text("You " + a.toFixed(1) + " lb", 16, 62, 17, "#fff", "left"); text(rivalName + " " + r.toFixed(1) + " lb", W - 64, 62, 17, "#fff", "right");
+    } else text("Free fishing · " + L.n, W / 2, 34, 20);
+    ctx.shadowBlur = 0;
+    if (st === "cast") {
+      text("Tap to cast. Stop the bar in the green.", W / 2, H * 0.2, 19);
+      const bx = W * 0.15, bw = W * 0.7, by = H * 0.94;
+      ctx.fillStyle = "rgba(0,0,0,.45)"; ctx.fillRect(bx, by, bw, 16); ctx.fillStyle = "#4caf50"; ctx.fillRect(bx + bw * 0.6, by, bw * 0.3, 16);
+      ctx.fillStyle = "#fff"; ctx.fillRect(bx + bw * power - 3, by - 5, 6, 26);
+    }
+    if (st === "wait") text("Wait for a bite...", W / 2, H * 0.2, 20);
+    if (st === "bite") text("TAP NOW!", W / 2, H * 0.2, 30, "#ffd36b");
+    if (st === "result" || st === "over") {
+      ctx.fillStyle = "rgba(6,30,40,.78)"; ctx.fillRect(0, H * 0.22, W, H * 0.52);
+      if (st === "result") {
+        if (fish) {
+          drawFish(W / 2, H * 0.36, 52, FC_FISH[fish].c, 1, 0);
+          text(fish, W / 2, H * 0.36 + 80, 28, "#fff"); text(lbText(weight), W / 2, H * 0.36 + 118, 30, "#ffd36b");
+          if (rec) text("New personal best!", W / 2, H * 0.36 + 148, 18, "#9be7a0");
+          text("+" + (Math.round(weight * 8) + 5) + " XP", W / 2, H * 0.36 + 174, 16, "#cfe");
+        } else { text("Lost it", W / 2, H * 0.36 + 20, 32); text(msg, W / 2, H * 0.36 + 62, 18); }
+        text("Tap to continue", W / 2, H * 0.7, 20, "#ffd36b");
+      } else {
+        const a = mine.reduce((x, y) => x + y, 0), r = rival.reduce((x, y) => x + y, 0);
+        text(resText === "win" ? "You win!" : resText === "lose" ? "Rival wins" : "It's a draw", W / 2, H * 0.22 + 60, 38, resText === "win" ? "#ffd36b" : "#fff");
+        text(`You ${a.toFixed(2)} lb  ·  ${rivalName} ${r.toFixed(2)} lb`, W / 2, H * 0.22 + 104, 18);
+        text(resText === "win" ? "+60 XP" : resText === "draw" ? "+30 XP" : "+15 XP", W / 2, H * 0.22 + 140, 18, "#cfe");
+        text("Tap to go back", W / 2, H * 0.7, 20, "#ffd36b");
+      }
+    }
+  }
+  raf = requestAnimationFrame(frame);
+}
+
+/* ======================= REEL RUSH (quick game) ======================= */
+function openReelRush() {
   const best0 = +getPref("gamebest", "0") || 0;
   const canvas = el("canvas", { class: "game-canvas", role: "img", "aria-label": "Fishing game. Drag your finger or mouse, or use the arrow keys, to move the hook into fish." });
   const ctx = canvas.getContext("2d");
