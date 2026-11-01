@@ -164,6 +164,8 @@ function badText(text) {
 }
 const NO_SLURS = "That includes language that isn't allowed here. Please change it.";
 const PERMS = [["deletePosts", "Delete catches"], ["deleteComments", "Delete comments"], ["reports", "See and handle reports"], ["ban", "Ban and unban anglers"]];
+const MODERN_TILES = "https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png";
+const MODERN_OPTS = { maxZoom: 19, subdomains: "abcd", attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/attributions">CARTO</a>' };
 const US_STATES = [["AL","Alabama"],["AK","Alaska"],["AZ","Arizona"],["AR","Arkansas"],["CA","California"],["CO","Colorado"],["CT","Connecticut"],["DE","Delaware"],["DC","District of Columbia"],["FL","Florida"],["GA","Georgia"],["HI","Hawaii"],["ID","Idaho"],["IL","Illinois"],["IN","Indiana"],["IA","Iowa"],["KS","Kansas"],["KY","Kentucky"],["LA","Louisiana"],["ME","Maine"],["MD","Maryland"],["MA","Massachusetts"],["MI","Michigan"],["MN","Minnesota"],["MS","Mississippi"],["MO","Missouri"],["MT","Montana"],["NE","Nebraska"],["NV","Nevada"],["NH","New Hampshire"],["NJ","New Jersey"],["NM","New Mexico"],["NY","New York"],["NC","North Carolina"],["ND","North Dakota"],["OH","Ohio"],["OK","Oklahoma"],["OR","Oregon"],["PA","Pennsylvania"],["RI","Rhode Island"],["SC","South Carolina"],["SD","South Dakota"],["TN","Tennessee"],["TX","Texas"],["UT","Utah"],["VT","Vermont"],["VA","Virginia"],["WA","Washington"],["WV","West Virginia"],["WI","Wisconsin"],["WY","Wyoming"]];
 const US_BOUNDS = [[17, -180], [72, -64]];   // the map stays on the USA (including Alaska and Hawaii)
 const placeLabel = (x) => [x.city, x.state].filter(Boolean).join(", ");
@@ -1448,7 +1450,7 @@ function openMapPicker(startQuery, startLoc, onDone) {
   loadLeaflet().then((L) => {
     let c = startLoc || (() => { try { return JSON.parse(getPref("lastloc", "null")); } catch { return null; } })();
     map = L.map(mapBox, { maxBounds: US_BOUNDS, maxBoundsViscosity: 0.9, minZoom: 3 }).setView(c ? [c.lat, c.lng] : [39.5, -98.35], c ? 13 : 4);
-    L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", { maxZoom: 19, attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>' }).addTo(map);
+    L.tileLayer(MODERN_TILES, MODERN_OPTS).addTo(map);
     map.on("click", (e) => setPick(e.latlng.lat, e.latlng.lng, ""));
     if (startLoc) setPick(startLoc.lat, startLoc.lng, "");
     setTimeout(() => map?.invalidateSize(), 80);
@@ -1510,8 +1512,7 @@ function renderMap() {
   loadLeaflet().then((L) => {
     if (S.tab !== "map" || token !== mapToken) return;
     S.map = L.map(box, { maxBounds: US_BOUNDS, maxBoundsViscosity: 0.9, minZoom: 3 }).setView([39.5, -98.35], 4);
-    const streets = L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", { maxZoom: 19,
-      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>' });
+    const streets = L.tileLayer(MODERN_TILES, MODERN_OPTS);
     const sat = L.tileLayer("https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}", { maxZoom: 19, attribution: "Tiles &copy; Esri" });
     streets.addTo(S.map);
     L.control.layers({ "Map": streets, "Satellite": sat }, null, { position: "topright" }).addTo(S.map);
