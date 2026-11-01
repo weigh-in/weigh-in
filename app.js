@@ -1711,40 +1711,125 @@ function openInstallHelp() {
 /* ======================= LAKE DUEL (cast, hook, reel) ======================= */
 const FC_LOCS = [
   { id: "pond", n: "Pond", lvl: 1, hard: 0, stars: 1, sky: ["#ffe2b0", "#d6ecf2"], water: ["#4aa6b9", "#1d6577"], fish: ["Bluegill", "Largemouth bass", "Channel catfish"] },
-  { id: "lake", n: "Lake", lvl: 3, hard: 0.05, stars: 2, sky: ["#bcd0ff", "#e3f0f5"], water: ["#3a7fb0", "#123e5f"], fish: ["Crappie", "Largemouth bass", "Walleye", "Northern pike", "Muskellunge"] },
-  { id: "river", n: "River", lvl: 5, hard: 0.15, stars: 3, sky: ["#ffcfae", "#f1e6d6"], water: ["#4b9a8a", "#17463f"], fish: ["Rainbow trout", "Smallmouth bass", "Channel catfish", "Common carp", "Muskellunge"] },
-  { id: "bay", n: "Salt bay", lvl: 7, hard: 0.2, stars: 4, salt: true, sky: ["#9fd8ff", "#f6efe0"], water: ["#35b5c4", "#0f5c75"], fish: ["Redfish", "Flounder", "Spotted seatrout", "Snook"] },
-  { id: "ocean", n: "Open ocean", lvl: 9, hard: 0.28, stars: 5, salt: true, sky: ["#8ec5f5", "#dcefff"], water: ["#1f78b4", "#082b52"], fish: ["Mahi-mahi", "King mackerel", "Tarpon", "Yellowfin tuna"] }];
+  { id: "lake", n: "Lake", lvl: 3, lic: 1, hard: 0.05, stars: 2, sky: ["#bcd0ff", "#e3f0f5"], water: ["#3a7fb0", "#123e5f"], fish: ["Crappie", "Largemouth bass", "Walleye", "Northern pike", "Muskellunge"] },
+  { id: "river", n: "River", lvl: 5, lic: 1, hard: 0.15, stars: 3, sky: ["#ffcfae", "#f1e6d6"], water: ["#4b9a8a", "#17463f"], fish: ["Rainbow trout", "Smallmouth bass", "Channel catfish", "Common carp", "Muskellunge"] },
+  { id: "bay", n: "Salt bay", lvl: 7, lic: 2, hard: 0.2, stars: 4, salt: true, sky: ["#9fd8ff", "#f6efe0"], water: ["#35b5c4", "#0f5c75"], fish: ["Redfish", "Flounder", "Spotted seatrout", "Snook"] },
+  { id: "ocean", n: "Open ocean", lvl: 9, lic: 2, hard: 0.28, stars: 5, salt: true, sky: ["#8ec5f5", "#dcefff"], water: ["#1f78b4", "#082b52"], fish: ["Mahi-mahi", "King mackerel", "Tarpon", "Yellowfin tuna"] }];
 const FC_LURES = [["spinner", "Spinner"], ["worm", "Worm"], ["crank", "Crankbait"], ["jig", "Minnow jig"]];
+/* Gear you buy, roughly in the order a real angler would: licence first, then
+   basic tackle, then proper gear, then the expensive kit once you've put in the hours. */
 const FC_GEAR = [
-  { id: "rod", n: "Rod", icon: "🎣", base: "Starter rod", names: ["Fiberglass rod", "Graphite rod", "Pro carbon rod", "Tournament rod"], costs: [150, 500, 1500, 4000],
-    eff: (l) => l ? `Reels ${Math.round(l * 18)}% faster, line builds ${Math.round(l * 13)}% slower` : "A plain rod. Does the job." },
-  { id: "line", n: "Fishing line", icon: "🧵", base: "6 lb line", names: ["10 lb line", "15 lb line", "25 lb braid", "40 lb braid", "60 lb big-game braid"], costs: [120, 350, 900, 2200, 5000],
-    eff: (l) => l ? `Line takes ${Math.round(l * 9)}% more pull before it snaps` : "Snaps easily. Big fish will break it." },
-  { id: "reel", n: "Reel", icon: "🌀", base: "Plastic reel", names: ["Steel reel", "Sealed bearing reel", "High-speed reel"], costs: [250, 800, 2400],
-    eff: (l) => l ? `Brings fish in ${Math.round(l * 12)}% faster` : "Slow and creaky." },
-  { id: "drag", n: "Drag system", icon: "🛞", base: "No drag", names: ["Basic drag", "Smooth drag", "Carbon drag"], costs: [300, 1000, 3000],
-    eff: (l) => l ? `Fish gain ${Math.round(l * 15)}% less ground when they run` : "Runs cost you a lot of line." },
-  { id: "gloves", n: "Grip gloves", icon: "🧤", base: "Bare hands", names: ["Cloth gloves", "Rubber grip gloves", "Pro angler gloves"], costs: [180, 600, 1800],
-    eff: (l) => l ? `Line builds ${Math.round(l * 7)}% slower while you reel` : "Your hands slip on the handle." },
-  { id: "hook", n: "Hooks", icon: "🪝", base: "Blunt hooks", names: ["Sharp hooks", "Circle hooks", "Chemically sharpened hooks"], costs: [100, 350, 1100],
+  { id: "license", g: "Licences and permits", n: "Fishing licence", icon: "📜", base: "No licence",
+    names: ["Resident freshwater licence", "Saltwater endorsement", "Lifetime licence"], costs: [60, 450, 3500],
+    eff: (l) => ["You may only fish the practice pond.", "Lets you fish the lake and the river", "Adds the salt bay and the open ocean", "Never expires, and buyers pay 15% more"][l] },
+  { id: "tackle", g: "Starter tackle", n: "Tackle box", icon: "🧰", base: "Loose gear in a bag",
+    names: ["Plastic tray", "Two-tray box", "Tackle backpack"], costs: [80, 280, 850], req: { catches: 1 },
+    eff: (l) => l ? `The right lure for the day: better chance at bigger fish (+${l})` : "You fish whatever you happen to have." },
+  { id: "hook", g: "Starter tackle", n: "Hooks", icon: "🪝", base: "Blunt hooks",
+    names: ["Bronze hooks", "Sharpened hooks", "Circle hooks"], costs: [70, 240, 700],
     eff: (l) => l ? `You get ${Math.round(l * 30)}% longer to set the hook` : "You have to be quick." },
-  { id: "bait", n: "Bait scent", icon: "🧪", base: "No scent", names: ["Garlic scent", "Shad oil", "Pro attractant"], costs: [140, 450, 1300],
+  { id: "line", g: "Starter tackle", n: "Fishing line", icon: "🧵", base: "Old 6 lb line",
+    names: ["8 lb mono", "12 lb mono", "20 lb braid", "40 lb braid", "80 lb big-game braid"], costs: [120, 350, 900, 2200, 5500],
+    eff: (l) => l ? `Takes ${Math.round(l * 9)}% more pull before it snaps` : "Snaps easily. Big fish will break it." },
+  { id: "bait", g: "Starter tackle", n: "Bait and scent", icon: "🪱", base: "Bare lure",
+    names: ["Nightcrawlers", "Live minnows", "Pro scent"], costs: [90, 300, 900], req: { catches: 3 },
     eff: (l) => l ? `Fish bite about ${Math.round(l * 18)}% sooner` : "Fish take their time." },
-  { id: "charm", n: "Lucky charm", icon: "🍀", base: "No charm", names: ["Rabbit's foot", "Old fishing medal", "Grandpa's lucky lure"], costs: [500, 1600, 4500],
-    eff: (l) => l ? `Better chance at bigger fish (+${l})` : "No luck on your side." },
-  { id: "finder", n: "Fish finder", icon: "📡", base: "No finder", names: ["Basic sonar", "Colour sonar", "Live sonar"], costs: [400, 1200, 3500],
-    eff: (l) => ["You can't tell what is down there.", "Shows how big the shadow is", "Shows a weight guess too", "Names the fish before you hook it"][l] },
-  { id: "net", n: "Landing net", icon: "🥅", base: "No net", names: ["Small net", "Rubber net", "Big game net"], costs: [350, 1100, 3200],
+  { id: "gloves", g: "Proper gear", n: "Grip gloves", icon: "🧤", base: "Bare hands",
+    names: ["Cloth gloves", "Rubber grip gloves", "Pro angler gloves"], costs: [150, 500, 1500], req: { catches: 5 },
+    eff: (l) => l ? `Line builds ${Math.round(l * 7)}% slower while you reel` : "Your hands slip on the handle." },
+  { id: "net", g: "Proper gear", n: "Landing net", icon: "🥅", base: "No net",
+    names: ["Small net", "Rubber net", "Big-game net"], costs: [300, 950, 2800], req: { catches: 10 },
     eff: (l) => l ? `${l * 20}% chance to save a fish that gets off` : "Lost fish are gone for good." },
-  { id: "cooler", n: "Cooler", icon: "🧊", base: "Small bag", names: ["Cool box", "Big cooler", "Ice chest", "Live well"], costs: [200, 700, 2000, 5000],
+  { id: "rod", g: "Proper gear", n: "Rod", icon: "🎣", base: "Starter rod",
+    names: ["Fiberglass rod", "Graphite spinning rod", "Baitcasting rod", "Tournament carbon rod"], costs: [200, 650, 1800, 4500], req: { catches: 10 },
+    eff: (l) => l ? `Reels ${Math.round(l * 18)}% faster, line builds ${Math.round(l * 13)}% slower` : "A plain rod. Does the job." },
+  { id: "reel", g: "Proper gear", n: "Reel", icon: "🌀", base: "Plastic reel",
+    names: ["Spinning reel", "Sealed bearing reel", "High-speed baitcaster"], costs: [300, 950, 2600], req: { catches: 15 },
+    eff: (l) => l ? `Brings fish in ${Math.round(l * 12)}% faster` : "Slow and creaky." },
+  { id: "cooler", g: "Proper gear", n: "Cooler", icon: "🧊", base: "Small bag",
+    names: ["Cool bag", "Big cooler", "Ice chest", "Live well"], costs: [250, 800, 2200, 5500], req: { catches: 12 },
     eff: (l) => `Holds ${40 + l * 30} fish` },
-  { id: "license", n: "Market license", icon: "🏷️", base: "No license", names: ["Local license", "County license", "State license"], costs: [600, 2000, 6000],
-    eff: (l) => l ? `Your fish sell for ${l * 15}% more` : "You get the plain price." },
-  { id: "log", n: "Logbook", icon: "📓", base: "No logbook", names: ["Pocket logbook", "Leather logbook", "Captain's logbook"], costs: [250, 900, 2600],
-    eff: (l) => l ? `You earn ${l * 20}% more XP` : "No notes, no extra XP." },
-  { id: "boat", n: "Boat", icon: "🚤", base: "Fishing from shore", names: ["Row boat", "Jon boat with motor", "Bass boat", "Offshore boat"], costs: [800, 2500, 7000, 15000],
-    eff: (l) => l ? `Reach better water: ${l * 8}% better chance at rare fish` : "You can only reach the edges." }];
+  { id: "log", g: "Proper gear", n: "Logbook", icon: "📓", base: "No logbook",
+    names: ["Pocket logbook", "Leather logbook", "Captain's logbook"], costs: [300, 1000, 2800], req: { catches: 20 },
+    eff: (l) => l ? `You learn from your notes: ${l * 20}% more XP` : "No notes, no extra XP." },
+  { id: "drag", g: "Experienced angler", n: "Drag system", icon: "🛞", base: "No drag",
+    names: ["Basic drag", "Smooth drag", "Carbon fibre drag"], costs: [350, 1100, 3200], req: { catches: 25 },
+    eff: (l) => l ? `Fish gain ${Math.round(l * 15)}% less ground when they run` : "Runs cost you a lot of line." },
+  { id: "glasses", g: "Experienced angler", n: "Polarized glasses", icon: "🕶️", base: "No glasses",
+    names: ["Basic polarized", "Pro lenses"], costs: [400, 1200], req: { catches: 25 },
+    eff: (l) => ["You can't see into the water.", "You can tell how big the shadow is", "You can also guess its weight"][l] },
+  { id: "waders", g: "Experienced angler", n: "Waders", icon: "🥾", base: "Fishing from the bank",
+    names: ["Hip waders", "Chest waders"], costs: [600, 1800], req: { catches: 30 },
+    eff: (l) => l ? `Wade out to better water: ${l * 7}% better chance at rare fish` : "You can only reach the edges." },
+  { id: "scale", g: "Experienced angler", n: "Certified scale", icon: "📏", base: "You guess the weight",
+    names: ["Digital scale", "Tournament scale"], costs: [500, 1800], req: { trophies: 1 },
+    eff: (l) => l ? `Buyers trust your weights: ${l * 15}% more coins` : "Buyers knock the price down." },
+  { id: "charm", g: "Experienced angler", n: "Lucky charm", icon: "🍀", base: "No charm",
+    names: ["Rabbit's foot", "Old fishing medal", "Grandpa's lucky lure"], costs: [600, 1800, 5000], req: { catches: 50 },
+    eff: (l) => l ? `Better chance at bigger fish (+${l})` : "No luck on your side." },
+  { id: "finder", g: "Serious kit", n: "Fish finder", icon: "📡", base: "No finder",
+    names: ["Portable sonar", "Colour sonar", "Live sonar"], costs: [1500, 4000, 9000], req: { catches: 50, lvl: 6 },
+    eff: (l) => ["You can't tell what is down there.", "Shows how big the shadow is", "Shows a weight guess too", "Names the fish before you hook it"][l] },
+  { id: "boat", g: "Serious kit", n: "Boat", icon: "🚤", base: "Fishing from shore",
+    names: ["Kayak", "Jon boat with motor", "Bass boat", "Offshore boat"], costs: [2500, 6000, 14000, 30000], req: { catches: 100, lvl: 8 },
+    eff: (l) => l ? `Reach open water: ${l * 8}% better chance at rare fish` : "You can only reach the edges." },
+  { id: "gps", g: "Serious kit", n: "GPS and charts", icon: "🗺️", base: "No charts",
+    names: ["Handheld GPS", "Chartplotter"], costs: [2000, 6000], req: { gear: ["boat", 1] },
+    eff: (l) => l ? `You remember the good spots: fish bite ${l * 12}% sooner` : "You hunt for spots the hard way." }];
+const FC_GROUPS = ["Licences and permits", "Starter tackle", "Proper gear", "Experienced angler", "Serious kit"];
+
+/* Things you only get by playing. Each one pays out once. */
+const FC_ACH = [
+  { id: "first", n: "Wet a line", d: "Land your first fish", coins: 50, p: (S) => [S.catches, 1] },
+  { id: "c10", n: "Weekend angler", d: "Land 10 fish", coins: 120, p: (S) => [S.catches, 10] },
+  { id: "c25", n: "Getting the hang of it", d: "Land 25 fish", coins: 300, p: (S) => [S.catches, 25] },
+  { id: "c50", n: "Serious angler", d: "Land 50 fish", coins: 700, p: (S) => [S.catches, 50] },
+  { id: "c100", n: "Veteran", d: "Land 100 fish", coins: 1800, p: (S) => [S.catches, 100] },
+  { id: "c250", n: "Lifer", d: "Land 250 fish", coins: 5000, p: (S) => [S.catches, 250] },
+  { id: "sp5", n: "Mixed bag", d: "Catch 5 different kinds of fish", coins: 200, p: (S) => [S.species, 5] },
+  { id: "sp10", n: "Collector", d: "Catch 10 different kinds of fish", coins: 600, p: (S) => [S.species, 10] },
+  { id: "spAll", n: "Master angler", d: "Catch every kind of fish", coins: 4000, p: (S) => [S.species, Object.keys(FC_FISH).length] },
+  { id: "t1", n: "Trophy hunter", d: "Land your first trophy fish", coins: 250, p: (S) => [S.trophies, 1] },
+  { id: "t10", n: "Wall of fame", d: "Land 10 trophy fish", coins: 1200, p: (S) => [S.trophies, 10] },
+  { id: "big20", n: "Heavyweight", d: "Land a fish over 20 lb", coins: 400, p: (S) => [Math.min(S.biggest, 20), 20] },
+  { id: "big50", n: "Monster", d: "Land a fish over 50 lb", coins: 1500, p: (S) => [Math.min(S.biggest, 50), 50] },
+  { id: "sold1k", n: "Market day", d: "Earn 1,000 coins selling fish", coins: 300, p: (S) => [S.earned, 1000] },
+  { id: "sold10k", n: "Fishmonger", d: "Earn 10,000 coins selling fish", coins: 2000, p: (S) => [S.earned, 10000] },
+  { id: "cast100", n: "Hours on the water", d: "Make 100 casts", coins: 250, p: (S) => [S.casts, 100] },
+  { id: "cast500", n: "Dawn till dusk", d: "Make 500 casts", coins: 1500, p: (S) => [S.casts, 500] },
+  { id: "duel1", n: "Competitor", d: "Win a duel", coins: 200, p: (S) => [S.duelWins, 1] },
+  { id: "duel10", n: "Tournament angler", d: "Win 10 duels", coins: 1500, p: (S) => [S.duelWins, 10] },
+  { id: "fresh", n: "Explorer", d: "Fish the pond, the lake and the river", coins: 500, p: (S) => [["pond", "lake", "river"].filter((x) => S.places.includes(x)).length, 3] },
+  { id: "salt", n: "Salty", d: "Fish in salt water", coins: 800, p: (S) => [["bay", "ocean"].filter((x) => S.places.includes(x)).length ? 1 : 0, 1] }];
+
+const fcStatsRaw = () => { try { return JSON.parse(getPref("fcstats", "{}")) || {}; } catch { return {}; } };
+function fcStat(k, add) { const st = fcStatsRaw(); st[k] = (+st[k] || 0) + add; setPref("fcstats", JSON.stringify(st)); }
+function fcMarkPlace(id) { const st = fcStatsRaw(), p = Array.isArray(st.places) ? st.places : []; if (!p.includes(id)) { p.push(id); st.places = p; setPref("fcstats", JSON.stringify(st)); } }
+function fcStats() {
+  const d = fcDex(), st = fcStatsRaw(), vals = Object.values(d);
+  return { catches: vals.reduce((a, x) => a + (x.n || 0), 0), species: Object.keys(d).length,
+    biggest: vals.length ? Math.max(...vals.map((x) => x.best || 0)) : 0,
+    trophies: +st.trophies || 0, earned: +st.earned || 0, casts: +st.casts || 0, duelWins: +st.duelWins || 0,
+    places: Array.isArray(st.places) ? st.places : [], level: fcLevel() };
+}
+const fcAchDone = () => { try { return JSON.parse(getPref("fcach", "[]")) || []; } catch { return []; } };
+const fcHasAch = (id) => fcAchDone().includes(id);
+/* Pays out anything newly finished. Returns the ones it just paid. */
+function fcCheckAch() {
+  const S = fcStats(), done = fcAchDone(), fresh = [];
+  for (const a of FC_ACH) { if (done.includes(a.id)) continue; const [have, need] = a.p(S); if (have >= need) { done.push(a.id); fresh.push(a); } }
+  if (fresh.length) { setPref("fcach", JSON.stringify(done)); setPref("fccoins", String(fcCoins() + fresh.reduce((x, a) => x + a.coins, 0))); }
+  return fresh;
+}
+/* null when you can buy it, otherwise what you still have to do. */
+function fcLocked(it, S) {
+  const r = it.req; if (!r) return null;
+  if (r.catches && S.catches < r.catches) return `Catch ${r.catches} fish first (${S.catches}/${r.catches})`;
+  if (r.trophies && S.trophies < r.trophies) return `Land a trophy fish first`;
+  if (r.lvl && S.level < r.lvl) return `Reach level ${r.lvl} (you're ${S.level})`;
+  if (r.gear) { const [g, l] = r.gear, o = FC_GEAR.find((x) => x.id === g); if (fcUp(g) < l) return `Get a ${o.n.toLowerCase()} first`; }
+  return null;
+}
 const FC_LURE_COST = [120, 400], FC_LURE_TAG = ["", " Pro", " Master"];
 const FC_FISH = {
   "Bluegill": { min: 0.3, max: 1.6, r: 15, asp: 0.74, top: "#5b7f5a", belly: "#e8a24a", fin: "#4a6a8a", pat: "bars", patc: "rgba(20,40,60,.28)", ear: true, price: 30, w: { spinner: 1, worm: 3, crank: 0.4, jig: 2 } },
@@ -1783,7 +1868,7 @@ const fcLureLv = () => { try { return JSON.parse(getPref("fclv", "{}")) || {}; }
 const fcDex = () => { try { return JSON.parse(getPref("fcdex", "{}")) || {}; } catch { return {}; } };
 const lbText = (w) => w.toFixed(2) + " lb";
 const fcTier = (n, w) => { const f = FC_FISH[n], q = (w - f.min) / (f.max - f.min); return q < 0.12 ? ["Tiny", 1, q] : q < 0.35 ? ["Small", 1, q] : q < 0.6 ? ["Nice size", 1.1, q] : q < 0.85 ? ["Big one", 1.3, q] : ["Trophy", 1.8, q]; };
-const fcValue = (n, w) => Math.max(1, Math.round(w * FC_FISH[n].price * fcTier(n, w)[1] * (1 + 0.15 * fcUp("license"))));
+const fcValue = (n, w) => Math.max(1, Math.round(w * FC_FISH[n].price * fcTier(n, w)[1] * (1 + 0.15 * fcUp("scale") + (fcUp("license") >= 3 ? 0.15 : 0))));
 const fcXpFor = (w) => Math.round((Math.round(w * 8) + 5) * (1 + 0.2 * fcUp("log")));
 /*FCSTEP*/
 const FC_PH_T = { rest: [0.9, 1.5], pull: [1.2, 2.2], run: [1.6, 2.8], thrash: [0.8, 1.2], jump: [1.0, 1.0] };
@@ -1855,7 +1940,7 @@ function openFishGame() {
   } catch { /* ignore */ }
   const friends = () => S.friendships.map((f) => { const uid = f.members.find((m) => m !== S.user.uid); return { uid, name: (f.names && f.names[uid]) || "friend" }; });
   const sellValue = (e) => fcValue(e.n, e.w);
-  const sell = (ids) => { const bag = fcBag(), keep = [], gone = bag.filter((e) => ids.includes(e.id)); bag.forEach((e) => { if (!ids.includes(e.id)) keep.push(e); }); const total = gone.reduce((a, e) => a + sellValue(e), 0); fcSaveBag(keep); setPref("fccoins", String(fcCoins() + total)); note = gone.length ? `Sold ${gone.length} fish for 🪙 ${total}.` : ""; draw(); };
+  const sell = (ids) => { const bag = fcBag(), keep = [], gone = bag.filter((e) => ids.includes(e.id)); bag.forEach((e) => { if (!ids.includes(e.id)) keep.push(e); }); const total = gone.reduce((a, e) => a + sellValue(e), 0); fcSaveBag(keep); setPref("fccoins", String(fcCoins() + total)); fcStat("earned", total); note = gone.length ? `Sold ${gone.length} fish for 🪙 ${total}.` : ""; draw(); };
   const challenge = async (fr) => {
     if (duels.some((d) => d.players.includes(fr.uid) && !(d.sa?.length && d.sb?.length))) { note = `You already have a duel going with @${fr.name}.`; draw(); return; }
     try {
@@ -1872,25 +1957,31 @@ function openFishGame() {
     else {
       const a = duelTotal(mine), b = duelTotal(theirs), out = a > b ? "You won" : a < b ? "They won" : "Draw";
       status = `${out} · you ${a.toFixed(1)} lb, @${opp} ${b.toFixed(1)} lb`; action = el("button", { class: "link small", type: "button", onclick: () => deleteDoc(doc(db, "duels", d.id)) }, "Remove");
-      if (done && !fcPaid().includes(d.id)) { const paid = fcPaid(); paid.push(d.id); setPref("fcpaid", JSON.stringify(paid.slice(-60))); const c = a > b ? 100 : a === b ? 40 : 20, x = a > b ? 60 : a === b ? 30 : 15; setPref("fccoins", String(fcCoins() + c)); setPref("fcxp", String(fcXp() + x)); note = `Duel with @${opp} finished: ${out.toLowerCase()}. +🪙 ${c} and +${x} XP.`; setTimeout(draw, 0); }
+      if (done && !fcPaid().includes(d.id)) { const paid = fcPaid(); paid.push(d.id); setPref("fcpaid", JSON.stringify(paid.slice(-60))); const c = a > b ? 100 : a === b ? 40 : 20, x = a > b ? 60 : a === b ? 30 : 15; if (a > b) fcStat("duelWins", 1); setPref("fccoins", String(fcCoins() + c)); setPref("fcxp", String(fcXp() + x)); note = `Duel with @${opp} finished: ${out.toLowerCase()}. +🪙 ${c} and +${x} XP.`; setTimeout(draw, 0); }
     }
     return el("div", { class: "item", style: "cursor:default;gap:10px" }, el("div", { class: "stack", style: "gap:2px;min-width:0" }, el("span", { class: "t" }, "Duel with @" + opp), el("span", { class: "s" }, status)), action);
   };
   const draw = () => {
+    const fresh = fcCheckAch();
+    if (fresh.length) note = [note, fresh.map((a) => `🏅 ${a.n} — ${a.d}. +🪙 ${a.coins}`).join("  ·  ")].filter(Boolean).join("  ·  ");
+    const ST = fcStats();
     const lv = fcLevel(), xp = fcXp(), lo = 40 * (lv - 1) ** 2, hi = 40 * lv ** 2, dex = fcDex(), coins = fcCoins(), lvs = fcLureLv();
     const names = Object.keys(FC_FISH), bag = fcBag().sort((a, b) => (b.k - a.k) || (sellValue(b) - sellValue(a))), fr = friends();
     const sellable = bag.filter((e) => !e.k);
     const L0 = FC_LOCS.find((l) => l.id === loc);
-    box.replaceChildren(
+    box.replaceChildren(...[
       el("div", { class: "row spread" }, el("h1", null, "Lake Duel"), el("button", { class: "link", type: "button", onclick: close }, "Close")),
       el("div", { class: "fc-card" }, el("div", { class: "row spread" }, el("b", null, "Level " + lv), el("b", { id: "fc-coins" }, "🪙 " + coins)),
         el("div", { class: "meter" }, el("i", { style: "width:" + Math.round((xp - lo) / (hi - lo) * 100) + "%" })),
-        el("span", { class: "muted small" }, xp + " / " + hi + " XP to level " + (lv + 1))),
+        el("span", { class: "muted small" }, xp + " / " + hi + " XP to level " + (lv + 1)),
+        el("span", { class: "muted small" }, `${ST.catches} fish landed · ${ST.casts} casts · ${ST.trophies} trophies · 🪙 ${ST.earned} earned selling`)),
       note ? el("p", { class: "fc-note", role: "status" }, note) : null,
       (() => { const owned = FC_GEAR.filter((it) => fcUp(it.id)); return owned.length ? el("p", { class: "muted small" }, "Your gear: " + owned.map((it) => it.icon + " " + fcGearName(it)).join(" · ")) : null; })(),
       el("h2", null, "Where"),
-      el("div", { class: "chips" }, FC_LOCS.map((l) => el("button", { class: "chip", type: "button", "data-loc": l.id, disabled: l.lvl > lv ? "" : null, "aria-pressed": String(loc === l.id),
-        onclick: () => { loc = l.id; setPref("fcloc", loc); note = ""; draw(); } }, l.n + (l.lvl > lv ? " 🔒 Lv " + l.lvl : "")))),
+      el("div", { class: "chips" }, FC_LOCS.map((l) => { const needLic = (l.lic || 0) > fcUp("license"), shut = needLic || l.lvl > lv;
+        return el("button", { class: "chip", type: "button", "data-loc": l.id, disabled: shut ? "" : null, "aria-pressed": String(loc === l.id),
+          onclick: () => { loc = l.id; setPref("fcloc", loc); note = ""; draw(); } },
+          l.n + (l.lvl > lv ? " 🔒 Lv " + l.lvl : needLic ? (l.lic === 2 ? " 🔒 Saltwater permit" : " 🔒 Licence") : "")); })),
       el("p", { class: "muted small" }, `${L0.salt ? "Salt water. " : "Fresh water. "}Fight: ${"★".repeat(L0.stars)}${"☆".repeat(5 - L0.stars)}. Fish here: ${L0.fish.map((n) => (dex[n] ? n : "???")).join(", ")}.`),
       el("h2", null, "Lure"),
       el("div", { class: "chips" }, FC_LURES.map(([id, n]) => el("button", { class: "chip", type: "button", "aria-pressed": String(lure === id), onclick: () => { lure = id; setPref("fclure", id); draw(); } }, n + FC_LURE_TAG[lvs[id] || 0]))),
@@ -1912,27 +2003,44 @@ function openFishGame() {
         el("button", { class: "btn small ghost", type: "button", "data-sell": e.id, onclick: () => sell([e.id]) }, "Sell 🪙 " + sellValue(e))))) : null,
       el("p", { class: "muted small" }, "Tap the star to keep a fish in your collection. Kept fish are never sold by Sell all."),
       el("h2", null, "Tackle shop"),
-      el("p", { class: "muted small" }, "Everything here makes fishing easier or pays you more. Each one can be upgraded a few times."),
-      el("div", { class: "gear-grid" }, FC_GEAR.map((it) => {
-        const l = fcUp(it.id), maxed = l >= it.costs.length, cost = maxed ? 0 : it.costs[l];
-        return el("div", { class: "gear" + (maxed ? " maxed" : ""), "data-gear": it.id },
-          el("div", { class: "row", style: "gap:8px;align-items:center" }, el("span", { class: "gear-i", "aria-hidden": "true" }, it.icon),
-            el("div", { class: "stack", style: "gap:1px;min-width:0" }, el("b", null, it.n), el("span", { class: "muted small" }, fcGearName(it)))),
-          el("div", { class: "pips", role: "img", "aria-label": `Level ${l} of ${it.costs.length}` },
-            it.costs.map((_, i) => el("i", { class: i < l ? "on" : "" }))),
-          el("span", { class: "gear-eff" }, it.eff(l)),
-          maxed ? el("span", { class: "pill live" }, "Fully upgraded")
-            : el("button", { class: "btn small", type: "button", "data-buygear": it.id, disabled: coins < cost ? "" : null,
-                onclick: () => { if (fcBuy(it.id)) { note = `Bought ${it.names[l]}.`; draw(); } } }, `${it.names[l]} 🪙 ${cost}`));
-      })),
+      el("p", { class: "muted small" }, "Buy your licence first, then build up your kit. The bigger gear only comes within reach once you have put the hours in."),
+      FC_GROUPS.map((grp) => {
+        const items = FC_GEAR.filter((it) => it.g === grp);
+        if (!items.length) return null;
+        return el("div", { class: "stack", style: "gap:8px" }, el("h3", { class: "gear-grp" }, grp),
+          el("div", { class: "gear-grid" }, items.map((it) => {
+            const l = fcUp(it.id), maxed = l >= it.costs.length, cost = maxed ? 0 : it.costs[l], lock = l ? null : fcLocked(it, ST);
+            return el("div", { class: "gear" + (maxed ? " maxed" : "") + (lock ? " locked" : ""), "data-gear": it.id },
+              el("div", { class: "row", style: "gap:8px;align-items:center" }, el("span", { class: "gear-i", "aria-hidden": "true" }, it.icon),
+                el("div", { class: "stack", style: "gap:1px;min-width:0" }, el("b", null, it.n), el("span", { class: "muted small" }, fcGearName(it)))),
+              el("div", { class: "pips", role: "img", "aria-label": `Level ${l} of ${it.costs.length}` }, it.costs.map((_, i) => el("i", { class: i < l ? "on" : "" }))),
+              el("span", { class: "gear-eff" }, it.eff(l)),
+              lock ? el("span", { class: "lockline" }, "🔒 " + lock)
+                : maxed ? el("span", { class: "pill live" }, "Fully upgraded")
+                : el("button", { class: "btn small", type: "button", "data-buygear": it.id, disabled: coins < cost ? "" : null,
+                    onclick: () => { if (fcBuy(it.id)) { note = `Bought ${it.names[l]}.`; draw(); } } }, `${it.names[l]} 🪙 ${cost}`));
+          })));
+      }),
       el("h2", null, "Lures"),
       el("div", { class: "list" }, FC_LURES.map(([id, n]) => { const l = lvs[id] || 0, cost = FC_LURE_COST[l];
         return el("div", { class: "item", style: "cursor:default" }, el("div", { class: "stack", style: "gap:2px" }, el("span", { class: "t" }, n + FC_LURE_TAG[l]), el("span", { class: "s" }, l ? "Attracts bigger fish" : "Basic")),
           cost ? el("button", { class: "btn small", type: "button", "data-buy": id, disabled: coins < cost ? "" : null, onclick: () => { if (fcCoins() >= cost) { setPref("fccoins", String(fcCoins() - cost)); lvs[id] = l + 1; setPref("fclv", JSON.stringify(lvs)); draw(); } } }, "Upgrade 🪙 " + cost) : el("span", { class: "pill live" }, "Maxed")); })),
+      (() => { const done = fcAchDone(), rows = FC_ACH.map((a) => { const [have, need] = a.p(ST); return { a, have, need, got: done.includes(a.id) }; })
+          .sort((x, y) => (x.got - y.got) || (y.have / y.need - x.have / x.need));
+        return el("div", { class: "stack", style: "gap:8px" },
+          el("h2", null, `Achievements (${done.length}/${FC_ACH.length})`),
+          el("p", { class: "muted small" }, "Each one pays out once, and some unlock new gear in the shop."),
+          el("div", { class: "list" }, rows.map(({ a, have, need, got }) => el("div", { class: "item ach" + (got ? " got" : ""), style: "cursor:default", "data-ach": a.id },
+            el("span", { class: "ach-i", "aria-hidden": "true" }, got ? "🏅" : "🔒"),
+            el("div", { class: "stack", style: "gap:3px;min-width:0;flex:1" },
+              el("span", { class: "t" }, a.n), el("span", { class: "s" }, a.d),
+              got ? null : el("div", { class: "meter thin" }, el("i", { style: "width:" + Math.round(Math.min(1, have / need) * 100) + "%" }))),
+            el("span", { class: "s" }, got ? "Done" : `${Math.floor(Math.min(have, need) * 100) / 100}/${need}`)))));
+      })(),
       el("h2", null, `My fish (${Object.keys(dex).length}/${names.length})`),
       el("div", { class: "list" }, names.map((n) => el("div", { class: "item", style: "cursor:default" },
         el("span", { class: "t" }, dex[n] ? n : "???"), el("span", { class: "s" }, dex[n] ? `best ${lbText(dex[n].best)} · caught ${dex[n].n}` : "not caught yet")))),
-      el("p", { class: "muted small" }, "How to play: tap to cast. Wait for a dark shape to show at the bobber and the ! to appear, then tap fast to hook it. You can't tell what it is until you land it. Hold to reel. When the fish runs or jumps, let go so the line doesn't snap. Big fish take longer to bite and fight harder. Sell your fish in your bag to earn coins, then spend them in the tackle shop."));
+      el("p", { class: "muted small" }, "How to play: tap to cast. Wait for a dark shape to show at the bobber and the ! to appear, then tap fast to hook it. You can't tell what it is until you land it. Hold to reel. When the fish runs or jumps, let go so the line doesn't snap. Big fish take longer to bite and fight harder. Sell your fish in your bag to earn coins, then spend them in the tackle shop.")].flat(9).filter(Boolean));
   };
   draw();
 }
@@ -1941,8 +2049,13 @@ function playClash(mode, locId, lureIdIn, onExit, duel) {
   const lureId = mode === "friend" && duel.lure ? duel.lure : lureIdIn;
   const L = FC_LOCS.find((l) => l.id === locId) || FC_LOCS[0];
   const G = fcGear(), lureLv = fcLureLv()[lureId] || 0;
-  const upHook = fcUp("hook"), upBait = fcUp("bait"), upCharm = fcUp("charm"), upFinder = fcUp("finder"), upNet = fcUp("net"), upBoat = fcUp("boat");
+  const upHook = fcUp("hook"), upNet = fcUp("net");
+  const upBait = fcUp("bait") + 0.7 * fcUp("gps");                 // scent and knowing the spots both speed up bites
+  const upCharm = fcUp("charm") + 0.7 * fcUp("tackle");            // the right lure works like luck
+  const upBoat = fcUp("boat") + 0.9 * fcUp("waders");              // both get you to better water
+  const upFinder = Math.max(fcUp("finder"), fcUp("glasses"));      // glasses do what cheap sonar does
   const BITE_WINDOW = 0.95 * (1 + 0.3 * upHook);
+  fcMarkPlace(L.id);
   const canvas = el("canvas", { class: "game-canvas", role: "img", "aria-label": "Fishing game. Tap to cast and hook. Hold to reel. Let go when the fish runs." });
   const ctx = canvas.getContext("2d");
   const sndBtn = el("button", { class: "game-x game-snd", type: "button", "aria-label": "Sound on or off", onclick: () => { soundOn = !soundOn; setPref("fcsound", soundOn ? "1" : "0"); sndBtn.textContent = soundOn ? "🔊" : "🔇"; if (!soundOn) whine(false); } });
@@ -1998,7 +2111,7 @@ function playClash(mode, locId, lureIdIn, onExit, duel) {
 
   /* ---------- game state ---------- */
   const CASTS = 3, rivalName = ["Lakeside Lou", "Big Mike", "Sunny", "Cody", "Captain Pete"][Math.floor(Math.random() * 5)];
-  let target = null, inBag = true, netSave = false, st = "cast", ci = 0, mine = [], rival = [], down = false, powerT = 0, power = 0, great = false, timer = 0, biteAt = 0, msg = "", fish = null, weight = 0, F = null, rec = false, resText = "", earned = { xp: 0, coins: 0 }, btn = null, shakeT = 0, drops = [], rip = [], lastTier = null;
+  let achNew = [], target = null, inBag = true, netSave = false, st = "cast", ci = 0, mine = [], rival = [], down = false, powerT = 0, power = 0, great = false, timer = 0, biteAt = 0, msg = "", fish = null, weight = 0, F = null, rec = false, resText = "", earned = { xp: 0, coins: 0 }, btn = null, shakeT = 0, drops = [], rip = [], lastTier = null;
   const setSt = (s) => { st = s; bg.dataset.state = s; };
   setSt("cast");
   const pickFish = (rand = Math.random) => {
@@ -2019,6 +2132,7 @@ function playClash(mode, locId, lureIdIn, onExit, duel) {
     // the fish is chosen now but you can't see what it is. Bigger fish take longer to bite.
     const sr = mode === "friend" ? seeded(ci) : Math.random, n = pickFish(sr), w = rollWeight(n, great, lureLv, sr), q = fcTier(n, w)[2];
     target = { n, w, q: Math.max(0, Math.min(1, q)) };
+    fcStat("casts", 1);
     timer = (2.6 + Math.random() * 3.4 + target.q * 6 * (1 - 0.1 * lureLv)) * (1 - 0.18 * upBait); setSt("wait"); tick(700, 0.2, 0.25, 1); rip.push({ ...bobber(), a: 1 }); }
   function hook() {
     fish = target.n; weight = target.w; const f = FC_FISH[fish];
@@ -2027,12 +2141,14 @@ function playClash(mode, locId, lureIdIn, onExit, duel) {
   const hooks = { phase: (n) => { bg.dataset.phase = n; if (n === "jump") { splash(0.9); tick(450, 0.3, 0.3, 1); } if (n === "run") clickAcc = 0; } };
   function splash(k) { const b = fightPos(); for (let i = 0; i < 14 * k; i++) drops.push({ x: b.x, y: b.y, vx: (Math.random() - 0.5) * 160, vy: -80 - Math.random() * 140, a: 1 }); rip.push({ x: b.x, y: b.y, a: 1 }); }
   function finish(win) {
-    resText = ""; rec = false; earned = { xp: 0, coins: 0 }; whine(false);
+    resText = ""; rec = false; achNew = []; earned = { xp: 0, coins: 0 }; whine(false);
     if (!win) netSave = false;
     if (win) {
       mine[ci] = weight; const dex = fcDex(), d = dex[fish] || { best: 0, n: 0 };
       rec = weight > d.best; d.best = Math.max(d.best, weight); d.n++; dex[fish] = d; setPref("fcdex", JSON.stringify(dex));
       earned = { xp: fcXpFor(weight), coins: 0, value: fcValue(fish, weight) }; lastTier = fcTier(fish, weight);
+      if (lastTier[0] === "Trophy") fcStat("trophies", 1);
+      achNew = fcCheckAch();
       inBag = fcAddToBag(fish, weight);
       setPref("fcxp", String(fcXp() + earned.xp)); tick(1200, 0.25, 0.15, 5); setTimeout(() => tick(1700, 0.25, 0.2, 5), 120);
     } else { mine[ci] = 0; fish = fish && win ? fish : null; }
@@ -2051,6 +2167,7 @@ function playClash(mode, locId, lureIdIn, onExit, duel) {
     if (mode === "duel" && ci >= CASTS - 1) {
       const a = mine.reduce((x, y) => x + y, 0), b = rival.reduce((x, y) => x + y, 0), out = a > b ? "win" : a < b ? "lose" : "draw";
       const bonus = { win: [60, 100], draw: [30, 40], lose: [15, 20] }[out];
+      if (out === "win") fcStat("duelWins", 1);
       setPref("fcxp", String(fcXp() + bonus[0])); setPref("fccoins", String(fcCoins() + bonus[1])); earned = { xp: bonus[0], coins: bonus[1] };
       resText = out; setSt("over"); return;
     }
@@ -2228,6 +2345,7 @@ function playClash(mode, locId, lureIdIn, onExit, duel) {
       let ry = cy + 360;
       if (netSave) { text("The net saved it!", W / 2, ry - 26, 17, "#2e7d32"); }
       text(inBag ? "Added to your bag" : "Your bag is full, so you let it go", W / 2, ry, 18, inBag ? "#2e6a5a" : "#b23a2a"); ry += 28; text(inBag ? `Worth 🪙 ${earned.value} when you sell it` : "Sell some fish in the menu first", W / 2, ry, 16, "#8a5a00"); ry += 26; text(`+${earned.xp} XP`, W / 2, ry, 16, "#2e6a5a"); if (rec) { ry += 24; text("New personal best!", W / 2, ry, 16, "#2e7d32"); }
+      for (const a of achNew.slice(0, 2)) { ry += 24; text(`🏅 ${a.n}  +🪙 ${a.coins}`, W / 2, ry, 16, "#8a5a00"); }
       button("Continue", cy + ch - 76);
     } else if (st === "result") {
       text("It got away", W / 2, cy + 90, 32, "#7a2418", "center", "Georgia,serif"); text(msg, W / 2, cy + 140, 17, "#333");
