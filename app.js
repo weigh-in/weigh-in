@@ -1716,8 +1716,35 @@ const FC_LOCS = [
   { id: "bay", n: "Salt bay", lvl: 7, hard: 0.2, stars: 4, salt: true, sky: ["#9fd8ff", "#f6efe0"], water: ["#35b5c4", "#0f5c75"], fish: ["Redfish", "Flounder", "Spotted seatrout", "Snook"] },
   { id: "ocean", n: "Open ocean", lvl: 9, hard: 0.28, stars: 5, salt: true, sky: ["#8ec5f5", "#dcefff"], water: ["#1f78b4", "#082b52"], fish: ["Mahi-mahi", "King mackerel", "Tarpon", "Yellowfin tuna"] }];
 const FC_LURES = [["spinner", "Spinner"], ["worm", "Worm"], ["crank", "Crankbait"], ["jig", "Minnow jig"]];
-const FC_RODS = [{ n: "Starter rod", cost: 0, note: "" }, { n: "Fiberglass rod", cost: 150, note: "Reels a bit faster, line holds better" },
-  { n: "Graphite rod", cost: 500, note: "Faster reel, much safer line" }, { n: "Pro carbon rod", cost: 1500, note: "Best reel speed and line control" }];
+const FC_GEAR = [
+  { id: "rod", n: "Rod", icon: "🎣", base: "Starter rod", names: ["Fiberglass rod", "Graphite rod", "Pro carbon rod", "Tournament rod"], costs: [150, 500, 1500, 4000],
+    eff: (l) => l ? `Reels ${Math.round(l * 18)}% faster, line builds ${Math.round(l * 13)}% slower` : "A plain rod. Does the job." },
+  { id: "line", n: "Fishing line", icon: "🧵", base: "6 lb line", names: ["10 lb line", "15 lb line", "25 lb braid", "40 lb braid", "60 lb big-game braid"], costs: [120, 350, 900, 2200, 5000],
+    eff: (l) => l ? `Line takes ${Math.round(l * 9)}% more pull before it snaps` : "Snaps easily. Big fish will break it." },
+  { id: "reel", n: "Reel", icon: "🌀", base: "Plastic reel", names: ["Steel reel", "Sealed bearing reel", "High-speed reel"], costs: [250, 800, 2400],
+    eff: (l) => l ? `Brings fish in ${Math.round(l * 12)}% faster` : "Slow and creaky." },
+  { id: "drag", n: "Drag system", icon: "🛞", base: "No drag", names: ["Basic drag", "Smooth drag", "Carbon drag"], costs: [300, 1000, 3000],
+    eff: (l) => l ? `Fish gain ${Math.round(l * 15)}% less ground when they run` : "Runs cost you a lot of line." },
+  { id: "gloves", n: "Grip gloves", icon: "🧤", base: "Bare hands", names: ["Cloth gloves", "Rubber grip gloves", "Pro angler gloves"], costs: [180, 600, 1800],
+    eff: (l) => l ? `Line builds ${Math.round(l * 7)}% slower while you reel` : "Your hands slip on the handle." },
+  { id: "hook", n: "Hooks", icon: "🪝", base: "Blunt hooks", names: ["Sharp hooks", "Circle hooks", "Chemically sharpened hooks"], costs: [100, 350, 1100],
+    eff: (l) => l ? `You get ${Math.round(l * 30)}% longer to set the hook` : "You have to be quick." },
+  { id: "bait", n: "Bait scent", icon: "🧪", base: "No scent", names: ["Garlic scent", "Shad oil", "Pro attractant"], costs: [140, 450, 1300],
+    eff: (l) => l ? `Fish bite about ${Math.round(l * 18)}% sooner` : "Fish take their time." },
+  { id: "charm", n: "Lucky charm", icon: "🍀", base: "No charm", names: ["Rabbit's foot", "Old fishing medal", "Grandpa's lucky lure"], costs: [500, 1600, 4500],
+    eff: (l) => l ? `Better chance at bigger fish (+${l})` : "No luck on your side." },
+  { id: "finder", n: "Fish finder", icon: "📡", base: "No finder", names: ["Basic sonar", "Colour sonar", "Live sonar"], costs: [400, 1200, 3500],
+    eff: (l) => ["You can't tell what is down there.", "Shows how big the shadow is", "Shows a weight guess too", "Names the fish before you hook it"][l] },
+  { id: "net", n: "Landing net", icon: "🥅", base: "No net", names: ["Small net", "Rubber net", "Big game net"], costs: [350, 1100, 3200],
+    eff: (l) => l ? `${l * 20}% chance to save a fish that gets off` : "Lost fish are gone for good." },
+  { id: "cooler", n: "Cooler", icon: "🧊", base: "Small bag", names: ["Cool box", "Big cooler", "Ice chest", "Live well"], costs: [200, 700, 2000, 5000],
+    eff: (l) => `Holds ${40 + l * 30} fish` },
+  { id: "license", n: "Market license", icon: "🏷️", base: "No license", names: ["Local license", "County license", "State license"], costs: [600, 2000, 6000],
+    eff: (l) => l ? `Your fish sell for ${l * 15}% more` : "You get the plain price." },
+  { id: "log", n: "Logbook", icon: "📓", base: "No logbook", names: ["Pocket logbook", "Leather logbook", "Captain's logbook"], costs: [250, 900, 2600],
+    eff: (l) => l ? `You earn ${l * 20}% more XP` : "No notes, no extra XP." },
+  { id: "boat", n: "Boat", icon: "🚤", base: "Fishing from shore", names: ["Row boat", "Jon boat with motor", "Bass boat", "Offshore boat"], costs: [800, 2500, 7000, 15000],
+    eff: (l) => l ? `Reach better water: ${l * 8}% better chance at rare fish` : "You can only reach the edges." }];
 const FC_LURE_COST = [120, 400], FC_LURE_TAG = ["", " Pro", " Master"];
 const FC_FISH = {
   "Bluegill": { min: 0.3, max: 1.6, r: 15, asp: 0.74, top: "#5b7f5a", belly: "#e8a24a", fin: "#4a6a8a", pat: "bars", patc: "rgba(20,40,60,.28)", ear: true, price: 30, w: { spinner: 1, worm: 3, crank: 0.4, jig: 2 } },
@@ -1742,12 +1769,22 @@ const FC_FISH = {
 const fcXp = () => +getPref("fcxp", "0") || 0;
 const fcLevel = () => 1 + Math.floor(Math.sqrt(fcXp() / 40));
 const fcCoins = () => +getPref("fccoins", "0") || 0;
-const fcRod = () => Math.min(FC_RODS.length - 1, +getPref("fcrod", "0") || 0);
+const fcGear = () => { let g = {}; try { g = JSON.parse(getPref("fcgear", "{}")) || {}; } catch { g = {}; }
+  if (g.rod == null) g.rod = +getPref("fcrod", "0") || 0;   // carry over the old rod
+  return g; };
+const fcUp = (id) => { const it = FC_GEAR.find((x) => x.id === id); return Math.min(it ? it.costs.length : 0, fcGear()[id] || 0); };
+const fcBuy = (id) => { const it = FC_GEAR.find((x) => x.id === id), g = fcGear(), l = fcUp(id);
+  if (!it || l >= it.costs.length || fcCoins() < it.costs[l]) return false;
+  setPref("fccoins", String(fcCoins() - it.costs[l])); g[id] = l + 1; setPref("fcgear", JSON.stringify(g)); return true; };
+const fcGearName = (it) => { const l = fcUp(it.id); return l ? it.names[l - 1] : it.base; };
+const fcRod = () => fcUp("rod");
+const fcBagMax = () => 40 + 30 * fcUp("cooler");
 const fcLureLv = () => { try { return JSON.parse(getPref("fclv", "{}")) || {}; } catch { return {}; } };
 const fcDex = () => { try { return JSON.parse(getPref("fcdex", "{}")) || {}; } catch { return {}; } };
 const lbText = (w) => w.toFixed(2) + " lb";
 const fcTier = (n, w) => { const f = FC_FISH[n], q = (w - f.min) / (f.max - f.min); return q < 0.12 ? ["Tiny", 1, q] : q < 0.35 ? ["Small", 1, q] : q < 0.6 ? ["Nice size", 1.1, q] : q < 0.85 ? ["Big one", 1.3, q] : ["Trophy", 1.8, q]; };
-const fcValue = (n, w) => Math.max(1, Math.round(w * FC_FISH[n].price * fcTier(n, w)[1]));
+const fcValue = (n, w) => Math.max(1, Math.round(w * FC_FISH[n].price * fcTier(n, w)[1] * (1 + 0.15 * fcUp("license"))));
+const fcXpFor = (w) => Math.round((Math.round(w * 8) + 5) * (1 + 0.2 * fcUp("log")));
 /*FCSTEP*/
 const FC_PH_T = { rest: [0.9, 1.5], pull: [1.2, 2.2], run: [1.6, 2.8], thrash: [0.8, 1.2], jump: [1.0, 1.0] };
 function fcPickPhase(F) {
@@ -1763,8 +1800,12 @@ function fcSetPhase(F, n, hooks) {
 }
 function fcNewFight(s) { const F = { t: 0.35, d: 100, s, ph: "rest", phT: 1.2, phA: 0, time: 0, slack: 0, shake: 0.14, runDir: 1 }; return F; }
 /* returns "win", "snap", "slack" or null */
-function fcStep(F, down, dt, rodLv, hooks) {
-  const s = F.s, gm = 1 - 0.13 * rodLv, rm = (1 + 0.18 * rodLv) * (F.time > 20 ? 1 + (F.time - 20) * 0.05 : 1);
+function fcStep(F, down, dt, G, hooks) {
+  G = typeof G === "number" ? { rod: G } : (G || {});
+  const rodLv = G.rod || 0, line = G.line || 0, reel = G.reel || 0, gloves = G.gloves || 0, drag = G.drag || 0;
+  const snapAt = 1 + 0.09 * line;                       // better line takes more pull
+  const s = F.s, gm = (1 - 0.13 * rodLv) * (1 - 0.07 * gloves), rm = (1 + 0.18 * rodLv) * (1 + 0.12 * reel) * (F.time > 20 ? 1 + (F.time - 20) * 0.05 : 1);
+  const dragM = 1 - 0.15 * drag;
   F.time += dt; F.phT -= dt; F.phA += dt;
   if (F.phT <= 0) fcSetPhase(F, fcPickPhase(F), hooks);
   const ph = F.ph;
@@ -1776,25 +1817,26 @@ function fcStep(F, down, dt, rodLv, hooks) {
   if (ph === "jump" && F.phA > 0.15 && F.phA < 0.85 && down) F.t += 0.9 * dt;
   if (down) F.t += gain * gm * dt; else F.t -= fall * dt;
   F.t = Math.max(0, F.t);
-  const green = F.t >= 0.3 && F.t <= 0.72;
+  const green = F.t >= 0.3 * snapAt && F.t <= 0.72 * snapAt;
   if (down) F.d -= (green ? 30 : F.t > 0.72 ? 10 : 5) * dt * (1.1 - 0.5 * s) * rm * (ph === "rest" ? 1.35 : ph === "run" ? 0.4 : 1);
-  if (ph === "run") F.d += (down ? 6 : 13) * (0.4 + 0.6 * s) * dt;
-  if (ph === "pull") F.d += (down ? 2.5 : 6) * s * dt;
-  if (ph === "thrash") F.d += 3 * s * dt;
+  if (ph === "run") F.d += (down ? 6 : 13) * (0.4 + 0.6 * s) * dt * dragM;
+  if (ph === "pull") F.d += (down ? 2.5 : 6) * s * dt * dragM;
+  if (ph === "thrash") F.d += 3 * s * dt * dragM;
   F.d = Math.min(100, F.d);
   F.slack = F.t < 0.1 ? F.slack + dt : Math.max(0, F.slack - dt);
-  if (F.t >= 1) return "snap";
+  F.tn = F.t / snapAt;                                  // 0 to 1, for the gauge
+  if (F.t >= snapAt) return "snap";
   if (F.slack > 2.2) return "slack";
   if (F.d <= 0) return "win";
   return null;
 }
 /*ENDFCSTEP*/
 
-const FC_BAG_MAX = 40;
+
 const fcBag = () => { try { const b = JSON.parse(getPref("fcbag", "[]")); return Array.isArray(b) ? b : []; } catch { return []; } };
 const fcSaveBag = (b) => setPref("fcbag", JSON.stringify(b));
 function fcAddToBag(n, w) {
-  const b = fcBag(); if (b.length >= FC_BAG_MAX) return false;
+  const b = fcBag(); if (b.length >= fcBagMax()) return false;
   b.push({ id: Date.now().toString(36) + Math.random().toString(36).slice(2, 6), n, w, k: 0 }); fcSaveBag(b); return true;
 }
 const fcPaid = () => { try { return JSON.parse(getPref("fcpaid", "[]")) || []; } catch { return []; } };
@@ -1835,9 +1877,8 @@ function openFishGame() {
     return el("div", { class: "item", style: "cursor:default;gap:10px" }, el("div", { class: "stack", style: "gap:2px;min-width:0" }, el("span", { class: "t" }, "Duel with @" + opp), el("span", { class: "s" }, status)), action);
   };
   const draw = () => {
-    const lv = fcLevel(), xp = fcXp(), lo = 40 * (lv - 1) ** 2, hi = 40 * lv ** 2, dex = fcDex(), coins = fcCoins(), rod = fcRod(), lvs = fcLureLv();
+    const lv = fcLevel(), xp = fcXp(), lo = 40 * (lv - 1) ** 2, hi = 40 * lv ** 2, dex = fcDex(), coins = fcCoins(), lvs = fcLureLv();
     const names = Object.keys(FC_FISH), bag = fcBag().sort((a, b) => (b.k - a.k) || (sellValue(b) - sellValue(a))), fr = friends();
-    const buyRod = () => { const r = FC_RODS[rod + 1]; if (r && fcCoins() >= r.cost) { setPref("fccoins", String(fcCoins() - r.cost)); setPref("fcrod", String(rod + 1)); draw(); } };
     const sellable = bag.filter((e) => !e.k);
     const L0 = FC_LOCS.find((l) => l.id === loc);
     box.replaceChildren(
@@ -1846,6 +1887,7 @@ function openFishGame() {
         el("div", { class: "meter" }, el("i", { style: "width:" + Math.round((xp - lo) / (hi - lo) * 100) + "%" })),
         el("span", { class: "muted small" }, xp + " / " + hi + " XP to level " + (lv + 1))),
       note ? el("p", { class: "fc-note", role: "status" }, note) : null,
+      (() => { const owned = FC_GEAR.filter((it) => fcUp(it.id)); return owned.length ? el("p", { class: "muted small" }, "Your gear: " + owned.map((it) => it.icon + " " + fcGearName(it)).join(" · ")) : null; })(),
       el("h2", null, "Where"),
       el("div", { class: "chips" }, FC_LOCS.map((l) => el("button", { class: "chip", type: "button", "data-loc": l.id, disabled: l.lvl > lv ? "" : null, "aria-pressed": String(loc === l.id),
         onclick: () => { loc = l.id; setPref("fcloc", loc); note = ""; draw(); } }, l.n + (l.lvl > lv ? " 🔒 Lv " + l.lvl : "")))),
@@ -1861,7 +1903,7 @@ function openFishGame() {
         el("button", { class: "btn small ghost", type: "button", "data-challenge": f.uid, onclick: () => challenge(f) }, "Challenge")))) :
         el("p", { class: "muted small" }, "Add friends in Me, then Friends and chat. Then you can challenge them here. You each fish 3 casts in the same place when it suits you, and the biggest total wins."),
       fr.length ? el("p", { class: "muted small" }, `A challenge uses your picked place (${L0.n}) and lure.`) : null,
-      el("h2", { id: "fc-bag-h" }, `My bag (${bag.length}/${FC_BAG_MAX})`),
+      el("h2", { id: "fc-bag-h" }, `My bag (${bag.length}/${fcBagMax()})`),
       bag.length ? el("div", { class: "row spread" }, el("span", { class: "muted small" }, `Worth 🪙 ${sellable.reduce((a, e) => a + sellValue(e), 0)} (not counting ★ fish)`),
         el("button", { class: "btn small", type: "button", id: "fc-sellall", disabled: sellable.length ? null : "", onclick: () => sell(sellable.map((e) => e.id)) }, "Sell all")) : el("p", { class: "muted small" }, "Empty. Fish you catch go in your bag. You only get coins when you sell them."),
       bag.length ? el("div", { class: "list" }, bag.map((e) => el("div", { class: "item", style: "cursor:default;gap:8px", "data-fish": e.id },
@@ -1870,16 +1912,27 @@ function openFishGame() {
         el("button", { class: "btn small ghost", type: "button", "data-sell": e.id, onclick: () => sell([e.id]) }, "Sell 🪙 " + sellValue(e))))) : null,
       el("p", { class: "muted small" }, "Tap the star to keep a fish in your collection. Kept fish are never sold by Sell all."),
       el("h2", null, "Tackle shop"),
-      el("div", { class: "fc-card" },
-        el("div", { class: "row spread" }, el("div", { class: "stack", style: "gap:2px" }, el("b", null, FC_RODS[rod].n), el("span", { class: "muted small" }, rod ? FC_RODS[rod].note : "Your first rod.")),
-          FC_RODS[rod + 1] ? el("button", { class: "btn small", type: "button", id: "fc-buyrod", disabled: coins < FC_RODS[rod + 1].cost ? "" : null, onclick: buyRod }, `${FC_RODS[rod + 1].n} 🪙 ${FC_RODS[rod + 1].cost}`) : el("span", { class: "pill live" }, "Best rod"))),
+      el("p", { class: "muted small" }, "Everything here makes fishing easier or pays you more. Each one can be upgraded a few times."),
+      el("div", { class: "gear-grid" }, FC_GEAR.map((it) => {
+        const l = fcUp(it.id), maxed = l >= it.costs.length, cost = maxed ? 0 : it.costs[l];
+        return el("div", { class: "gear" + (maxed ? " maxed" : ""), "data-gear": it.id },
+          el("div", { class: "row", style: "gap:8px;align-items:center" }, el("span", { class: "gear-i", "aria-hidden": "true" }, it.icon),
+            el("div", { class: "stack", style: "gap:1px;min-width:0" }, el("b", null, it.n), el("span", { class: "muted small" }, fcGearName(it)))),
+          el("div", { class: "pips", role: "img", "aria-label": `Level ${l} of ${it.costs.length}` },
+            it.costs.map((_, i) => el("i", { class: i < l ? "on" : "" }))),
+          el("span", { class: "gear-eff" }, it.eff(l)),
+          maxed ? el("span", { class: "pill live" }, "Fully upgraded")
+            : el("button", { class: "btn small", type: "button", "data-buygear": it.id, disabled: coins < cost ? "" : null,
+                onclick: () => { if (fcBuy(it.id)) { note = `Bought ${it.names[l]}.`; draw(); } } }, `${it.names[l]} 🪙 ${cost}`));
+      })),
+      el("h2", null, "Lures"),
       el("div", { class: "list" }, FC_LURES.map(([id, n]) => { const l = lvs[id] || 0, cost = FC_LURE_COST[l];
         return el("div", { class: "item", style: "cursor:default" }, el("div", { class: "stack", style: "gap:2px" }, el("span", { class: "t" }, n + FC_LURE_TAG[l]), el("span", { class: "s" }, l ? "Attracts bigger fish" : "Basic")),
           cost ? el("button", { class: "btn small", type: "button", "data-buy": id, disabled: coins < cost ? "" : null, onclick: () => { if (fcCoins() >= cost) { setPref("fccoins", String(fcCoins() - cost)); lvs[id] = l + 1; setPref("fclv", JSON.stringify(lvs)); draw(); } } }, "Upgrade 🪙 " + cost) : el("span", { class: "pill live" }, "Maxed")); })),
       el("h2", null, `My fish (${Object.keys(dex).length}/${names.length})`),
       el("div", { class: "list" }, names.map((n) => el("div", { class: "item", style: "cursor:default" },
         el("span", { class: "t" }, dex[n] ? n : "???"), el("span", { class: "s" }, dex[n] ? `best ${lbText(dex[n].best)} · caught ${dex[n].n}` : "not caught yet")))),
-      el("p", { class: "muted small" }, "How to play: tap to cast. Wait for a dark shape to show at the bobber and the ! to appear, then tap fast to hook it. You can't tell what it is until you land it. Hold to reel. When the fish runs or jumps, let go so the line doesn't snap. Big fish take longer to bite and fight harder. Sell your fish in your bag to earn coins."));
+      el("p", { class: "muted small" }, "How to play: tap to cast. Wait for a dark shape to show at the bobber and the ! to appear, then tap fast to hook it. You can't tell what it is until you land it. Hold to reel. When the fish runs or jumps, let go so the line doesn't snap. Big fish take longer to bite and fight harder. Sell your fish in your bag to earn coins, then spend them in the tackle shop."));
   };
   draw();
 }
@@ -1887,7 +1940,9 @@ function openFishGame() {
 function playClash(mode, locId, lureIdIn, onExit, duel) {
   const lureId = mode === "friend" && duel.lure ? duel.lure : lureIdIn;
   const L = FC_LOCS.find((l) => l.id === locId) || FC_LOCS[0];
-  const rodLv = fcRod(), lureLv = fcLureLv()[lureId] || 0;
+  const G = fcGear(), lureLv = fcLureLv()[lureId] || 0;
+  const upHook = fcUp("hook"), upBait = fcUp("bait"), upCharm = fcUp("charm"), upFinder = fcUp("finder"), upNet = fcUp("net"), upBoat = fcUp("boat");
+  const BITE_WINDOW = 0.95 * (1 + 0.3 * upHook);
   const canvas = el("canvas", { class: "game-canvas", role: "img", "aria-label": "Fishing game. Tap to cast and hook. Hold to reel. Let go when the fish runs." });
   const ctx = canvas.getContext("2d");
   const sndBtn = el("button", { class: "game-x game-snd", type: "button", "aria-label": "Sound on or off", onclick: () => { soundOn = !soundOn; setPref("fcsound", soundOn ? "1" : "0"); sndBtn.textContent = soundOn ? "🔊" : "🔇"; if (!soundOn) whine(false); } });
@@ -1943,15 +1998,15 @@ function playClash(mode, locId, lureIdIn, onExit, duel) {
 
   /* ---------- game state ---------- */
   const CASTS = 3, rivalName = ["Lakeside Lou", "Big Mike", "Sunny", "Cody", "Captain Pete"][Math.floor(Math.random() * 5)];
-  let target = null, inBag = true, st = "cast", ci = 0, mine = [], rival = [], down = false, powerT = 0, power = 0, great = false, timer = 0, biteAt = 0, msg = "", fish = null, weight = 0, F = null, rec = false, resText = "", earned = { xp: 0, coins: 0 }, btn = null, shakeT = 0, drops = [], rip = [], lastTier = null;
+  let target = null, inBag = true, netSave = false, st = "cast", ci = 0, mine = [], rival = [], down = false, powerT = 0, power = 0, great = false, timer = 0, biteAt = 0, msg = "", fish = null, weight = 0, F = null, rec = false, resText = "", earned = { xp: 0, coins: 0 }, btn = null, shakeT = 0, drops = [], rip = [], lastTier = null;
   const setSt = (s) => { st = s; bg.dataset.state = s; };
   setSt("cast");
   const pickFish = (rand = Math.random) => {
-    const ws = L.fish.map((n) => FC_FISH[n].w[lureId] * (FC_FISH[n].rare ?? 1)); let r = rand() * ws.reduce((a, b) => a + b, 0), i = 0;
+    const ws = L.fish.map((n) => FC_FISH[n].w[lureId] * (FC_FISH[n].rare != null ? FC_FISH[n].rare * (1 + 0.08 * upBoat) : 1)); let r = rand() * ws.reduce((a, b) => a + b, 0), i = 0;
     for (; i < ws.length - 1; i++) { if ((r -= ws[i]) <= 0) break; }
     return L.fish[i];
   };
-  const rollWeight = (n, good, lv, rand = Math.random) => { const f = FC_FISH[n]; return Math.round((f.min + (f.max - f.min) * Math.pow(rand(), (good ? 1.7 : 2.6) - 0.3 * (lv || 0))) * 100) / 100; };
+  const rollWeight = (n, good, lv, rand = Math.random) => { const f = FC_FISH[n]; return Math.round((f.min + (f.max - f.min) * Math.pow(rand(), Math.max(0.6, (good ? 1.7 : 2.6) - 0.3 * (lv || 0) - 0.22 * upCharm))) * 100) / 100; };
   const seeded = (i) => rng((duel ? duel.seed : 1) * 31 + i * 7919);
   if (mode === "duel") for (let i = 0; i < CASTS; i++) rival.push(Math.random() < 0.15 ? 0 : rollWeight(pickFish(), Math.random() < 0.4, 0));
 
@@ -1964,7 +2019,7 @@ function playClash(mode, locId, lureIdIn, onExit, duel) {
     // the fish is chosen now but you can't see what it is. Bigger fish take longer to bite.
     const sr = mode === "friend" ? seeded(ci) : Math.random, n = pickFish(sr), w = rollWeight(n, great, lureLv, sr), q = fcTier(n, w)[2];
     target = { n, w, q: Math.max(0, Math.min(1, q)) };
-    timer = 2.6 + Math.random() * 3.4 + target.q * 6 * (1 - 0.1 * lureLv); setSt("wait"); tick(700, 0.2, 0.25, 1); rip.push({ ...bobber(), a: 1 }); }
+    timer = (2.6 + Math.random() * 3.4 + target.q * 6 * (1 - 0.1 * lureLv)) * (1 - 0.18 * upBait); setSt("wait"); tick(700, 0.2, 0.25, 1); rip.push({ ...bobber(), a: 1 }); }
   function hook() {
     fish = target.n; weight = target.w; const f = FC_FISH[fish];
     F = fcNewFight(Math.min(1.25, 0.3 + 0.7 * Math.pow(target.q, 0.85) + L.hard + (f.pow || 0))); F.jumpY = 0; F.off = 0; F.dir = 1; bg.dataset.phase = F.ph; setSt("fight"); tick(900, 0.25, 0.08);
@@ -1973,16 +2028,20 @@ function playClash(mode, locId, lureIdIn, onExit, duel) {
   function splash(k) { const b = fightPos(); for (let i = 0; i < 14 * k; i++) drops.push({ x: b.x, y: b.y, vx: (Math.random() - 0.5) * 160, vy: -80 - Math.random() * 140, a: 1 }); rip.push({ x: b.x, y: b.y, a: 1 }); }
   function finish(win) {
     resText = ""; rec = false; earned = { xp: 0, coins: 0 }; whine(false);
+    if (!win) netSave = false;
     if (win) {
       mine[ci] = weight; const dex = fcDex(), d = dex[fish] || { best: 0, n: 0 };
       rec = weight > d.best; d.best = Math.max(d.best, weight); d.n++; dex[fish] = d; setPref("fcdex", JSON.stringify(dex));
-      earned = { xp: Math.round(weight * 8) + 5, coins: 0, value: fcValue(fish, weight) }; lastTier = fcTier(fish, weight);
+      earned = { xp: fcXpFor(weight), coins: 0, value: fcValue(fish, weight) }; lastTier = fcTier(fish, weight);
       inBag = fcAddToBag(fish, weight);
       setPref("fcxp", String(fcXp() + earned.xp)); tick(1200, 0.25, 0.15, 5); setTimeout(() => tick(1700, 0.25, 0.2, 5), 120);
     } else { mine[ci] = 0; fish = fish && win ? fish : null; }
     setSt("result");
   }
-  function lose(text) { msg = text; fish = null; finish(false); }
+  function lose(text) {
+    if (upNet && target && Math.random() < 0.2 * upNet) { msg = ""; fish = target.n; weight = target.w; netSave = true; tick(1000, 0.25, 0.2, 4); finish(true); return; }
+    msg = text; fish = null; netSave = false; finish(false);
+  }
   function advance() {
     if (mode === "friend" && ci >= CASTS - 1) {
       const key = duel.a === S.user.uid ? "sa" : "sb";
@@ -2099,14 +2158,16 @@ function playClash(mode, locId, lureIdIn, onExit, duel) {
       ctx.strokeStyle = "rgba(255,255,255,.85)"; ctx.lineWidth = 1.3; ctx.beginPath(); ctx.moveTo(tip.x, tip.y); ctx.quadraticCurveTo((tip.x + b.x) / 2, (tip.y + b.y) / 2 + 30, b.x, b.y + dip); ctx.stroke();
       ctx.fillStyle = "#e5352b"; ctx.beginPath(); ctx.arc(b.x, b.y + dip, 9, Math.PI, 0); ctx.fill(); ctx.fillStyle = "#fff"; ctx.beginPath(); ctx.arc(b.x, b.y + dip, 9, 0, Math.PI); ctx.fill();
       ctx.strokeStyle = "rgba(255,255,255,.5)"; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.ellipse(b.x, b.y + 10, 16 + Math.sin(now / 400) * 3, 5, 0, 0, 7); ctx.stroke();
-      if (st === "bite") { ctx.strokeStyle = "rgba(255,255,255,.7)"; ctx.beginPath(); ctx.ellipse(b.x, b.y + 4, 18 + (biteAt * 40), 7 + biteAt * 14, 0, 0, 7); ctx.stroke();
+      if (st === "bite") { ctx.strokeStyle = "rgba(255,255,255,.7)"; ctx.beginPath(); ctx.ellipse(b.x, b.y + 4, 18 + (biteAt / BITE_WINDOW * 38), 7 + biteAt / BITE_WINDOW * 13, 0, 0, 7); ctx.stroke();
         if (target) { const a = now / 260; drawReal(target.n, b.x + Math.cos(a) * 38, b.y + 20 + Math.sin(a) * 8, fishR(target.n, target.w) * 0.75, Math.sin(a) > 0 ? -1 : 1, 0, false, true); }
-        text("!", b.x, b.y - 34, 54, "#ffd36b"); }
+        text("!", b.x, b.y - 34, 54, "#ffd36b");
+        if (upFinder && target) { const t3 = fcTier(target.n, target.w)[0];
+          text(upFinder >= 3 ? target.n : upFinder >= 2 ? `${t3} · about ${target.w.toFixed(1)} lb` : t3, b.x, b.y + 56, 17, "#aefcff"); } }
     }
     let fp = null;
     if (st === "fight") {
-      fp = fightPos(); const ph = F.ph, col = F.t > 0.72 ? "#ff6b5e" : F.t < 0.3 ? "#cfd8dc" : "#fff";
-      ctx.strokeStyle = col; ctx.lineWidth = 1.5 + F.t * 2.5; ctx.beginPath(); ctx.moveTo(tip.x, tip.y); ctx.lineTo(fp.x, fp.y); ctx.stroke();
+      fp = fightPos(); const ph = F.ph, tn = F.tn ?? F.t, col = tn > 0.72 ? "#ff6b5e" : tn < 0.3 ? "#cfd8dc" : "#fff";
+      ctx.strokeStyle = col; ctx.lineWidth = 1.5 + tn * 2.5; ctx.beginPath(); ctx.moveTo(tip.x, tip.y); ctx.lineTo(fp.x, fp.y); ctx.stroke();
       const r = fishR(fish, weight), dir = fp.x < tip.x ? 1 : -1, airborne = ph === "jump" && F.phA < 1;
       const wob = Math.sin(F.time * (ph === "thrash" ? 28 : ph === "run" ? 16 : 7)) * (ph === "thrash" ? 0.35 : ph === "run" ? 0.18 : 0.1) + (airborne ? -0.5 + F.phA * 1.0 : 0);
       if (!airborne) { ctx.fillStyle = "rgba(0,0,0,.18)"; ctx.beginPath(); ctx.ellipse(fp.x, fp.y + r * 0.5, r * 1.1, r * 0.3, 0, 0, 7); ctx.fill(); }
@@ -2115,7 +2176,7 @@ function playClash(mode, locId, lureIdIn, onExit, duel) {
     }
     for (const d of drops) { d.x += d.vx * dt; d.y += d.vy * dt; d.vy += 420 * dt; d.a -= dt * 1.4; ctx.fillStyle = `rgba(255,255,255,${Math.max(0, d.a)})`; ctx.beginPath(); ctx.arc(d.x, d.y, 2.2, 0, 7); ctx.fill(); } for (let i = drops.length - 1; i >= 0; i--) if (drops[i].a <= 0) drops.splice(i, 1);
     // rod (bends when the line is tight)
-    const bend = F ? F.t * 26 : 4;
+    const bend = F ? (F.tn ?? F.t) * 26 : 4;
     ctx.strokeStyle = "#2f2217"; ctx.lineCap = "round"; ctx.lineWidth = 7; ctx.beginPath(); ctx.moveTo(W / 2 + 74, H + 12); ctx.quadraticCurveTo(W / 2 + 56 - bend * 0.3, H * 0.9, tip.x, tip.y); ctx.stroke();
     ctx.strokeStyle = "#7d6a55"; ctx.lineWidth = 3; ctx.beginPath(); ctx.moveTo(W / 2 + 74, H + 12); ctx.quadraticCurveTo(W / 2 + 56 - bend * 0.3, H * 0.9, tip.x, tip.y); ctx.stroke();
     ctx.fillStyle = "#222"; ctx.beginPath(); ctx.arc(W / 2 + 66, H * 0.93, 11, 0, 7); ctx.fill(); ctx.strokeStyle = "#aaa"; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(W / 2 + 66, H * 0.93, 7, (now / 100) * (F && down ? 1 : 0), (now / 100) * (F && down ? 1 : 0) + 4); ctx.stroke();
@@ -2133,7 +2194,7 @@ function playClash(mode, locId, lureIdIn, onExit, duel) {
       const me = duel.a === S.user.uid;
       text(`Duel with @${me ? duel.bName : duel.aName}`, W / 2 - 20, 30, 16); text(`Cast ${Math.min(ci + 1, CASTS)} of ${CASTS}`, W / 2 - 20, 52, 14); text("You " + mine.reduce((x, y) => x + y, 0).toFixed(1) + " lb", 16, 74, 16, "#fff", "left");
     } else text(L.n, W / 2 - 20, 30, 18);
-    text("🪙 " + fcCoins(), 16, 30, 16, "#ffd36b", "left"); text("Bag " + fcBag().length + "/" + FC_BAG_MAX, W - 16, 100, 13, fcBag().length >= FC_BAG_MAX - 3 ? "#ffb74d" : "#fff", "right");
+    text("🪙 " + fcCoins(), 16, 30, 16, "#ffd36b", "left"); text("Bag " + fcBag().length + "/" + fcBagMax(), W - 16, 100, 13, fcBag().length >= fcBagMax() - 3 ? "#ffb74d" : "#fff", "right");
     ctx.shadowBlur = 0;
     if (st === "cast") {
       text("Tap to cast. Stop the bar in the green.", W / 2, H * 0.2, 18);
@@ -2145,7 +2206,7 @@ function playClash(mode, locId, lureIdIn, onExit, duel) {
     if (st === "fight") {
       const gx = W - 44, gy = H * 0.3, gh = H * 0.42;
       ctx.fillStyle = "rgba(0,0,0,.4)"; ctx.fillRect(gx, gy, 26, gh); ctx.fillStyle = "#4caf50"; ctx.fillRect(gx, gy + gh * 0.28, 26, gh * 0.42); ctx.fillStyle = "#d9423a"; ctx.fillRect(gx, gy, 26, gh * 0.28);
-      const ty = gy + gh * (1 - Math.min(1, F.t)); ctx.fillStyle = "#fff"; ctx.fillRect(gx - 6, ty - 3, 38, 6); text("LINE", gx + 13, gy - 8, 13);
+      const ty = gy + gh * (1 - Math.min(1, F.tn ?? F.t)); ctx.fillStyle = "#fff"; ctx.fillRect(gx - 6, ty - 3, 38, 6); text("LINE", gx + 13, gy - 8, 13);
       ctx.fillStyle = "rgba(0,0,0,.4)"; ctx.fillRect(16, gy, 14, gh); ctx.fillStyle = "#ffd36b"; const dh = gh * (1 - F.d / 100); ctx.fillRect(16, gy + gh - dh, 14, dh);
       const msgs = { rest: ["It's tiring! Reel it in!", "#fff"], pull: ["Reel steadily", "#fff"], run: ["FISH RUNNING! Let go!", "#ffb74d"], thrash: ["It's thrashing! Careful!", "#ffb74d"], jump: ["It jumped! Let go!", "#ff8a80"] }[F.ph];
       ctx.shadowColor = "rgba(0,0,0,.6)"; ctx.shadowBlur = 5; text(msgs[0], W / 2, H * 0.2, 22, msgs[1]); ctx.shadowBlur = 0;
@@ -2164,7 +2225,9 @@ function playClash(mode, locId, lureIdIn, onExit, duel) {
       drawReal(fish, W / 2 + 6, cy + 150 + Math.sin(now / 500) * 3, Math.min(cw * 0.27, 48 + 56 * Math.sqrt(q)), 1, -0.05, true);
       text(fish, W / 2, cy + 252, 26, "#16352d", "center", "Georgia,serif"); text(lbText(weight), W / 2, cy + 292, 34, "#b45309");
       ctx.fillStyle = q > 0.6 ? "#2e7d32" : "#607d8b"; rrect(W / 2 - 62, cy + 304, 124, 26, 13); ctx.fill(); text(tier, W / 2, cy + 323, 15, "#fff");
-      let ry = cy + 360; text(inBag ? "Added to your bag" : "Your bag is full, so you let it go", W / 2, ry, 18, inBag ? "#2e6a5a" : "#b23a2a"); ry += 28; text(inBag ? `Worth 🪙 ${earned.value} when you sell it` : "Sell some fish in the menu first", W / 2, ry, 16, "#8a5a00"); ry += 26; text(`+${earned.xp} XP`, W / 2, ry, 16, "#2e6a5a"); if (rec) { ry += 24; text("New personal best!", W / 2, ry, 16, "#2e7d32"); }
+      let ry = cy + 360;
+      if (netSave) { text("The net saved it!", W / 2, ry - 26, 17, "#2e7d32"); }
+      text(inBag ? "Added to your bag" : "Your bag is full, so you let it go", W / 2, ry, 18, inBag ? "#2e6a5a" : "#b23a2a"); ry += 28; text(inBag ? `Worth 🪙 ${earned.value} when you sell it` : "Sell some fish in the menu first", W / 2, ry, 16, "#8a5a00"); ry += 26; text(`+${earned.xp} XP`, W / 2, ry, 16, "#2e6a5a"); if (rec) { ry += 24; text("New personal best!", W / 2, ry, 16, "#2e7d32"); }
       button("Continue", cy + ch - 76);
     } else if (st === "result") {
       text("It got away", W / 2, cy + 90, 32, "#7a2418", "center", "Georgia,serif"); text(msg, W / 2, cy + 140, 17, "#333");
@@ -2188,9 +2251,9 @@ function playClash(mode, locId, lureIdIn, onExit, duel) {
     shakeT = Math.max(0, shakeT - dt);
     if (st === "cast") { powerT += dt * 0.9; if (powerT > 2) powerT = 0; power = powerT <= 1 ? powerT : 2 - powerT; }
     if (st === "wait") { timer -= dt; if (timer <= 0) { biteAt = 0; setSt("bite"); tick(1500, 0.12, 0.05); } }
-    if (st === "bite") { biteAt += dt; if (biteAt > 0.95) lose("Too slow. It got away."); }
+    if (st === "bite") { biteAt += dt; if (biteAt > BITE_WINDOW) lose("Too slow. It got away."); }
     if (st === "fight") {
-      const out = fcStep(F, down, dt, rodLv, hooks); bg.dataset.tension = F.t.toFixed(2);
+      const out = fcStep(F, down, dt, G, hooks); bg.dataset.tension = F.t.toFixed(2);
       // reel sounds: fast screaming drag while the fish runs, slow clicks while you crank
       if (F.ph === "run") { whine(true, 800 + 700 * F.s + (F.d < 50 ? 150 : 0)); clickAcc += dt * (26 + 26 * F.s); while (clickAcc >= 1) { clickAcc -= 1; tick(2000 + Math.random() * 1400, 0.14, 0.02, 4); } }
       else { whine(false); if (down) { clickAcc += dt * 9; while (clickAcc >= 1) { clickAcc -= 1; tick(1300 + Math.random() * 300, 0.07, 0.02, 4); } } }
