@@ -606,6 +606,8 @@ function feedPosts() {
 }
 /* What's new. Newest first. Add a new entry on top each time the app changes. */
 const UPDATES = [
+  { id: "2026-11-01c", date: "Nov 1", title: "Better trees", items: [
+    "Every tree in the game now has a trunk, a shadow and fuller leaves, and the pines are shaded."] },
   { id: "2026-11-01b", date: "Nov 1", title: "Fishing game: tournaments, leaderboard and new places", items: [
     "Daily tournaments: every place has a cup each day. 3 casts, the same fish for everyone, heaviest total wins. Prizes come the next day.",
     "Leaderboard: top anglers, biggest fish, most fish and cup wins. Switch between everyone and just your friends.",
@@ -2453,9 +2455,18 @@ function playClash(mode, locId, lureIdIn, onExit, duel) {
     ctx.strokeStyle = "#2a2a2a"; ctx.lineWidth = 1.6; for (const b of D.birds) { const bx = ((b.x + t * b.v) % (W + 60)) - 30, fl = Math.sin(t * 7 + b.ph) * 4; ctx.beginPath(); ctx.moveTo(bx - 8, b.y - fl); ctx.quadraticCurveTo(bx - 3, b.y - 4, bx, b.y); ctx.quadraticCurveTo(bx + 3, b.y - 4, bx + 8, b.y - fl); ctx.stroke(); }
     for (const tr of D.trees) { const base = y0 + 2;
       if (tr.palm) { const tx = tr.x + (tr.k - 0.5) * 30, ty = base - tr.h; ctx.strokeStyle = "#6b4f2c"; ctx.lineWidth = 4; ctx.beginPath(); ctx.moveTo(tr.x, base); ctx.quadraticCurveTo(tr.x + (tr.k - 0.5) * 14, base - tr.h * 0.5, tx, ty); ctx.stroke(); ctx.strokeStyle = "#2f8a46"; ctx.lineWidth = 3; for (let i = 0; i < 7; i++) { const ang = -Math.PI / 2 + (i - 3) * 0.55; ctx.beginPath(); ctx.moveTo(tx, ty); ctx.quadraticCurveTo(tx + Math.cos(ang) * 22, ty + Math.sin(ang) * 22 - 6, tx + Math.cos(ang) * 38, ty + Math.sin(ang) * 38 + 10 + Math.sin(t * 1.5 + i) * 2); ctx.stroke(); } continue; }
-      ctx.fillStyle = K === "river" ? "#2f5a3a" : K === "lake" ? "#244b36" : "#3d7a42";
-      if (tr.pine) { for (let k = 0; k < 3; k++) { ctx.beginPath(); ctx.moveTo(tr.x - 11 + k * 2, base - tr.h * (0.25 + k * 0.28)); ctx.lineTo(tr.x, base - tr.h * (0.65 + k * 0.28)); ctx.lineTo(tr.x + 11 - k * 2, base - tr.h * (0.25 + k * 0.28)); ctx.closePath(); ctx.fill(); } }
-      else { ctx.beginPath(); ctx.arc(tr.x, base - tr.h * 0.7, 10 + tr.k * 8, 0, 7); ctx.fill(); ctx.fillStyle = "#4a3523"; ctx.fillRect(tr.x - 1.5, base - tr.h * 0.5, 3, tr.h * 0.5); } }
+      const pal = K === "river" ? ["#2f5a3a", "#427a52", "#24472e"] : K === "lake" ? ["#244b36", "#33694c", "#1b3a2a"] : ["#3d7a42", "#5fa75c", "#2f6334"], dark = tr.k > 0.5 ? pal[0] : pal[2];
+      ctx.fillStyle = "rgba(10,30,20,.25)"; ctx.beginPath(); ctx.ellipse(tr.x, base + 1, 9 + tr.k * 5, 2.5, 0, 0, 7); ctx.fill();
+      if (tr.pine) {
+        ctx.fillStyle = "#4a3523"; ctx.fillRect(tr.x - 2, base - tr.h * 0.32, 4, tr.h * 0.32 + 1); ctx.fillStyle = "#35261a"; ctx.fillRect(tr.x, base - tr.h * 0.32, 2, tr.h * 0.32 + 1);
+        for (let k = 0; k < 3; k++) { const yb = base - tr.h * (0.25 + k * 0.28), yt = base - tr.h * (0.65 + k * 0.28), hw = 11 - k * 2;
+          ctx.fillStyle = dark; ctx.beginPath(); ctx.moveTo(tr.x - hw, yb); ctx.lineTo(tr.x, yt); ctx.lineTo(tr.x + hw, yb); ctx.closePath(); ctx.fill();
+          ctx.fillStyle = pal[1]; ctx.beginPath(); ctx.moveTo(tr.x - hw * 0.1, yb); ctx.lineTo(tr.x, yt); ctx.lineTo(tr.x - hw, yb); ctx.closePath(); ctx.globalAlpha = 0.55; ctx.fill(); ctx.globalAlpha = 1; } }
+      else {
+        const rr = 10 + tr.k * 8, cy = base - tr.h * 0.45 - rr * 0.8;
+        ctx.fillStyle = "#4a3523"; ctx.beginPath(); ctx.moveTo(tr.x - 3, base + 1); ctx.lineTo(tr.x - 1.5, cy); ctx.lineTo(tr.x + 1.5, cy); ctx.lineTo(tr.x + 3, base + 1); ctx.fill(); ctx.fillStyle = "#35261a"; ctx.fillRect(tr.x + 0.5, cy, 2, base - cy);
+        ctx.fillStyle = dark; ctx.beginPath(); ctx.arc(tr.x, cy, rr, 0, 7); ctx.arc(tr.x - rr * 0.7, cy + rr * 0.3, rr * 0.7, 0, 7); ctx.arc(tr.x + rr * 0.7, cy + rr * 0.3, rr * 0.7, 0, 7); ctx.fill();
+        ctx.fillStyle = pal[1]; ctx.globalAlpha = 0.6; ctx.beginPath(); ctx.arc(tr.x - rr * 0.3, cy - rr * 0.3, rr * 0.6, 0, 7); ctx.fill(); ctx.globalAlpha = 1; } }
     g = ctx.createLinearGradient(0, y0, 0, H); g.addColorStop(0, L.water[0]); g.addColorStop(1, L.water[1]); ctx.fillStyle = g; ctx.fillRect(0, y0, W, H - y0);
     ctx.fillStyle = "rgba(255,255,255,.1)"; ctx.fillRect(0, y0, W, 18);
     const hz = ctx.createLinearGradient(0, y0 - 26, 0, y0 + 40); hz.addColorStop(0, "rgba(255,255,255,0)"); hz.addColorStop(0.45, "rgba(255,255,255,.3)"); hz.addColorStop(1, "rgba(255,255,255,0)"); ctx.fillStyle = hz; ctx.fillRect(0, y0 - 26, W, 66);
