@@ -1711,10 +1711,16 @@ function openInstallHelp() {
 /* ======================= LAKE DUEL (cast, hook, reel) ======================= */
 const FC_LOCS = [
   { id: "pond", n: "Pond", lvl: 1, hard: 0, stars: 1, sky: ["#ffe2b0", "#d6ecf2"], water: ["#4aa6b9", "#1d6577"], fish: ["Bluegill", "Largemouth bass", "Channel catfish"] },
+  { id: "creek", n: "Mill creek", lvl: 2, lic: 1, hard: 0.08, stars: 2, like: "river", sky: ["#ffe0b8", "#dbeee8"], water: ["#5aa89a", "#1d5a50"], fish: ["Rainbow trout", "Smallmouth bass", "Bluegill", "Common carp"] },
   { id: "lake", n: "Lake", lvl: 3, lic: 1, hard: 0.05, stars: 2, sky: ["#bcd0ff", "#e3f0f5"], water: ["#3a7fb0", "#123e5f"], fish: ["Crappie", "Largemouth bass", "Walleye", "Northern pike", "Muskellunge"] },
+  { id: "reservoir", n: "Big reservoir", lvl: 4, lic: 1, hard: 0.1, stars: 2, like: "lake", sky: ["#c9d7f2", "#eaf1f4"], water: ["#4a86a8", "#173d57"], fish: ["Crappie", "Walleye", "Largemouth bass", "Channel catfish", "Common carp"] },
   { id: "river", n: "River", lvl: 5, lic: 1, hard: 0.15, stars: 3, sky: ["#ffcfae", "#f1e6d6"], water: ["#4b9a8a", "#17463f"], fish: ["Rainbow trout", "Smallmouth bass", "Channel catfish", "Common carp", "Muskellunge"] },
+  { id: "muskie", n: "Northwoods lake", lvl: 6, lic: 1, hard: 0.18, stars: 3, like: "lake", sky: ["#b9c6e8", "#dfe6ea"], water: ["#2f6f86", "#0d3040"], fish: ["Northern pike", "Muskellunge", "Walleye", "Smallmouth bass", "Lake trout"] },
   { id: "bay", n: "Salt bay", lvl: 7, lic: 2, hard: 0.2, stars: 4, salt: true, sky: ["#9fd8ff", "#f6efe0"], water: ["#35b5c4", "#0f5c75"], fish: ["Redfish", "Flounder", "Spotted seatrout", "Snook"] },
-  { id: "ocean", n: "Open ocean", lvl: 9, lic: 2, hard: 0.28, stars: 5, salt: true, sky: ["#8ec5f5", "#dcefff"], water: ["#1f78b4", "#082b52"], fish: ["Mahi-mahi", "King mackerel", "Tarpon", "Yellowfin tuna"] }];
+  { id: "flats", n: "Mangrove flats", lvl: 8, lic: 2, hard: 0.24, stars: 4, salt: true, like: "bay", sky: ["#a7dcff", "#f4ecd8"], water: ["#4fc0b4", "#176a69"], fish: ["Snook", "Redfish", "Tarpon", "Spotted seatrout", "Flounder"] },
+  { id: "great", n: "Great Lake", lvl: 8, lic: 1, hard: 0.22, stars: 4, big: true, like: "lake", sky: ["#a9c1f0", "#e2ecf5"], water: ["#2c6aa6", "#0b2c52"], fish: ["Lake trout", "Walleye", "Northern pike", "Rainbow trout", "White sturgeon"] },
+  { id: "ocean", n: "Open ocean", lvl: 9, lic: 2, hard: 0.28, stars: 5, salt: true, sky: ["#8ec5f5", "#dcefff"], water: ["#1f78b4", "#082b52"], fish: ["Mahi-mahi", "King mackerel", "Tarpon", "Yellowfin tuna"] },
+  { id: "canyon", n: "Deep blue canyon", lvl: 11, lic: 2, hard: 0.34, stars: 5, salt: true, like: "ocean", sky: ["#7fb6ee", "#cfe6ff"], water: ["#134f9a", "#041c3d"], fish: ["Yellowfin tuna", "Mahi-mahi", "Sailfish", "Blue marlin", "King mackerel"] }];
 const FC_LURES = [["spinner", "Spinner"], ["worm", "Worm"], ["crank", "Crankbait"], ["jig", "Minnow jig"]];
 /* Gear you buy, roughly in the order a real angler would: licence first, then
    basic tackle, then proper gear, then the expensive kit once you've put in the hours. */
@@ -1800,6 +1806,12 @@ const FC_ACH = [
   { id: "duel1", n: "Competitor", d: "Win a duel", coins: 200, p: (S) => [S.duelWins, 1] },
   { id: "duel10", n: "Tournament angler", d: "Win 10 duels", coins: 1500, p: (S) => [S.duelWins, 10] },
   { id: "fresh", n: "Explorer", d: "Fish the pond, the lake and the river", coins: 500, p: (S) => [["pond", "lake", "river"].filter((x) => S.places.includes(x)).length, 3] },
+  { id: "places6", n: "Well travelled", d: "Fish at 6 different places", coins: 600, p: (S) => [S.places.length, 6] },
+  { id: "placesAll", n: "Seen it all", d: "Fish at every place", coins: 2500, p: (S) => [S.places.length, FC_LOCS.length] },
+  { id: "tour1", n: "Tournament rookie", d: "Enter a daily tournament", coins: 150, p: (S) => [S.tEnt, 1] },
+  { id: "tour10", n: "On the circuit", d: "Enter 10 daily tournaments", coins: 800, p: (S) => [S.tEnt, 10] },
+  { id: "pod1", n: "On the podium", d: "Finish top 3 in a daily tournament", coins: 600, p: (S) => [S.tPodium, 1] },
+  { id: "tw1", n: "Cup champion", d: "Win a daily tournament", coins: 1500, p: (S) => [S.tWins, 1] },
   { id: "salt", n: "Salty", d: "Fish in salt water", coins: 800, p: (S) => [["bay", "ocean"].filter((x) => S.places.includes(x)).length ? 1 : 0, 1] }];
 
 const fcStatsRaw = () => { try { return JSON.parse(getPref("fcstats", "{}")) || {}; } catch { return {}; } };
@@ -1809,7 +1821,7 @@ function fcStats() {
   const d = fcDex(), st = fcStatsRaw(), vals = Object.values(d);
   return { catches: vals.reduce((a, x) => a + (x.n || 0), 0), species: Object.keys(d).length,
     biggest: vals.length ? Math.max(...vals.map((x) => x.best || 0)) : 0,
-    trophies: +st.trophies || 0, earned: +st.earned || 0, casts: +st.casts || 0, duelWins: +st.duelWins || 0,
+    trophies: +st.trophies || 0, earned: +st.earned || 0, casts: +st.casts || 0, duelWins: +st.duelWins || 0, tEnt: +st.tEnt || 0, tPodium: +st.tPodium || 0, tWins: +st.tWins || 0,
     places: Array.isArray(st.places) ? st.places : [], level: fcLevel() };
 }
 const fcAchDone = () => { try { return JSON.parse(getPref("fcach", "[]")) || []; } catch { return []; } };
@@ -1849,6 +1861,10 @@ const FC_FISH = {
   "Mahi-mahi": { min: 5, max: 50, r: 30, asp: 0.5, top: "#2ea8c0", belly: "#f2d54a", fin: "#3aa8c8", pat: "spots", patc: "rgba(30,90,140,.5)", price: 12, pow: 0.05, w: { spinner: 3, worm: 0.3, crank: 2, jig: 1 } },
   "King mackerel": { min: 5, max: 60, r: 31, asp: 0.28, top: "#5d7f95", belly: "#e6edf0", fin: "#6b8795", pat: "speckle", patc: "rgba(20,40,60,.45)", nostripe: true, jaw: true, price: 9, pow: 0.05, w: { spinner: 3, worm: 0.2, crank: 2, jig: 1 } },
   "Tarpon": { min: 20, max: 130, r: 38, asp: 0.52, top: "#7a8f9a", belly: "#e9eef0", fin: "#8a9aa3", pat: "scales", patc: "rgba(255,255,255,.3)", price: 5, pow: 0.1, rare: 0.7, w: { spinner: 1, worm: 0.3, crank: 2, jig: 3 } },
+  "Lake trout": { min: 3, max: 40, r: 28, asp: 0.38, top: "#6e7f72", belly: "#e9ece3", fin: "#7c8c80", pat: "speckle", patc: "rgba(235,240,225,.55)", jaw: true, price: 18, pow: 0.04, w: { spinner: 3, worm: 0.5, crank: 2, jig: 2 } },
+  "White sturgeon": { min: 10, max: 150, r: 40, asp: 0.28, top: "#6b6f68", belly: "#d8d4c6", fin: "#5f635c", pat: "scales", patc: "rgba(255,255,255,.18)", whisk: true, price: 6, pow: 0.12, rare: 0.5, w: { spinner: 0.3, worm: 3, crank: 0.3, jig: 1 } },
+  "Sailfish": { min: 30, max: 120, r: 38, asp: 0.34, top: "#27537a", belly: "#dfe9ee", fin: "#2d6aa0", pat: "bars", patc: "rgba(150,190,230,.4)", jaw: true, price: 6, pow: 0.12, rare: 0.55, w: { spinner: 2, worm: 0.2, crank: 3, jig: 1 } },
+  "Blue marlin": { min: 80, max: 400, r: 42, asp: 0.34, top: "#1b3f7a", belly: "#cfd9e6", fin: "#2a56a0", pat: "bars", patc: "rgba(130,170,230,.35)", jaw: true, price: 3, pow: 0.15, rare: 0.35, w: { spinner: 1, worm: 0.1, crank: 3, jig: 1 } },
   "Yellowfin tuna": { min: 20, max: 140, r: 38, asp: 0.5, top: "#1f3d5a", belly: "#cfd8dc", fin: "#e8c93a", pat: "none", patc: "rgba(0,0,0,0)", price: 6, pow: 0.12, rare: 0.6, w: { spinner: 2, worm: 0.2, crank: 3, jig: 1 } }
 };
 const fcXp = () => +getPref("fcxp", "0") || 0;
@@ -1927,10 +1943,75 @@ function fcAddToBag(n, w) {
 const fcPaid = () => { try { return JSON.parse(getPref("fcpaid", "[]")) || []; } catch { return []; } };
 const duelTotal = (a) => (Array.isArray(a) ? a : []).reduce((x, y) => x + (+y || 0), 0);
 
+/* ===== leaderboard and daily tournaments (shared through Firestore) ===== */
+const fcDay = () => new Date().toISOString().slice(0, 10).replace(/-/g, "");   // the UTC day, the same for everyone
+const fcHash = (s) => { let h = 2166136261; for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 16777619); } return (h >>> 0) % 1000000000; };
+const fcEvent = (loc, day) => { const d = day || fcDay(), id = loc + "-" + d; return { id, loc, day: d, seed: fcHash(id) }; };
+const fcLeft = () => { const n = new Date(), end = Date.UTC(n.getUTCFullYear(), n.getUTCMonth(), n.getUTCDate() + 1), m = Math.max(0, Math.floor((end - n.getTime()) / 60000)); return Math.floor(m / 60) + "h " + (m % 60) + "m"; };
+const ord = (n) => n + (n % 100 >= 11 && n % 100 <= 13 ? "th" : (["th", "st", "nd", "rd"][n % 10] || "th"));
+const fcEnts = () => { try { const a = JSON.parse(getPref("fcents", "[]")); return Array.isArray(a) ? a : []; } catch { return []; } };
+const fcSaveEnts = (a) => setPref("fcents", JSON.stringify(a.slice(-80)));
+function fcSetEnt(id, patch) { const a = fcEnts(), e = a.find((x) => x.id === id); if (e) { Object.assign(e, patch); fcSaveEnts(a); } return e; }
+
+function fcMine() {
+  const s = fcStats(), d = fcDex(); let bn = "", bw = 0;
+  for (const k in d) if ((d[k].best || 0) > bw) { bw = d[k].best; bn = k; }
+  return { name: S.name || "angler", xp: fcXp(), lv: fcLevel(), big: +bw.toFixed(2), bigN: bn, catches: s.catches, trophies: s.trophies, wins: s.duelWins, tw: s.tWins };
+}
+let fcLastPub = "";
+async function fcPublish() {
+  if (!S.user) return;
+  const data = fcMine(), key = JSON.stringify(data);
+  if (key === fcLastPub) return;
+  fcLastPub = key;
+  try { await setDoc(doc(db, "fcboard", S.user.uid), { ...data, upd: serverTimestamp() }); } catch { fcLastPub = ""; }
+}
+async function fcSendEntry(e) {
+  try { await setDoc(doc(db, "fcscores", e.id + "_" + S.user.uid), { event: e.id, uid: S.user.uid, name: S.name || "angler", score: e.score, c: e.c, at: serverTimestamp() }); return true; }
+  catch (err) { return !!err && err.code === "permission-denied"; }   // denied means it is already there, so stop retrying
+}
+function fcSubmitEntry(id, mine) {
+  const e0 = fcEnts().find((x) => x.id === id); if (!e0 || e0.score != null) return;
+  const c = [0, 1, 2].map((i) => +(+mine[i] || 0).toFixed(2)), score = +c.reduce((x, y) => x + y, 0).toFixed(2);
+  const e = fcSetEnt(id, { c, score });
+  fcSendEntry(e).then((ok) => { if (ok) fcSetEnt(id, { sent: 1 }); });
+}
+/* An entry that never finished counts as what you had caught (nothing). Anything unsent is sent again. */
+async function fcFlush() {
+  for (const e of fcEnts()) {
+    let x = e;
+    if (x.score == null) x = fcSetEnt(x.id, { c: [0, 0, 0], score: 0 });
+    if (!x.sent && (await fcSendEntry(x))) fcSetEnt(x.id, { sent: 1 });
+  }
+}
+async function fcStandings(id) {
+  const s = await getDocs(query(collection(db, "fcscores"), where("event", "==", id), limit(100)));
+  return s.docs.map((d) => d.data()).sort((a, b) => b.score - a.score);
+}
+/* Pays prizes for cups that ended on an earlier day. Returns the messages. */
+async function fcClaim() {
+  const notes = [], day = fcDay();
+  for (const e of fcEnts()) {
+    if (e.claimed || e.score == null || !e.sent || e.day >= day) continue;
+    let rows; try { rows = await fcStandings(e.id); } catch { continue; }
+    const rank = rows.filter((r) => r.score > e.score && r.uid !== S.user.uid).length + 1, n = Math.max(rows.length, rank);
+    const L = FC_LOCS.find((l) => l.id === e.loc) || FC_LOCS[0], k = 0.6 + 0.4 * L.stars;
+    let coins = 40, xp = 15;
+    if (n >= 3) { coins = rank === 1 ? 500 : rank === 2 ? 300 : rank === 3 ? 200 : rank <= 10 ? 100 : 40; xp = rank === 1 ? 120 : rank === 2 ? 80 : rank === 3 ? 50 : 20; }
+    coins = Math.round(coins * k);
+    fcSetEnt(e.id, { claimed: 1, res: { rank, n, coins } });
+    if (n >= 3 && rank <= 3) fcStat("tPodium", 1);
+    if (n >= 3 && rank === 1) fcStat("tWins", 1);
+    setPref("fccoins", String(fcCoins() + coins)); setPref("fcxp", String(fcXp() + xp));
+    notes.push(`${L.n} Cup: you came ${ord(rank)} of ${n}. +🪙 ${coins} and +${xp} XP.`);
+  }
+  return notes;
+}
+
 function openFishGame() {
   let loc = getPref("fcloc", "pond"), lure = getPref("fclure", "spinner");
-  if (!FC_LOCS.some((l) => l.id === loc && l.lvl <= fcLevel())) loc = "pond";
-  let duels = [], unsub = null, note = "";
+  if (!FC_LOCS.some((l) => l.id === loc && l.lvl <= fcLevel() && (l.lic || 0) <= fcUp("license"))) loc = "pond";
+  let duels = [], unsub = null, note = "", tab = "play", evCache = {}, openEv = "", rk = "xp", scope = "all", rankState = { key: "" };
   const box = el("div", { class: "fc-menu-in" });
   const bg = el("div", { class: "game-bg fc-menu", role: "dialog", "aria-label": "Fishing game menu" }, box);
   document.body.append(bg);
@@ -1961,6 +2042,85 @@ function openFishGame() {
     }
     return el("div", { class: "item", style: "cursor:default;gap:10px" }, el("div", { class: "stack", style: "gap:2px;min-width:0" }, el("span", { class: "t" }, "Duel with @" + opp), el("span", { class: "s" }, status)), action);
   };
+  /* ---------- tournaments and leaderboard tabs ---------- */
+  const lockWhy = (l) => l.lvl > fcLevel() ? `Reach level ${l.lvl}` : (l.lic || 0) > fcUp("license") ? (l.lic === 2 ? "Get the saltwater endorsement" : "Get a fishing licence") : "";
+  const loadStand = async (id) => { try { evCache[id] = { rows: await fcStandings(id), at: Date.now() }; } catch { evCache[id] = { rows: null, at: Date.now() }; } draw(); };
+  const rankIn = (rows, uid) => { const m = rows.find((r) => r.uid === uid); return m ? rows.filter((r) => r.score > m.score).length + 1 : 0; };
+  const enter = async (l) => {
+    const ev = fcEvent(l.id, fcDay());
+    if (fcEnts().some((e) => e.id === ev.id)) return;
+    try { const s = await getDoc(doc(db, "fcscores", ev.id + "_" + S.user.uid)); if (s.exists()) { note = `You already fished the ${l.n} Cup today.`; draw(); return; } } catch { /* offline: let them play */ }
+    const a = fcEnts(); a.push({ id: ev.id, loc: l.id, day: ev.day, score: null, c: [], sent: 0, claimed: 0 }); fcSaveEnts(a); fcStat("tEnt", 1);
+    playClash("event", l.id, lure, () => { delete evCache[ev.id]; note = ""; draw(); fcPublish(); }, ev);
+  };
+  const evTab = () => {
+    const day = fcDay(), ents = fcEnts();
+    const cards = FC_LOCS.map((l) => {
+      const ev = fcEvent(l.id, day), en = ents.find((e) => e.id === ev.id), why = lockWhy(l), C = evCache[ev.id], rows = C && C.rows;
+      let line, act;
+      if (en) {
+        const r = rows ? rankIn(rows, S.user.uid) : 0;
+        line = en.score == null ? "In progress" : `Your score: ${en.score.toFixed(2)} lb` + (r ? ` · #${r} of ${rows.length}` : "") + (en.sent ? "" : " · not sent yet");
+        act = el("button", { class: "btn small ghost", type: "button", "data-stand": ev.id, onclick: () => { openEv = openEv === ev.id ? "" : ev.id; if (openEv && !evCache[ev.id]) loadStand(ev.id); else draw(); } }, openEv === ev.id ? "Hide standings" : "Standings");
+      } else if (why) { line = ""; act = null; }
+      else { line = "3 casts. Everyone fishes the same water today."; act = el("button", { class: "btn small", type: "button", "data-enter": ev.id, onclick: () => enter(l) }, "Enter the cup"); }
+      return el("div", { class: "gear" + (why && !en ? " locked" : ""), "data-ev": ev.id },
+        el("div", { class: "row spread" }, el("b", null, l.n + " Cup"), el("span", { class: "muted small", "aria-label": l.stars + " stars of difficulty" }, "★".repeat(l.stars))),
+        line ? el("span", { class: "gear-eff" }, line) : null,
+        why && !en ? el("span", { class: "lockline" }, "🔒 " + why) : null, act);
+    });
+    let panel = null;
+    if (openEv) {
+      const C = evCache[openEv], rows = C && C.rows, loc = FC_LOCS.find((l) => l.id === openEv.split("-")[0]);
+      panel = el("div", { class: "stack", style: "gap:6px", id: "fc-stand" }, el("h3", { class: "gear-grp" }, (loc ? loc.n : "") + " Cup standings"),
+        !C ? el("p", { class: "muted small" }, "Loading...") : !rows ? el("p", { class: "muted small" }, "Couldn't load the standings. Check your internet.")
+          : !rows.length ? el("p", { class: "muted small" }, "No scores yet.")
+          : el("div", { class: "list" }, rows.slice(0, 20).map((r, i) => el("div", { class: "item" + (r.uid === S.user.uid ? " me" : ""), style: "cursor:default;gap:10px" },
+              el("b", { class: "rank-n" }, ["🥇", "🥈", "🥉"][rankIn(rows, r.uid) - 1] || "#" + rankIn(rows, r.uid)), el("span", { class: "t", style: "flex:1;min-width:0" }, "@" + r.name), el("span", { class: "s" }, r.score.toFixed(2) + " lb")))));
+    }
+    const past = ents.filter((e) => e.res).slice(-6).reverse();
+    return [
+      el("h2", null, "Daily tournaments"),
+      el("p", { class: "muted small" }, `Every place has a cup each day. You get 3 casts, the same fish for everyone, and the heaviest total wins. New cups start in ${fcLeft()}. Prizes come the next day, and you need at least 3 anglers for the podium. If you leave early, only what you've caught counts.`),
+      el("div", { class: "gear-grid" }, cards), panel,
+      past.length ? el("div", { class: "stack", style: "gap:6px" }, el("h3", { class: "gear-grp" }, "Past results"),
+        el("div", { class: "list" }, past.map((e) => { const L = FC_LOCS.find((l) => l.id === e.loc) || FC_LOCS[0];
+          return el("div", { class: "item", style: "cursor:default" }, el("div", { class: "stack", style: "gap:2px" }, el("span", { class: "t" }, `${L.n} Cup`), el("span", { class: "s" }, `${e.day.slice(4, 6)}/${e.day.slice(6)} · ${ord(e.res.rank)} of ${e.res.n}`)), el("span", { class: "s" }, "+🪙 " + e.res.coins)); }))) : null];
+  };
+  const BOARDS = [["xp", "Top anglers", (r) => `Level ${r.lv} · ${r.xp} XP`], ["big", "Biggest fish", (r) => `${(+r.big).toFixed(2)} lb ${r.bigN || ""}`], ["catches", "Most fish", (r) => `${r.catches} fish`], ["tw", "Cup wins", (r) => `${r.tw || 0} won`]];
+  const loadBoard = async () => {
+    const key = rk + "|" + scope; rankState = { key, rows: null }; draw();
+    let rows = [];
+    try {
+      await fcPublish();
+      if (scope === "all") rows = (await getDocs(query(collection(db, "fcboard"), orderBy(rk, "desc"), limit(25)))).docs.map((d) => ({ uid: d.id, ...d.data() }));
+      else {
+        const ids = [S.user.uid, ...friends().map((f) => f.uid)];
+        rows = (await Promise.all(ids.map((u) => getDoc(doc(db, "fcboard", u)).then((s) => (s.exists() ? { uid: u, ...s.data() } : null)).catch(() => null)))).filter(Boolean).sort((a, b) => (b[rk] || 0) - (a[rk] || 0));
+      }
+      if (rankState.key === key) rankState = { key, rows: rows.filter((r) => (r[rk] || 0) > 0), at: Date.now() };
+    } catch { if (rankState.key === key) rankState = { key, rows: null, err: true }; }
+    if (rankState.key === key) draw();
+  };
+  const rankTab = () => {
+    const B = BOARDS.find((b) => b[0] === rk), rows = rankState.key === rk + "|" + scope ? rankState.rows : null, me = fcMine();
+    return [
+      el("h2", null, "Leaderboard"),
+      el("div", { class: "chips" }, BOARDS.map(([id, n]) => el("button", { class: "chip", type: "button", "data-board": id, "aria-pressed": String(rk === id), onclick: () => { rk = id; loadBoard(); } }, n))),
+      el("div", { class: "chips" }, [["all", "Everyone"], ["friends", "Friends"]].map(([id, n]) => el("button", { class: "chip", type: "button", "data-scope": id, "aria-pressed": String(scope === id), onclick: () => { scope = id; loadBoard(); } }, n))),
+      rankState.err && rankState.key === rk + "|" + scope ? el("p", { class: "muted small" }, "Couldn't load the leaderboard. Check your internet and try again.")
+        : !rows ? el("p", { class: "muted small" }, "Loading...")
+        : !rows.length ? el("p", { class: "muted small" }, scope === "friends" ? "None of your friends have played yet." : "Nobody is on this board yet. Play a bit and you will be first.")
+        : el("div", { class: "list", id: "fc-board" }, rows.map((r, i) => el("div", { class: "item" + (r.uid === S.user.uid ? " me" : ""), style: "cursor:default;gap:10px", "data-rank": i + 1 },
+            el("b", { class: "rank-n" }, ["🥇", "🥈", "🥉"][i] || "#" + (i + 1)), el("div", { class: "stack", style: "gap:1px;flex:1;min-width:0" }, el("span", { class: "t" }, "@" + r.name), el("span", { class: "s" }, `${r.catches || 0} fish landed`)), el("span", { class: "s" }, B[2](r))))),
+      el("p", { class: "muted small" }, `You: level ${me.lv} · ${me.catches} fish landed · biggest ${me.big ? me.big.toFixed(2) + " lb " + me.bigN : "none yet"}. Your scores are shared with other players when you open the game.`)];
+  };
+  const setTab = (t) => {
+    tab = t;
+    if (t === "rank" && (rankState.key !== rk + "|" + scope || Date.now() - (rankState.at || 0) > 30000)) loadBoard();
+    else if (t === "events") { fcEnts().filter((e) => e.day === fcDay() && e.score != null && !evCache[e.id]).forEach((e) => loadStand(e.id)); draw(); }
+    else draw();
+  };
   const draw = () => {
     const fresh = fcCheckAch();
     if (fresh.length) note = [note, fresh.map((a) => `🏅 ${a.n} — ${a.d}. +🪙 ${a.coins}`).join("  ·  ")].filter(Boolean).join("  ·  ");
@@ -1976,6 +2136,8 @@ function openFishGame() {
         el("span", { class: "muted small" }, xp + " / " + hi + " XP to level " + (lv + 1)),
         el("span", { class: "muted small" }, `${ST.catches} fish landed · ${ST.casts} casts · ${ST.trophies} trophies · 🪙 ${ST.earned} earned selling`)),
       note ? el("p", { class: "fc-note", role: "status" }, note) : null,
+      el("div", { class: "chips fc-tabs", role: "group", "aria-label": "Game sections" }, [["play", "Fish"], ["events", "Tournaments"], ["rank", "Leaderboard"], ["shop", "Bag and shop"], ["me", "Progress"]].map(([id, n]) => el("button", { class: "chip", type: "button", "data-tab": id, "aria-pressed": String(tab === id), onclick: () => setTab(id) }, n))),
+      tab === "play" && [
       (() => { const owned = FC_GEAR.filter((it) => fcUp(it.id)); return owned.length ? el("p", { class: "muted small" }, "Your gear: " + owned.map((it) => it.icon + " " + fcGearName(it)).join(" · ")) : null; })(),
       el("h2", null, "Where"),
       el("div", { class: "chips" }, FC_LOCS.map((l) => { const needLic = (l.lic || 0) > fcUp("license"), shut = needLic || l.lvl > lv;
@@ -1994,6 +2156,8 @@ function openFishGame() {
         el("button", { class: "btn small ghost", type: "button", "data-challenge": f.uid, onclick: () => challenge(f) }, "Challenge")))) :
         el("p", { class: "muted small" }, "Add friends in Me, then Friends and chat. Then you can challenge them here. You each fish 3 casts in the same place when it suits you, and the biggest total wins."),
       fr.length ? el("p", { class: "muted small" }, `A challenge uses your picked place (${L0.n}) and lure.`) : null,
+      ],
+      tab === "shop" && [
       el("h2", { id: "fc-bag-h" }, `My bag (${bag.length}/${fcBagMax()})`),
       bag.length ? el("div", { class: "row spread" }, el("span", { class: "muted small" }, `Worth 🪙 ${sellable.reduce((a, e) => a + sellValue(e), 0)} (not counting ★ fish)`),
         el("button", { class: "btn small", type: "button", id: "fc-sellall", disabled: sellable.length ? null : "", onclick: () => sell(sellable.map((e) => e.id)) }, "Sell all")) : el("p", { class: "muted small" }, "Empty. Fish you catch go in your bag. You only get coins when you sell them."),
@@ -2025,6 +2189,8 @@ function openFishGame() {
       el("div", { class: "list" }, FC_LURES.map(([id, n]) => { const l = lvs[id] || 0, cost = FC_LURE_COST[l];
         return el("div", { class: "item", style: "cursor:default" }, el("div", { class: "stack", style: "gap:2px" }, el("span", { class: "t" }, n + FC_LURE_TAG[l]), el("span", { class: "s" }, l ? "Attracts bigger fish" : "Basic")),
           cost ? el("button", { class: "btn small", type: "button", "data-buy": id, disabled: coins < cost ? "" : null, onclick: () => { if (fcCoins() >= cost) { setPref("fccoins", String(fcCoins() - cost)); lvs[id] = l + 1; setPref("fclv", JSON.stringify(lvs)); draw(); } } }, "Upgrade 🪙 " + cost) : el("span", { class: "pill live" }, "Maxed")); })),
+      ],
+      tab === "me" && [
       (() => { const done = fcAchDone(), rows = FC_ACH.map((a) => { const [have, need] = a.p(ST); return { a, have, need, got: done.includes(a.id) }; })
           .sort((x, y) => (x.got - y.got) || (y.have / y.need - x.have / x.need));
         return el("div", { class: "stack", style: "gap:8px" },
@@ -2040,14 +2206,16 @@ function openFishGame() {
       el("h2", null, `My fish (${Object.keys(dex).length}/${names.length})`),
       el("div", { class: "list" }, names.map((n) => el("div", { class: "item", style: "cursor:default" },
         el("span", { class: "t" }, dex[n] ? n : "???"), el("span", { class: "s" }, dex[n] ? `best ${lbText(dex[n].best)} · caught ${dex[n].n}` : "not caught yet")))),
-      el("p", { class: "muted small" }, "How to play: tap to cast. Wait for a dark shape to show at the bobber and the ! to appear, then tap fast to hook it. You can't tell what it is until you land it. Hold to reel. When the fish runs or jumps, let go so the line doesn't snap. Big fish take longer to bite and fight harder. Sell your fish in your bag to earn coins, then spend them in the tackle shop.")].flat(9).filter(Boolean));
+      el("p", { class: "muted small" }, "How to play: tap to cast. Wait for a dark shape to show at the bobber and the ! to appear, then tap fast to hook it. You can't tell what it is until you land it. Hold to reel. When the fish runs or jumps, let go so the line doesn't snap. Big fish take longer to bite and fight harder. Sell your fish in your bag to earn coins, then spend them in the tackle shop.")], tab === "events" && evTab(), tab === "rank" && rankTab()].flat(9).filter(Boolean));
   };
   draw();
+  fcPublish();
+  fcFlush().then(fcClaim).then((notes) => { if (notes.length) { note = [note, ...notes].filter(Boolean).join("  ·  "); draw(); fcPublish(); } }).catch(() => { /* offline */ });
 }
 
 function playClash(mode, locId, lureIdIn, onExit, duel) {
   const lureId = mode === "friend" && duel.lure ? duel.lure : lureIdIn;
-  const L = FC_LOCS.find((l) => l.id === locId) || FC_LOCS[0];
+  const L = FC_LOCS.find((l) => l.id === locId) || FC_LOCS[0], K = L.like || L.id;
   const G = fcGear(), lureLv = fcLureLv()[lureId] || 0;
   const upHook = fcUp("hook"), upNet = fcUp("net");
   const upBait = fcUp("bait") + 0.7 * fcUp("gps");                 // scent and knowing the spots both speed up bites
@@ -2087,7 +2255,7 @@ function playClash(mode, locId, lureIdIn, onExit, duel) {
     whineNode.o.frequency.setTargetAtTime(pitch, a.currentTime, 0.05);
   };
   const resize = () => { dpr = Math.min(2, devicePixelRatio || 1); W = bg.clientWidth; H = bg.clientHeight; canvas.width = W * dpr; canvas.height = H * dpr; canvas.style.width = W + "px"; canvas.style.height = H + "px"; ctx.setTransform(dpr, 0, 0, dpr, 0, 0); deco = buildDeco(); };
-  const end = () => { cancelAnimationFrame(raf); whine(false); removeEventListener("resize", resize); removeEventListener("keydown", onKey); removeEventListener("keyup", onKeyUp); try { actx && actx.close(); } catch { /* ignore */ } bg.remove(); onExit && onExit(); };
+  const end = () => { evSubmit(); cancelAnimationFrame(raf); whine(false); removeEventListener("resize", resize); removeEventListener("keydown", onKey); removeEventListener("keyup", onKeyUp); try { actx && actx.close(); } catch { /* ignore */ } bg.remove(); onExit && onExit(); };
 
   /* ---------- scenery ---------- */
   const rng = (seed) => () => { seed |= 0; seed = seed + 0x6D2B79F5 | 0; let t = Math.imul(seed ^ seed >>> 15, 1 | seed); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; };
@@ -2098,10 +2266,10 @@ function playClash(mode, locId, lureIdIn, onExit, duel) {
     D.hills = [[0.55, "rgba(120,150,170,.45)", 0.5], [0.35, "rgba(70,105,90,.6)", 0.8]].map(([amp, col, f]) => ({ col, pts: Array.from({ length: 12 }, (_, i) => [i * w / 11, y0 - 8 - r() * y0 * amp * f]) }));
     const n = Math.round(w / 22);
     for (let i = 0; i < n; i++) D.trees.push({ x: i * 22 + r() * 16, h: 22 + r() * 36, k: r(), pine: L.id !== "pond" ? r() < 0.8 : r() < 0.2 });
-    if (L.salt) { D.trees = L.id === "bay" ? Array.from({ length: 6 }, (_, i) => ({ x: (i + 0.5) * w / 6 + (r() - 0.5) * 30, h: 50 + r() * 40, palm: true, k: r() })) : []; if (L.id === "ocean") D.hills = []; }
+    if (L.salt) { D.trees = K === "bay" ? Array.from({ length: 6 }, (_, i) => ({ x: (i + 0.5) * w / 6 + (r() - 0.5) * 30, h: 50 + r() * 40, palm: true, k: r() })) : []; if (K === "ocean") D.hills = []; }
     for (let i = 0; i < 16; i++) D.reeds.push({ x: (i < 8 ? r() * w * 0.28 : w * 0.72 + r() * w * 0.28), h: 26 + r() * 40, ph: r() * 6, cat: r() < 0.5 });
-    if (L.id === "pond") for (let i = 0; i < 9; i++) D.pads.push({ x: r() * w, y: y0 + 60 + r() * (H * 0.45), s: 14 + r() * 14 });
-    if (L.id === "river") for (let i = 0; i < 8; i++) D.rocks.push({ x: r() * w, y: y0 + 50 + r() * (H * 0.55), s: 10 + r() * 22 });
+    if (K === "pond") for (let i = 0; i < 9; i++) D.pads.push({ x: r() * w, y: y0 + 60 + r() * (H * 0.45), s: 14 + r() * 14 });
+    if (K === "river") for (let i = 0; i < 8; i++) D.rocks.push({ x: r() * w, y: y0 + 50 + r() * (H * 0.55), s: 10 + r() * 22 });
     for (let i = 0; i < 4; i++) D.shadows.push({ x: r() * w, y: y0 + 80 + r() * H * 0.5, s: 14 + r() * 16, v: (r() < 0.5 ? -1 : 1) * (10 + r() * 14) });
     for (let i = 0; i < 2; i++) D.birds.push({ x: r() * w, y: 30 + r() * y0 * 0.4, v: 25 + r() * 20, ph: r() * 6 });
     for (let i = 0; i < 26; i++) D.sparkles.push({ x: r() * w, y: y0 + 10 + r() * (H - y0) * 0.85, ph: r() * 6 });
@@ -2130,7 +2298,7 @@ function playClash(mode, locId, lureIdIn, onExit, duel) {
   function doCast() {
     audio(); power = powerT; great = power > 0.6 && power < 0.9;
     // the fish is chosen now but you can't see what it is. Bigger fish take longer to bite.
-    const sr = mode === "friend" ? seeded(ci) : Math.random, n = pickFish(sr), w = rollWeight(n, great, lureLv, sr), q = fcTier(n, w)[2];
+    const sr = mode === "friend" || mode === "event" ? seeded(ci) : Math.random, n = pickFish(sr), w = rollWeight(n, great, lureLv, sr), q = fcTier(n, w)[2];
     target = { n, w, q: Math.max(0, Math.min(1, q)) };
     fcStat("casts", 1);
     timer = (2.6 + Math.random() * 3.4 + target.q * 6 * (1 - 0.1 * lureLv)) * (1 - 0.18 * upBait); setSt("wait"); tick(700, 0.2, 0.25, 1); rip.push({ ...bobber(), a: 1 }); }
@@ -2158,7 +2326,10 @@ function playClash(mode, locId, lureIdIn, onExit, duel) {
     if (upNet && target && Math.random() < 0.2 * upNet) { msg = ""; fish = target.n; weight = target.w; netSave = true; tick(1000, 0.25, 0.2, 4); finish(true); return; }
     msg = text; fish = null; netSave = false; finish(false);
   }
+  let evDone = false;
+  function evSubmit() { if (mode !== "event" || evDone) return; evDone = true; fcSubmitEntry(duel.id, mine); }
   function advance() {
+    if (mode === "event" && ci >= CASTS - 1) { evSubmit(); resText = "sent"; earned = { xp: 0, coins: 0 }; setSt("over"); return; }
     if (mode === "friend" && ci >= CASTS - 1) {
       const key = duel.a === S.user.uid ? "sa" : "sb";
       updateDoc(doc(db, "duels", duel.id), { [key]: [0, 1, 2].map((i) => +(mine[i] || 0).toFixed(2)) }).catch(() => toast("Couldn't send your score. Check your internet."));
@@ -2244,14 +2415,14 @@ function playClash(mode, locId, lureIdIn, onExit, duel) {
     ctx.strokeStyle = "#2a2a2a"; ctx.lineWidth = 1.6; for (const b of D.birds) { const bx = ((b.x + t * b.v) % (W + 60)) - 30, fl = Math.sin(t * 7 + b.ph) * 4; ctx.beginPath(); ctx.moveTo(bx - 8, b.y - fl); ctx.quadraticCurveTo(bx - 3, b.y - 4, bx, b.y); ctx.quadraticCurveTo(bx + 3, b.y - 4, bx + 8, b.y - fl); ctx.stroke(); }
     for (const tr of D.trees) { const base = y0 + 2;
       if (tr.palm) { const tx = tr.x + (tr.k - 0.5) * 30, ty = base - tr.h; ctx.strokeStyle = "#6b4f2c"; ctx.lineWidth = 4; ctx.beginPath(); ctx.moveTo(tr.x, base); ctx.quadraticCurveTo(tr.x + (tr.k - 0.5) * 14, base - tr.h * 0.5, tx, ty); ctx.stroke(); ctx.strokeStyle = "#2f8a46"; ctx.lineWidth = 3; for (let i = 0; i < 7; i++) { const ang = -Math.PI / 2 + (i - 3) * 0.55; ctx.beginPath(); ctx.moveTo(tx, ty); ctx.quadraticCurveTo(tx + Math.cos(ang) * 22, ty + Math.sin(ang) * 22 - 6, tx + Math.cos(ang) * 38, ty + Math.sin(ang) * 38 + 10 + Math.sin(t * 1.5 + i) * 2); ctx.stroke(); } continue; }
-      ctx.fillStyle = L.id === "river" ? "#2f5a3a" : L.id === "lake" ? "#244b36" : "#3d7a42";
+      ctx.fillStyle = K === "river" ? "#2f5a3a" : K === "lake" ? "#244b36" : "#3d7a42";
       if (tr.pine) { for (let k = 0; k < 3; k++) { ctx.beginPath(); ctx.moveTo(tr.x - 11 + k * 2, base - tr.h * (0.25 + k * 0.28)); ctx.lineTo(tr.x, base - tr.h * (0.65 + k * 0.28)); ctx.lineTo(tr.x + 11 - k * 2, base - tr.h * (0.25 + k * 0.28)); ctx.closePath(); ctx.fill(); } }
       else { ctx.beginPath(); ctx.arc(tr.x, base - tr.h * 0.7, 10 + tr.k * 8, 0, 7); ctx.fill(); ctx.fillStyle = "#4a3523"; ctx.fillRect(tr.x - 1.5, base - tr.h * 0.5, 3, tr.h * 0.5); } }
     g = ctx.createLinearGradient(0, y0, 0, H); g.addColorStop(0, L.water[0]); g.addColorStop(1, L.water[1]); ctx.fillStyle = g; ctx.fillRect(0, y0, W, H - y0);
     ctx.fillStyle = "rgba(255,255,255,.1)"; ctx.fillRect(0, y0, W, 18);
     for (const s of D.shadows) { const sx = ((s.x + t * s.v) % (W + 80) + W + 80) % (W + 80) - 40; ctx.fillStyle = "rgba(0,20,30,.18)"; ctx.beginPath(); ctx.ellipse(sx, s.y, s.s * 1.5, s.s * 0.55, 0, 0, 7); ctx.fill(); ctx.beginPath(); ctx.moveTo(sx - s.s * 1.4 * Math.sign(s.v), s.y); ctx.lineTo(sx - s.s * 2.2 * Math.sign(s.v), s.y - s.s * 0.5); ctx.lineTo(sx - s.s * 2.2 * Math.sign(s.v), s.y + s.s * 0.5); ctx.fill(); }
     ctx.strokeStyle = "rgba(255,255,255,.2)"; ctx.lineWidth = 2;
-    for (let i = 0; i < 6; i++) { const y = y0 + 30 + i * (H - y0) / 6.5; ctx.beginPath(); for (let x = 0; x <= W; x += 14) ctx.lineTo(x, y + Math.sin(x / 30 + now / 500 + i) * (L.id === "ocean" ? 6 : 3)); ctx.stroke(); }
+    for (let i = 0; i < 6; i++) { const y = y0 + 30 + i * (H - y0) / 6.5; ctx.beginPath(); for (let x = 0; x <= W; x += 14) ctx.lineTo(x, y + Math.sin(x / 30 + now / 500 + i) * (K === "ocean" || L.big ? 6 : 3)); ctx.stroke(); }
     for (const p of D.pads) { ctx.fillStyle = "#3e8a45"; ctx.beginPath(); ctx.ellipse(p.x, p.y, p.s, p.s * 0.45, 0, 0.3, Math.PI * 2 - 0.1); ctx.lineTo(p.x, p.y); ctx.fill(); if (p.s > 22) { ctx.fillStyle = "#f6b6cc"; ctx.beginPath(); ctx.arc(p.x + 3, p.y - 3, 4, 0, 7); ctx.fill(); } }
     for (const rk of D.rocks) { ctx.fillStyle = "#59666b"; ctx.beginPath(); ctx.ellipse(rk.x, rk.y, rk.s, rk.s * 0.55, 0, Math.PI, 0); ctx.fill(); ctx.fillStyle = "rgba(255,255,255,.4)"; ctx.fillRect(rk.x - rk.s, rk.y - 1, rk.s * 2, 2); }
     for (const s of D.sparkles) { const a = Math.max(0, Math.sin(t * 2 + s.ph)); if (a > 0.6) { ctx.fillStyle = `rgba(255,255,255,${(a - 0.6) * 1.6})`; ctx.fillRect(s.x - 4, s.y, 8, 1.5); } }
@@ -2310,6 +2481,8 @@ function playClash(mode, locId, lureIdIn, onExit, duel) {
     } else if (mode === "friend") {
       const me = duel.a === S.user.uid;
       text(`Duel with @${me ? duel.bName : duel.aName}`, W / 2 - 20, 30, 16); text(`Cast ${Math.min(ci + 1, CASTS)} of ${CASTS}`, W / 2 - 20, 52, 14); text("You " + mine.reduce((x, y) => x + y, 0).toFixed(1) + " lb", 16, 74, 16, "#fff", "left");
+    } else if (mode === "event") {
+      text(`${L.n} Cup`, W / 2 - 20, 30, 17); text(`Cast ${Math.min(ci + 1, CASTS)} of ${CASTS}`, W / 2 - 20, 52, 14); text("Score " + mine.reduce((x, y) => x + y, 0).toFixed(1) + " lb", 16, 74, 16, "#fff", "left");
     } else text(L.n, W / 2 - 20, 30, 18);
     text("🪙 " + fcCoins(), 16, 30, 16, "#ffd36b", "left"); text("Bag " + fcBag().length + "/" + fcBagMax(), W - 16, 100, 13, fcBag().length >= fcBagMax() - 3 ? "#ffb74d" : "#fff", "right");
     ctx.shadowBlur = 0;
@@ -2352,6 +2525,12 @@ function playClash(mode, locId, lureIdIn, onExit, duel) {
       text("Tip: tap when the bobber dips and the ! shows up.", W / 2, cy + 190, 14, "#666");
       button("Continue", cy + ch - 76);
     } else {
+      if (mode === "event") {
+        const a = mine.reduce((x, y) => x + y, 0);
+        text("Entry sent!", W / 2, cy + 80, 34, "#1f5c4d", "center", "Georgia,serif"); text(`${L.n} Cup: ${a.toFixed(2)} lb`, W / 2, cy + 140, 22, "#16352d");
+        text("Everyone fishes the same water.", W / 2, cy + 190, 16, "#444"); text("See the standings in Tournaments.", W / 2, cy + 216, 16, "#444"); text("Prizes arrive after the cup ends.", W / 2, cy + 242, 16, "#444");
+        button("Back to menu", cy + ch - 76); return;
+      }
       if (mode === "friend") {
         const a = mine.reduce((x, y) => x + y, 0), opp = duel.a === S.user.uid ? duel.bName : duel.aName;
         text("Score sent!", W / 2, cy + 80, 34, "#1f5c4d", "center", "Georgia,serif"); text(`You caught ${a.toFixed(2)} lb`, W / 2, cy + 140, 22, "#16352d");

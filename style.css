@@ -282,3 +282,6 @@ button.who{background:none;border:0;padding:0;color:inherit;text-align:left;curs
 .ach-i{font-size:1.2rem;line-height:1}
 .item.ach.got .t{color:var(--lake)}
 @media (prefers-color-scheme:dark){.lockline{color:#fbe4a0}}
+.fc-tabs{position:sticky;top:0;z-index:2;background:var(--water);padding:6px 0}
+.rank-n{width:2.4em;flex:none;text-align:center}
+.item.me{background:var(--lake-soft)}
