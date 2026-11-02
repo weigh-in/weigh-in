@@ -2263,7 +2263,7 @@ function playClash(mode, locId, lureIdIn, onExit, duel) {
   function buildDeco() {
     const r = rng(L.id.length * 977 + (L.id.charCodeAt(0) || 1)), w = W, y0 = wy(), D = { clouds: [], hills: [], trees: [], reeds: [], pads: [], rocks: [], shadows: [], birds: [], sparkles: [] };
     for (let i = 0; i < 4; i++) D.clouds.push({ x: r() * w, y: 20 + r() * y0 * 0.45, s: 0.7 + r() * 0.9, v: 4 + r() * 8 });
-    D.hills = [[0.55, "rgba(120,150,170,.45)", 0.5], [0.35, "rgba(70,105,90,.6)", 0.8]].map(([amp, col, f]) => ({ col, pts: Array.from({ length: 12 }, (_, i) => [i * w / 11, y0 - 8 - r() * y0 * amp * f]) }));
+    D.hills = [[0.8, "rgba(165,185,210,.35)", 0.35], [0.55, "rgba(120,150,170,.45)", 0.5], [0.35, "rgba(70,105,90,.6)", 0.8]].map(([amp, col, f]) => ({ col, pts: Array.from({ length: 12 }, (_, i) => [i * w / 11, y0 - 8 - r() * y0 * amp * f]) }));
     const n = Math.round(w / 22);
     for (let i = 0; i < n; i++) D.trees.push({ x: i * 22 + r() * 16, h: 22 + r() * 36, k: r(), pine: L.id !== "pond" ? r() < 0.8 : r() < 0.2 });
     if (L.salt) { D.trees = K === "bay" ? Array.from({ length: 6 }, (_, i) => ({ x: (i + 0.5) * w / 6 + (r() - 0.5) * 30, h: 50 + r() * 40, palm: true, k: r() })) : []; if (K === "ocean") D.hills = []; }
@@ -2273,6 +2273,12 @@ function playClash(mode, locId, lureIdIn, onExit, duel) {
     for (let i = 0; i < 4; i++) D.shadows.push({ x: r() * w, y: y0 + 80 + r() * H * 0.5, s: 14 + r() * 16, v: (r() < 0.5 ? -1 : 1) * (10 + r() * 14) });
     for (let i = 0; i < 2; i++) D.birds.push({ x: r() * w, y: 30 + r() * y0 * 0.4, v: 25 + r() * 20, ph: r() * 6 });
     for (let i = 0; i < 26; i++) D.sparkles.push({ x: r() * w, y: y0 + 10 + r() * (H - y0) * 0.85, ph: r() * 6 });
+    D.weeds = Array.from({ length: 22 }, () => ({ x: r() * w, h: 30 + r() * 60, ph: r() * 6, k: r() }));
+    D.bubbles = Array.from({ length: 14 }, () => ({ x: r() * w, y: r() * H, v: 12 + r() * 22, s: 1 + r() * 2.5 }));
+    D.streaks = Array.from({ length: 10 }, () => ({ x: r() * w, y: y0 + 30 + r() * (H - y0) * 0.8, l: 30 + r() * 70, v: 20 + r() * 30 }));
+    D.pebbles = Array.from({ length: 18 }, () => ({ x: r() * w, y: H * 0.915 + r() * H * 0.07, s: 1.5 + r() * 3.5, c: r() }));
+    D.boat = { x: w * (0.15 + r() * 0.4), s: 0.8 + r() * 0.5 };
+    D.far = Array.from({ length: 18 }, (_, i) => ({ x: i * w / 17 + r() * 8, h: 8 + r() * 16 }));
     return D;
   }
   resize(); addEventListener("resize", resize);
@@ -2410,8 +2416,10 @@ function playClash(mode, locId, lureIdIn, onExit, duel) {
     const y0 = wy(), D = deco, t = now / 1000;
     let g = ctx.createLinearGradient(0, 0, 0, y0); g.addColorStop(0, L.sky[0]); g.addColorStop(1, L.sky[1]); ctx.fillStyle = g; ctx.fillRect(0, 0, W, y0);
     const sg = ctx.createRadialGradient(W * 0.8, y0 * 0.35, 4, W * 0.8, y0 * 0.35, 70); sg.addColorStop(0, "rgba(255,246,200,1)"); sg.addColorStop(0.25, "rgba(255,236,170,.8)"); sg.addColorStop(1, "rgba(255,236,170,0)"); ctx.fillStyle = sg; ctx.fillRect(W * 0.8 - 80, y0 * 0.35 - 80, 160, 160);
-    ctx.fillStyle = "rgba(255,255,255,.8)"; for (const c of D.clouds) { const cx = ((c.x + t * c.v) % (W + 160)) - 80; for (const [dx, dy, rr] of [[0, 0, 16], [16, -6, 20], [34, 0, 15], [14, 6, 14]]) { ctx.beginPath(); ctx.arc(cx + dx * c.s, c.y + dy * c.s, rr * c.s, 0, 7); ctx.fill(); } }
+    for (const [col, oy] of [["rgba(175,194,220,.55)", 5], ["rgba(255,255,255,.9)", 0]]) { ctx.fillStyle = col; for (const c of D.clouds) { const cx = ((c.x + t * c.v) % (W + 160)) - 80; for (const [dx, dy, rr] of [[0, 0, 16], [16, -6, 20], [34, 0, 15], [14, 6, 14]]) { ctx.beginPath(); ctx.arc(cx + dx * c.s, c.y + dy * c.s + oy * c.s, rr * c.s, 0, 7); ctx.fill(); } } }
     for (const hl of D.hills) { ctx.fillStyle = hl.col; ctx.beginPath(); ctx.moveTo(0, y0); hl.pts.forEach(([x, y], i) => { if (i === 0) ctx.lineTo(x, y); else { const [px, py] = hl.pts[i - 1]; ctx.quadraticCurveTo(px, py, (px + x) / 2, (py + y) / 2); } }); ctx.lineTo(W, y0); ctx.closePath(); ctx.fill(); }
+    if (!L.salt) { ctx.fillStyle = "rgba(50,88,72,.55)"; for (const f of D.far) { ctx.beginPath(); ctx.moveTo(f.x - 7, y0); ctx.lineTo(f.x, y0 - f.h); ctx.lineTo(f.x + 7, y0); ctx.fill(); } }
+    if (L.salt || L.big) { const bx = (D.boat.x + t * 3) % (W + 80) - 40, sc = D.boat.s, b0 = y0 - 1 + Math.sin(t * 1.2); ctx.fillStyle = "#f4f1e8"; ctx.beginPath(); ctx.moveTo(bx, b0 - 22 * sc); ctx.lineTo(bx + 12 * sc, b0 - 3 * sc); ctx.lineTo(bx, b0 - 3 * sc); ctx.fill(); ctx.fillStyle = "#e3ddc9"; ctx.beginPath(); ctx.moveTo(bx - 2 * sc, b0 - 18 * sc); ctx.lineTo(bx - 10 * sc, b0 - 3 * sc); ctx.lineTo(bx - 2 * sc, b0 - 3 * sc); ctx.fill(); ctx.fillStyle = "#3b4a5a"; ctx.fillRect(bx - 12 * sc, b0 - 3 * sc, 26 * sc, 4 * sc); }
     ctx.strokeStyle = "#2a2a2a"; ctx.lineWidth = 1.6; for (const b of D.birds) { const bx = ((b.x + t * b.v) % (W + 60)) - 30, fl = Math.sin(t * 7 + b.ph) * 4; ctx.beginPath(); ctx.moveTo(bx - 8, b.y - fl); ctx.quadraticCurveTo(bx - 3, b.y - 4, bx, b.y); ctx.quadraticCurveTo(bx + 3, b.y - 4, bx + 8, b.y - fl); ctx.stroke(); }
     for (const tr of D.trees) { const base = y0 + 2;
       if (tr.palm) { const tx = tr.x + (tr.k - 0.5) * 30, ty = base - tr.h; ctx.strokeStyle = "#6b4f2c"; ctx.lineWidth = 4; ctx.beginPath(); ctx.moveTo(tr.x, base); ctx.quadraticCurveTo(tr.x + (tr.k - 0.5) * 14, base - tr.h * 0.5, tx, ty); ctx.stroke(); ctx.strokeStyle = "#2f8a46"; ctx.lineWidth = 3; for (let i = 0; i < 7; i++) { const ang = -Math.PI / 2 + (i - 3) * 0.55; ctx.beginPath(); ctx.moveTo(tx, ty); ctx.quadraticCurveTo(tx + Math.cos(ang) * 22, ty + Math.sin(ang) * 22 - 6, tx + Math.cos(ang) * 38, ty + Math.sin(ang) * 38 + 10 + Math.sin(t * 1.5 + i) * 2); ctx.stroke(); } continue; }
@@ -2420,16 +2428,31 @@ function playClash(mode, locId, lureIdIn, onExit, duel) {
       else { ctx.beginPath(); ctx.arc(tr.x, base - tr.h * 0.7, 10 + tr.k * 8, 0, 7); ctx.fill(); ctx.fillStyle = "#4a3523"; ctx.fillRect(tr.x - 1.5, base - tr.h * 0.5, 3, tr.h * 0.5); } }
     g = ctx.createLinearGradient(0, y0, 0, H); g.addColorStop(0, L.water[0]); g.addColorStop(1, L.water[1]); ctx.fillStyle = g; ctx.fillRect(0, y0, W, H - y0);
     ctx.fillStyle = "rgba(255,255,255,.1)"; ctx.fillRect(0, y0, W, 18);
+    const hz = ctx.createLinearGradient(0, y0 - 26, 0, y0 + 40); hz.addColorStop(0, "rgba(255,255,255,0)"); hz.addColorStop(0.45, "rgba(255,255,255,.3)"); hz.addColorStop(1, "rgba(255,255,255,0)"); ctx.fillStyle = hz; ctx.fillRect(0, y0 - 26, W, 66);
+    // light shafts from the sky and the sun's glitter on the water
+    for (let i = 0; i < 5; i++) { const x = W * (i + 0.3) / 5 + Math.sin(t * 0.25 + i * 1.7) * 24, wd = 26 + 14 * Math.sin(i * 2.3 + t * 0.4), a = (K === "ocean" || L.big ? 0.14 : 0.09) * (0.6 + 0.4 * Math.sin(t * 0.7 + i));
+      const rg = ctx.createLinearGradient(0, y0, 0, H * 0.85); rg.addColorStop(0, `rgba(255,255,255,${a})`); rg.addColorStop(1, "rgba(255,255,255,0)");
+      ctx.fillStyle = rg; ctx.beginPath(); ctx.moveTo(x, y0); ctx.lineTo(x + wd, y0); ctx.lineTo(x + wd * 2.4 - 70, H * 0.85); ctx.lineTo(x - wd * 1.4 - 70, H * 0.85); ctx.closePath(); ctx.fill(); }
+    for (let i = 0; i < 16; i++) { const ww = 30 - i * 1.4 + Math.sin(t * 3 + i * 1.3) * 8; if (ww > 2) { ctx.fillStyle = `rgba(255,248,210,${0.5 - i * 0.025})`; ctx.fillRect(W * 0.8 - ww / 2 + Math.sin(t * 1.5 + i) * 6, y0 + 4 + i * 11, ww, 2); } }
     for (const s of D.shadows) { const sx = ((s.x + t * s.v) % (W + 80) + W + 80) % (W + 80) - 40; ctx.fillStyle = "rgba(0,20,30,.18)"; ctx.beginPath(); ctx.ellipse(sx, s.y, s.s * 1.5, s.s * 0.55, 0, 0, 7); ctx.fill(); ctx.beginPath(); ctx.moveTo(sx - s.s * 1.4 * Math.sign(s.v), s.y); ctx.lineTo(sx - s.s * 2.2 * Math.sign(s.v), s.y - s.s * 0.5); ctx.lineTo(sx - s.s * 2.2 * Math.sign(s.v), s.y + s.s * 0.5); ctx.fill(); }
     ctx.strokeStyle = "rgba(255,255,255,.2)"; ctx.lineWidth = 2;
     for (let i = 0; i < 6; i++) { const y = y0 + 30 + i * (H - y0) / 6.5; ctx.beginPath(); for (let x = 0; x <= W; x += 14) ctx.lineTo(x, y + Math.sin(x / 30 + now / 500 + i) * (K === "ocean" || L.big ? 6 : 3)); ctx.stroke(); }
+    if (K === "river") for (const sk of D.streaks) { const sx = ((sk.x + t * sk.v) % (W + 140)) - 70; ctx.strokeStyle = "rgba(255,255,255,.22)"; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(sx, sk.y); ctx.lineTo(sx + sk.l, sk.y + 1); ctx.stroke(); }
     for (const p of D.pads) { ctx.fillStyle = "#3e8a45"; ctx.beginPath(); ctx.ellipse(p.x, p.y, p.s, p.s * 0.45, 0, 0.3, Math.PI * 2 - 0.1); ctx.lineTo(p.x, p.y); ctx.fill(); if (p.s > 22) { ctx.fillStyle = "#f6b6cc"; ctx.beginPath(); ctx.arc(p.x + 3, p.y - 3, 4, 0, 7); ctx.fill(); } }
     for (const rk of D.rocks) { ctx.fillStyle = "#59666b"; ctx.beginPath(); ctx.ellipse(rk.x, rk.y, rk.s, rk.s * 0.55, 0, Math.PI, 0); ctx.fill(); ctx.fillStyle = "rgba(255,255,255,.4)"; ctx.fillRect(rk.x - rk.s, rk.y - 1, rk.s * 2, 2); }
     for (const s of D.sparkles) { const a = Math.max(0, Math.sin(t * 2 + s.ph)); if (a > 0.6) { ctx.fillStyle = `rgba(255,255,255,${(a - 0.6) * 1.6})`; ctx.fillRect(s.x - 4, s.y, 8, 1.5); } }
+    ctx.lineCap = "round";
+    for (const wd of D.weeds) { const bx = wd.x, b0 = H * 0.9; ctx.strokeStyle = L.salt ? (wd.k < 0.5 ? "rgba(214,98,84,.32)" : "rgba(30,110,70,.32)") : "rgba(20,70,40,.34)"; ctx.lineWidth = 3 + wd.k * 3; ctx.beginPath(); ctx.moveTo(bx, b0); ctx.bezierCurveTo(bx + Math.sin(t * 1.1 + wd.ph) * 10, b0 - wd.h * 0.35, bx - Math.sin(t * 1.3 + wd.ph) * 10, b0 - wd.h * 0.7, bx + Math.sin(t * 1.2 + wd.ph) * 14, b0 - wd.h); ctx.stroke(); }
+    for (const bb of D.bubbles) { const yy = (((bb.y - t * bb.v) % (H - y0)) + (H - y0)) % (H - y0) + y0; ctx.fillStyle = "rgba(255,255,255,.28)"; ctx.beginPath(); ctx.arc(bb.x + Math.sin(t + bb.y) * 4, yy, bb.s, 0, 7); ctx.fill(); }
+    const vg = ctx.createRadialGradient(W / 2, H * 0.5, H * 0.25, W / 2, H * 0.5, H * 0.8); vg.addColorStop(0, "rgba(0,0,0,0)"); vg.addColorStop(1, K === "ocean" ? "rgba(0,10,30,.45)" : "rgba(0,15,25,.3)"); ctx.fillStyle = vg; ctx.fillRect(0, y0, W, H - y0);
     // bank
     const by = H * 0.9; g = ctx.createLinearGradient(0, by, 0, H); g.addColorStop(0, L.salt ? "#e5d3a1" : "#7a6440"); g.addColorStop(1, L.salt ? "#c3ac75" : "#5a4a2e"); ctx.fillStyle = g; ctx.fillRect(0, by, W, H - by);
     ctx.fillStyle = L.salt ? "#cdb97f" : "#4d7a35"; ctx.beginPath(); ctx.moveTo(0, by + 4); for (let x = 0; x <= W; x += 10) ctx.lineTo(x, by - 2 + Math.sin(x * 0.2) * 3); ctx.lineTo(W, by + 8); ctx.lineTo(0, by + 8); ctx.fill();
     ctx.fillStyle = L.salt ? "#8c8272" : "#6b4a2a"; ctx.fillRect(0, by - 10, W * 0.2, 7); for (let i = 0; i < 5; i++) ctx.fillRect(i * W * 0.045, by - 2, 5, 22); ctx.fillStyle = "rgba(0,0,0,.2)"; ctx.fillRect(0, by - 3, W * 0.2, 2);
+    ctx.strokeStyle = "rgba(255,255,255,.55)"; ctx.lineWidth = 2; ctx.beginPath(); for (let x = 0; x <= W; x += 12) ctx.lineTo(x, by - 3 + Math.sin(x * 0.1 + t * 2) * 1.5); ctx.stroke();
+    ctx.fillStyle = "rgba(0,0,0,.28)"; for (let i = 0; i < 6; i++) ctx.fillRect(W * 0.02 + i * W * 0.032, by - 10, 1.5, 7);
+    for (const pb of D.pebbles) { const c = pb.c; ctx.fillStyle = L.salt ? `rgba(${(150 + c * 60) | 0},${(135 + c * 50) | 0},${(105 + c * 40) | 0},.85)` : `rgba(${(100 + c * 70) | 0},${(95 + c * 60) | 0},${(85 + c * 40) | 0},.85)`; ctx.beginPath(); ctx.ellipse(pb.x, pb.y, pb.s * 1.4, pb.s, 0, 0, 7); ctx.fill(); }
+    if (!L.salt) { ctx.strokeStyle = "#3d6a2b"; ctx.lineWidth = 1.5; for (let x = 4; x < W; x += 9) { const hh = 6 + ((x * 7) % 9); ctx.beginPath(); ctx.moveTo(x, by + 2); ctx.lineTo(x + Math.sin(t * 2 + x) * 2, by - hh); ctx.stroke(); } }
     for (const r of D.reeds) { const sway = Math.sin(t * 1.4 + r.ph) * 4, rx = r.x, ry = by + 2; ctx.strokeStyle = L.salt ? "#9aa24f" : "#3f6a2c"; ctx.lineWidth = 2.5; ctx.beginPath(); ctx.moveTo(rx, ry); ctx.quadraticCurveTo(rx + sway * 0.5, ry - r.h * 0.5, rx + sway, ry - r.h); ctx.stroke(); if (r.cat && !L.salt) { ctx.fillStyle = "#6a4528"; ctx.beginPath(); ctx.ellipse(rx + sway, ry - r.h - 5, 3, 8, 0, 0, 7); ctx.fill(); } }
   }
   function frame(now) {
