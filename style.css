@@ -285,3 +285,13 @@ button.who{background:none;border:0;padding:0;color:inherit;text-align:left;curs
 .fc-tabs{position:sticky;top:0;z-index:2;background:var(--water);padding:6px 0}
 .rank-n{width:2.4em;flex:none;text-align:center}
 .item.me{background:var(--lake-soft)}
+.loc-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.loc-card{position:relative;border:3px solid transparent;border-radius:14px;min-height:84px;padding:8px 10px;color:#fff;text-align:left;display:flex;flex-direction:column;justify-content:flex-end;gap:1px;cursor:pointer;text-shadow:0 1px 3px rgba(0,0,0,.65);font-weight:700;font-size:15px;line-height:1.15}
+.loc-card[aria-pressed="true"]{border-color:var(--bobber);box-shadow:0 0 0 2px #fff inset}
+.loc-card[disabled]{filter:grayscale(.75) brightness(.7);cursor:not-allowed}
+.loc-s{font-size:12px;font-weight:600;opacity:.95}
+.loc-lock{font-size:12px;font-weight:700;color:#ffe9a8}
+.fc-card.hero{background:linear-gradient(135deg,#1f5c4d,#0f2e26);color:#fff;border-color:transparent}
+.fc-card.hero .muted{color:rgba(255,255,255,.78)}
+.fc-card.hero .meter{background:rgba(255,255,255,.22)}
+.fc-card.hero .meter i{background:#ffd36b}
