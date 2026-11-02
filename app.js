@@ -360,7 +360,7 @@ function go(tab) {
   $nav.querySelectorAll(".tab").forEach((b) => b.dataset.tab === tab ? b.setAttribute("aria-current", "page") : b.removeAttribute("aria-current"));
   renderTab();
 }
-function updateDot() { $nav?.querySelector(".dot")?.toggleAttribute("hidden", S.reqIn.length === 0); }
+function updateDot() { $nav?.querySelector(".dot")?.toggleAttribute("hidden", S.reqIn.length === 0 && !unseenUpdate()); }
 function renderTab() {
   clearInterval(tick);
   if (S.tab !== "me" || S.meView !== "owner") stopOwner();
@@ -603,6 +603,34 @@ function feedPosts() {
     }
   }
   return S.posts;
+}
+/* What's new. Newest first. Add a new entry on top each time the app changes. */
+const UPDATES = [
+  { id: "2026-11-01b", date: "Nov 1", title: "Fishing game: tournaments, leaderboard and new places", items: [
+    "Daily tournaments: every place has a cup each day. 3 casts, the same fish for everyone, heaviest total wins. Prizes come the next day.",
+    "Leaderboard: top anglers, biggest fish, most fish and cup wins. Switch between everyone and just your friends.",
+    "6 new places: Mill creek, Big reservoir, Northwoods lake, Mangrove flats, Great Lake and Deep blue canyon.",
+    "4 new fish: Lake trout, White sturgeon, Sailfish and Blue marlin.",
+    "Better backgrounds: light shafts, glitter, weeds, bubbles, a hazy horizon and little sailboats.",
+    "The game menu now has tabs, and there are 6 new achievements."] },
+  { id: "2026-11-01a", date: "Nov 1", title: "Realistic gear and achievements", items: [
+    "You need a fishing licence first, then tackle, then serious gear like a fish finder and a boat.",
+    "Gear unlocks through achievements and how much you have fished."] },
+  { id: "2026-10-31", date: "Oct 31", title: "Fishing game, forecast and feed", items: [
+    "Lake Duel fishing game with friend duels and salt water.",
+    "The Bite tab shows wind, pressure and the best times to fish.",
+    "Your area feed, and a more modern map."] }];
+const unseenUpdate = () => getPref("seenNew", "") !== UPDATES[0].id;
+function openWhatsNew(after) {
+  setPref("seenNew", UPDATES[0].id);
+  const close = () => { bg.remove(); after && after(); };
+  const bg = el("div", { class: "sheet-bg", onclick: (e) => { if (e.target === bg) close(); } },
+    el("div", { class: "sheet", role: "dialog", "aria-label": "What's new", style: "height:auto;max-height:90%" },
+      el("div", { class: "sheet-h" }, el("h2", null, "What's new"), el("button", { class: "link", type: "button", id: "wn-close", onclick: close }, "Close")),
+      el("div", { class: "msgs about", style: "overflow:auto" }, UPDATES.map((u, i) => el("div", { class: "stack", style: "gap:6px", "data-update": u.id },
+        el("div", { class: "row spread" }, el("b", null, u.title), el("span", { class: i === 0 ? "pill live" : "muted small" }, i === 0 ? "Latest" : u.date)),
+        el("ul", { style: "margin:0;padding-left:20px;display:flex;flex-direction:column;gap:4px" }, u.items.map((t) => el("li", null, t))))))));
+  document.body.append(bg);
 }
 function openScopeSheet() {
   const close = () => bg.remove();
@@ -1628,6 +1656,8 @@ function viewMe(p) {
       el("div", null, el("b", null, biggest ? fmtLb(biggest) : "–"), el("span", null, "Biggest")),
       el("div", null, el("b", null, String(pins)), el("span", null, "Map pins"))),
     el("div", { class: "list" },
+      el("button", { class: "item", type: "button", id: "me-new", onclick: () => openWhatsNew(renderTab) },
+        el("span", { class: "row", style: "gap:10px" }, el("span", { class: "t" }, "🔔 What's new"), unseenUpdate() ? el("span", { class: "pill live" }, "New") : null), el("span", { class: "label" }, "›")),
       el("button", { class: "item", type: "button", onclick: open("friends") },
         el("span", { class: "row", style: "gap:10px" }, el("span", { class: "t" }, "Friends and chat"), S.reqIn.length ? el("span", { class: "pill live" }, `${S.reqIn.length} new`) : null), el("span", { class: "label" }, "›")),
       el("button", { class: "item", type: "button", onclick: open("log") }, el("span", { class: "t" }, "My fishing log"), el("span", { class: "label" }, "›")),
