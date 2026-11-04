@@ -534,9 +534,189 @@ function drawWx(box, w, loc, onPick) {
       el("ul", { class: "why" }, b.why.map((x) => el("li", null, x))),
       el("p", { class: "muted small" }, "A rough guide from pressure, wind, clouds, and time of day. Fish don't read forecasts, so use your own judgment.")),
     bestTimes(w),
+    advisorCard(w, loc),
     el("div", { class: "hours", "aria-label": "Next 12 hours" }, next.map((x) => el("div", { class: "hr" },
       el("small", null, new Date(x.t).toLocaleTimeString([], { hour: "numeric" })), el("b", null, Math.round(x.temp) + "°"), el("small", null, (x.rain ?? 0) + "% rain")))),
     el("p", { class: "muted small" }, "Weather from Open-Meteo. Your location is only used to ask for the forecast and is not saved to your account."));
+}
+
+/* ======================= FISHING ADVISOR: lure + where + when ======================= */
+/* Real-life rules of thumb, mixed with what people near you actually caught fish on. */
+const ADV_LURES = {
+  topwater: { n: "Topwater popper or frog", t: [68, 92], light: "low", wind: 0, clar: [1, 0.8, 0.5], d: "the surface", how: "Cast next to cover, let the rings fade, then twitch it." },
+  spinnerbait: { n: "Spinnerbait", t: [55, 80], light: "any", wind: 1, clar: [0.6, 1, 1], d: "shallow to mid depth", how: "Slow-roll it past cover, or burn it over weeds." },
+  chatterbait: { n: "Bladed jig (ChatterBait)", t: [55, 82], light: "any", wind: 1, clar: [0.7, 1, 0.9], d: "shallow to mid depth", how: "Steady retrieve, and rip it free when it touches weeds." },
+  crankShallow: { n: "Shallow crankbait", t: [55, 78], light: "any", wind: 1, clar: [1, 1, 0.6], d: "2 to 8 ft", how: "Bump it off wood and rocks, and pause when it hits something." },
+  crankDeep: { n: "Deep-diving crankbait", t: [50, 85], light: "bright", wind: 1, clar: [1, 0.9, 0.6], d: "10 to 20 ft", how: "Cast far, crank down fast, then keep it ticking the bottom." },
+  jig: { n: "Jig with a trailer", t: [38, 75], light: "bright", wind: 1, clar: [1, 1, 0.9], d: "on the bottom, any depth", how: "Drag it and hop it slowly along the bottom." },
+  worm: { n: "Soft plastic worm (Texas rig)", t: [55, 90], light: "bright", wind: 1, clar: [1, 1, 0.8], d: "on the bottom, any depth", how: "Cast to cover, let it sink, and twitch it every few seconds." },
+  dropshot: { n: "Drop shot", t: [40, 72], light: "bright", wind: 1, clar: [1, 0.7, 0.3], d: "mid to deep", how: "Keep the line tight and shake the bait without moving the weight." },
+  jerkbait: { n: "Suspending jerkbait", t: [38, 62], light: "any", wind: 1, clar: [1, 0.7, 0.2], d: "2 to 8 ft", how: "Jerk, jerk, then a long pause. Cold fish hit it on the pause." },
+  swimbait: { n: "Swimbait", t: [50, 82], light: "any", wind: 1, clar: [1, 0.9, 0.6], d: "mid depth", how: "Steady, slow retrieve just above weeds or rocks." },
+  spoon: { n: "Spoon", t: [34, 62], light: "any", wind: 1, clar: [1, 1, 0.8], d: "mid to deep", how: "Let it flutter down, then jig it up and let it fall again." },
+  spinner: { n: "Inline spinner", t: [40, 75], light: "any", wind: 1, clar: [1, 1, 0.8], d: "shallow to mid depth", how: "Cast across the current and reel just fast enough to keep the blade turning." },
+  minnow: { n: "Live minnow", t: [34, 78], light: "any", wind: 1, clar: [1, 1, 1], d: "any depth", how: "Hook it behind the dorsal fin and drift it near the bottom or under a bobber." },
+  crawler: { n: "Nightcrawler", t: [50, 92], light: "any", wind: 1, clar: [1, 1, 1], d: "bottom or under a bobber", how: "Thread it on a small hook and let it sit or drift naturally." },
+  cutbait: { n: "Cut bait or stink bait", t: [58, 95], light: "low", wind: 1, clar: [0.8, 1, 1], d: "bottom, deeper holes", how: "Cast to a hole or bend, put the rod in a holder and wait." },
+  tinyjig: { n: "Small jig under a bobber", t: [45, 85], light: "any", wind: 0, clar: [1, 1, 0.7], d: "2 to 10 ft", how: "Set the bobber so the jig hangs near brush, and twitch it now and then." },
+  dough: { n: "Corn or dough bait", t: [55, 92], light: "any", wind: 1, clar: [0.8, 1, 1], d: "bottom, shallow flats", how: "Chum the spot first, then fish a small hook on the bottom." },
+  bigbait: { n: "Big bucktail or glide bait", t: [48, 80], light: "any", wind: 1, clar: [1, 1, 0.8], d: "mid depth", how: "Cast past weeds and finish with a big figure 8 at the boat or bank." }
+};
+const ADV_LURE_WORDS = [["topwater|popper|frog|buzz|walking|prop", "topwater"], ["spinnerbait|spinner bait", "spinnerbait"], ["chatter|bladed", "chatterbait"], ["deep crank|deep dive|diving", "crankDeep"],
+  ["crank|squarebill|square bill|lipless|rattletrap", "crankShallow"], ["jig|football", "jig"], ["drop shot|dropshot", "dropshot"], ["worm|senko|plastic|craw|creature|tube|lizard", "worm"], ["jerk", "jerkbait"],
+  ["swimbait|swim bait|glide|paddle", "swimbait"], ["spoon|kastmaster|dardevle", "spoon"], ["spinner|mepps|rooster", "spinner"], ["minnow|shiner", "minnow"], ["crawler|worms?\\b|nightcrawler", "crawler"],
+  ["cut|stink|liver|chicken|shrimp|hot dog", "cutbait"], ["bobber|float", "tinyjig"], ["corn|dough|boilie|bread", "dough"], ["bucktail|musky|big bait|bigbait", "bigbait"]];
+const advLureCat = (t) => { const s = String(t || "").toLowerCase(); for (const [re, k] of ADV_LURE_WORDS) if (new RegExp(re).test(s)) return k; return ""; };
+const ADV_FISH = [
+  { n: "Largemouth bass", keys: ["largemouth", "black bass"], when: ["dawn", "dusk"], lures: { topwater: 0.8, spinnerbait: 0.9, chatterbait: 0.9, crankShallow: 0.8, crankDeep: 0.6, jig: 1, worm: 1, dropshot: 0.6, jerkbait: 0.6, swimbait: 0.7 },
+    where: "docks, fallen trees, weed edges, lily pads and points" },
+  { n: "Smallmouth bass", keys: ["smallmouth"], when: ["dawn", "dusk", "day"], lures: { crankShallow: 0.7, crankDeep: 0.7, jig: 1, dropshot: 0.9, jerkbait: 0.8, spinnerbait: 0.6, topwater: 0.6, worm: 0.7, swimbait: 0.6, minnow: 0.5 },
+    where: "rocky points, gravel flats, ledges and boulders" },
+  { n: "Catfish", keys: ["catfish", "channel cat", "blue cat", "flathead"], when: ["dusk", "night"], lures: { cutbait: 1, crawler: 0.9, minnow: 0.5 },
+    where: "deep holes, river bends, below dams, and shallow flats after dark" },
+  { n: "Crappie", keys: ["crappie"], when: ["dawn", "dusk"], lures: { tinyjig: 1, minnow: 1, spinner: 0.7 }, where: "brush piles, docks, bridge pilings and sunken trees" },
+  { n: "Walleye", keys: ["walleye"], when: ["dawn", "dusk", "night"], lures: { jig: 1, minnow: 1, crankDeep: 0.8, crawler: 0.7, spinner: 0.6, jerkbait: 0.6 }, where: "rocky points, humps, drop-offs and wind-blown shorelines" },
+  { n: "Trout", keys: ["trout", "char"], when: ["dawn", "dusk"], lures: { spinner: 1, spoon: 0.8, crawler: 0.7, minnow: 0.5, jerkbait: 0.5, tinyjig: 0.4 }, where: "riffles, pool tails, undercut banks, and creek mouths in lakes" },
+  { n: "Bluegill and panfish", keys: ["bluegill", "sunfish", "panfish", "perch", "bream", "pumpkinseed"], when: ["day"], lures: { crawler: 1, tinyjig: 0.9, spinner: 0.7 }, where: "weed lines, docks and shallow flats" },
+  { n: "Northern pike", keys: ["pike", "pickerel"], when: ["dawn", "day", "dusk"], lures: { spoon: 1, spinnerbait: 0.8, jerkbait: 0.8, swimbait: 0.7, topwater: 0.5, minnow: 0.6, bigbait: 0.7 }, where: "weed edges, shallow bays and creek mouths" },
+  { n: "Musky", keys: ["musky", "muskie", "muskellunge"], when: ["dawn", "dusk"], lures: { bigbait: 1, spinnerbait: 0.7, topwater: 0.6, jerkbait: 0.6 }, where: "weed edges, points, rock humps and creek mouths" },
+  { n: "Carp", keys: ["carp"], when: ["dawn", "dusk", "day"], lures: { dough: 1, crawler: 0.8 }, where: "muddy flats, weedy bays and near inflows" }];
+const ADV_CLAR = ["Clear", "Stained", "Muddy"];
+
+/* Estimate the water temperature from the last week of air temperatures. */
+const advWater = {};
+async function advWaterTemp(loc, w) {
+  const key = loc.lat + "," + loc.lng;
+  if (advWater[key] != null) return advWater[key];
+  let est = Math.round(w.current.temperature_2m);
+  try {
+    const r = await fetch("https://api.open-meteo.com/v1/forecast?latitude=" + loc.lat + "&longitude=" + loc.lng + "&daily=temperature_2m_mean&temperature_unit=fahrenheit&timezone=auto&past_days=7&forecast_days=1");
+    const j = await r.json(), a = (j.daily && j.daily.temperature_2m_mean || []).filter((x) => typeof x === "number");
+    if (a.length >= 3) est = Math.round(a.reduce((x, y) => x + y, 0) / a.length);
+  } catch { /* use the air temperature */ }
+  est = Math.max(34, Math.min(88, est)); advWater[key] = est; return est;
+}
+const advHrIdx = (w, ms) => { const h = w.hourly; let best = -1, bd = 90 * 60000; h.time.forEach((t, i) => { const d = Math.abs(new Date(t).getTime() - ms); if (d < bd) { bd = d; best = i; } }); return best; };
+const advCloud = (code, cur) => code >= 45 ? 90 : code >= 3 ? 85 : code === 2 ? 50 : code === 1 ? 25 : (cur ?? 10);
+/* What the weather will be like at a moment (now, or a window the person picks). */
+function advAt(w, ms, kind) {
+  const c = w.current, i = advHrIdx(w, ms), now = Math.abs(ms - new Date(c.time).getTime()) < 45 * 60000;
+  const code = now || i < 0 ? c.weather_code : w.hourly.weather_code[i];
+  const wind = now || i < 0 ? c.wind_speed_10m : w.hourly.wind_speed_10m[i], air = now || i < 0 ? c.temperature_2m : w.hourly.temperature_2m[i];
+  const cloud = advCloud(code, now ? c.cloud_cover : null), rain = code >= 51 && code <= 82, storm = code >= 95;
+  const sun = [...(w.daily.sunrise || []), ...(w.daily.sunset || [])].map((t) => new Date(t).getTime());
+  const nearSun = sun.some((x) => Math.abs(x - ms) < 90 * 60000);
+  const rise = (w.daily.sunrise || []).map((t) => new Date(t).getTime()), set = (w.daily.sunset || []).map((t) => new Date(t).getTime());
+  const dark = !(rise.some((r) => set.some((s) => ms > r && ms < s && s - r < 20 * 3600000)));
+  const low = kind === "dawn" || kind === "dusk" || kind === "night" || dark || nearSun || cloud > 60 || rain;
+  return { wind, air, cloud, rain, storm, low: !!low, dark, code };
+}
+function advCatches(loc, fish) {
+  const out = [], now = Date.now();
+  for (const x of S.spots) {
+    if (typeof x.lat !== "number" || typeof x.lng !== "number") continue;
+    const sp = String(x.species || "").toLowerCase(); if (!fish.keys.some((k) => sp.includes(k))) continue;
+    const dKm = km(loc, x); if (dKm > 80) continue;
+    const ms = x.createdAt?.toMillis?.() ?? now; if (now - ms > 150 * 86400000) continue;
+    out.push({ ...x, dKm, ms, cat: advLureCat(x.lure) });
+  }
+  return out;
+}
+function advRankLures(fish, at, waterT, clar, local) {
+  const rows = [];
+  for (const [k, fit] of Object.entries(fish.lures)) {
+    const L = ADV_LURES[k], why = [];
+    let sc = fit * 100;
+    const dt = waterT < L.t[0] ? L.t[0] - waterT : waterT > L.t[1] ? waterT - L.t[1] : 0;
+    const tf = dt === 0 ? 1 : Math.max(0.15, 1 - 0.04 * dt); sc *= tf;
+    why.push(dt === 0 ? `${waterT}° water is right in its range` : tf < 0.6 ? `${waterT}° water is a bit ${waterT < L.t[0] ? "cold" : "warm"} for it` : `${waterT}° water is close to its range`);
+    const lf = L.light === "any" ? 1 : L.light === "low" ? (at.low ? 1 : 0.55) : (at.low ? 0.85 : 1); sc *= lf;
+    if (L.light === "low" && at.low) why.push("low light suits it"); if (L.light === "bright" && !at.low) why.push("bright light suits it");
+    const cf = L.clar[clar]; sc *= cf; if (cf >= 1) why.push(`works well in ${ADV_CLAR[clar].toLowerCase()} water`); else if (cf < 0.6) why.push(`not ideal in ${ADV_CLAR[clar].toLowerCase()} water`);
+    if (at.wind > 12) { if (!L.wind) { sc *= 0.5; why.push("wind will make it hard to fish"); } else if (k === "spinnerbait" || k === "chatterbait") { sc *= 1.1; why.push("the wind gives it cover"); } }
+    const ev = local.filter((x) => x.cat === k), n = ev.length;
+    if (n) { sc *= 1 + Math.min(5, n) * 0.15; why.push(`${n} catch${n > 1 ? "es" : ""} near you in the last 5 months used one`); }
+    rows.push({ k, L, sc, why, n });
+  }
+  // lures that fish near you really took but that the rules did not list for this fish
+  const known = new Set(Object.keys(fish.lures));
+  for (const k of new Set(local.map((x) => x.cat).filter(Boolean))) { const n = local.filter((x) => x.cat === k).length; if (!known.has(k) && n >= 2) rows.push({ k, L: ADV_LURES[k], sc: 40 + n * 5, why: [`${n} catches near you used one`], n }); }
+  return rows.sort((a, b) => b.sc - a.sc).slice(0, 3);
+}
+function advWindows(w, fish, waterT, local) {
+  const now = new Date(w.current.time).getTime(), c = w.current, wins = dayWindows(w).filter((x) => x.b > now && x.a < now + 40 * 3600000);
+  const b0 = biteScore(w), res = wins.map((x) => {
+    const mid = Math.max(x.a, now) + (x.b - Math.max(x.a, now)) / 2, at = advAt(w, mid, x.k), why = [];
+    let s = 45;
+    if (fish.when.includes(x.k)) { s += 25; why.push(`${fish.n.toLowerCase()} feed best at ${WINDOW_NAMES[x.k].toLowerCase()}`); }
+    if (waterT >= 80 && x.k !== "day") { s += 10; why.push("hot water, so cooler hours are better"); }
+    if (waterT >= 85 && x.k === "day") { s -= 15; why.push("midday heat slows fish down"); }
+    if (waterT <= 48 && x.k === "day") { s += 12; why.push("cold water, so the warmest hours are best"); }
+    if (waterT <= 48 && (x.k === "night" || x.k === "dawn")) s -= 8;
+    if (at.storm) { s -= 40; why.push("thunderstorms forecast. Stay off the water"); } else if (at.rain) { s -= 8; why.push("rain in the forecast"); }
+    if (at.wind > 20) { s -= 10; why.push("strong wind"); } else if (at.wind < 10) s += 5;
+    if (at.cloud > 60 && x.k === "day") { s += 8; why.push("cloud cover helps the midday bite"); }
+    if (b0.dP <= -1 && b0.dP > -4) { s += 6; why.push("pressure is slowly falling"); }
+    const mins = (ms) => { const d = new Date(ms); return d.getHours() * 60 + d.getMinutes(); }, a = mins(x.a), b = mins(x.b);
+    const hits = local.filter((p) => { const m = mins(p.ms); return a <= b ? m >= a && m <= b : m >= a || m <= b; }).length;
+    if (hits) { s += Math.min(24, hits * 6); why.push(`${hits} catch${hits > 1 ? "es" : ""} near you ${hits > 1 ? "were" : "was"} posted at this time of day`); }
+    s = Math.max(5, Math.min(99, Math.round(s)));
+    return { ...x, s, why, mid };
+  });
+  return res.sort((p, q) => q.s - p.s).slice(0, 3).sort((p, q) => p.a - q.a);
+}
+function advWhere(fish, at, waterT, kindRiver, w) {
+  const out = [], base = waterT < 48 ? "Fish are slow and deep. Try 10 to 25 ft near drop-offs, channel edges and deep docks, and fish slowly."
+    : waterT < 60 ? "Fish move between depths. Try 5 to 15 ft on points, humps and creek mouths, and the sunny north-facing banks in the afternoon."
+    : waterT < 76 ? "Fish are active and roam. Try 2 to 12 ft along weeds, docks and fallen trees."
+    : "It's hot. Fish early or late in the shallows, then move to shade and deeper structure (10 to 20 ft) when the sun is high.";
+  out.push(base);
+  out.push(`${fish.n} like ${fish.where}.`);
+  if (kindRiver) out.push("In a river, fish the seams where fast water meets slow, eddies behind rocks, and the tail of a pool. Cast upstream and let the bait drift down.");
+  if (at.wind >= 8) out.push(`Wind ${Math.round(at.wind)} mph: fish the bank or point the wind is blowing into. Baitfish get pushed there and the fish follow.`);
+  else out.push("Calm water: stay back from the edge, use light line and make long casts.");
+  out.push(at.low ? "Low light: fish come up shallow and into open water, so cover more of the lake." : "Bright sun: fish hold in shade and cover. Target docks, trees, weeds and the dark side of structure.");
+  return out;
+}
+function advisorCard(w, loc) {
+  const st = getPref("advset", ""); let saved = {}; try { saved = JSON.parse(st) || {}; } catch { saved = {}; }
+  const P = { fish: Math.min(ADV_FISH.length - 1, +saved.fish || 0), clar: [0, 1, 2].includes(saved.clar) ? saved.clar : 1, river: !!saved.river, plan: 0, temp: null };
+  const wrap = el("div", { class: "bite adv", id: "advisor" }), body = el("div", { class: "stack", style: "gap:10px" });
+  const save = () => setPref("advset", JSON.stringify({ fish: P.fish, clar: P.clar, river: P.river }));
+  const fishSel = el("select", { "aria-label": "What fish are you after", id: "adv-fish", onchange: (e) => { P.fish = +e.target.value; P.plan = 0; save(); draw(); } }, ADV_FISH.map((f, i) => el("option", { value: String(i), selected: i === P.fish ? "" : null }, f.n)));
+  const tempIn = el("input", { type: "number", id: "adv-temp", inputmode: "numeric", min: 32, max: 95, "aria-label": "Water temperature in degrees", style: "width:80px", onchange: (e) => { const v = +e.target.value; if (v >= 32 && v <= 95) { P.temp = v; draw(); } } });
+  const draw = () => {
+    const fish = ADV_FISH[P.fish], waterT = P.temp ?? P.est, local = advCatches(loc, fish), wins = advWindows(w, fish, waterT, local);
+    const plans = [{ label: "Right now", ms: new Date(w.current.time).getTime(), kind: "" }, ...wins.map((x) => ({ label: `${new Date(x.a).getDate() === new Date(w.current.time).getDate() ? "Today" : "Tomorrow"} ${WINDOW_NAMES[x.k].toLowerCase()}`, ms: x.mid, kind: x.k, win: x }))];
+    if (P.plan >= plans.length) P.plan = 0;
+    const plan = plans[P.plan], at = advAt(w, plan.ms, plan.kind), lures = advRankLures(fish, at, waterT, P.clar, local);
+    const near = local.slice().sort((a, b) => a.dKm - b.dKm).slice(0, 3);
+    const range = (x) => timeOf(new Date(Math.max(x.a, new Date(w.current.time).getTime()))) + " to " + timeOf(new Date(x.b));
+    tempIn.value = String(waterT);
+    body.replaceChildren(
+      el("div", { class: "row", style: "gap:8px;align-items:center;flex-wrap:wrap" }, el("span", { class: "muted small" }, "Water temp °F"), tempIn, el("span", { class: "muted small" }, P.temp == null ? "estimated from this week's weather" : "your number")),
+      el("div", { class: "chips", role: "group", "aria-label": "Water clarity" }, ADV_CLAR.map((n, i) => el("button", { class: "chip", type: "button", "data-clar": i, "aria-pressed": String(P.clar === i), onclick: () => { P.clar = i; save(); draw(); } }, n))),
+      el("div", { class: "chips", role: "group", "aria-label": "Type of water" }, [[false, "Lake or pond"], [true, "River or creek"]].map(([v, n]) => el("button", { class: "chip", type: "button", "data-river": v ? 1 : 0, "aria-pressed": String(P.river === v), onclick: () => { P.river = v; save(); draw(); } }, n))),
+      el("b", null, "When"),
+      el("div", { class: "stack", style: "gap:6px", id: "adv-when" }, wins.length ? wins.map((x) => el("div", { class: "adv-win" }, el("div", { class: "row spread" }, el("b", null, `${new Date(x.a).getDate() === new Date(w.current.time).getDate() ? "Today" : "Tomorrow"} ${WINDOW_NAMES[x.k].toLowerCase()}`), el("span", { class: "tag " + (x.s >= 75 ? "good" : x.s >= 55 ? "ok" : "bad") }, x.s + "/100")),
+        el("span", { class: "s" }, range(x)), x.why.length ? el("span", { class: "muted small" }, x.why.slice(0, 3).join(". ") + ".") : null)) : [el("p", { class: "muted small" }, "No good windows left in this forecast. Check again later.")]),
+      el("b", null, "Plan for"),
+      el("div", { class: "chips", role: "group", "aria-label": "Pick a time to plan for" }, plans.map((p, i) => el("button", { class: "chip", type: "button", "data-plan": i, "aria-pressed": String(P.plan === i), onclick: () => { P.plan = i; draw(); } }, p.label))),
+      el("b", null, "Lure"),
+      el("div", { class: "stack", style: "gap:6px", id: "adv-lures" }, lures.map((r, i) => el("div", { class: "adv-lure" }, el("div", { class: "row spread" }, el("b", null, `${i + 1}. ${r.L.n}`), r.n ? el("span", { class: "pill live" }, `${r.n} nearby`) : null),
+        el("span", { class: "s" }, `Fish it ${r.L.d}. ${r.L.how}`), el("span", { class: "muted small" }, "Why: " + r.why.slice(0, 3).join("; ") + ".")))),
+      el("b", null, "Where"),
+      el("ul", { class: "why", id: "adv-where" }, advWhere(fish, at, waterT, P.river, w).map((x) => el("li", null, x))),
+      near.length ? el("div", { class: "stack", style: "gap:6px", id: "adv-near" }, el("b", null, "Catches near you"),
+        near.map((x) => el("div", { class: "row spread adv-near", style: "gap:8px" }, el("span", { class: "s" }, `${(x.dKm / 1.609).toFixed(1)} mi away · ${x.species}${x.lb ? " " + x.lb + " lb" : ""}${x.lure ? " on " + x.lure : ""} · ${ago(x.createdAt)}`),
+          el("button", { class: "btn small ghost", type: "button", onclick: () => { S.mapFilter = { species: "", lure: "", mine: false }; S.focusSpot = x.id; go("map"); } }, "Map")))) :
+        el("p", { class: "muted small" }, "No catches of this fish posted near you yet, so this is from the weather and fish habits only. Post your catches with the lure and the place to make it smarter."),
+      el("p", { class: "muted small" }, `Rules of thumb plus ${local.length} catch${local.length === 1 ? "" : "es"} posted in Weigh-In within 50 miles. Fish don't follow rules, so change lures if nothing bites in 20 minutes.`));
+  };
+  wrap.append(el("div", { class: "row spread" }, el("b", null, "Fishing advisor"), el("span", { class: "muted small" }, "lure · where · when")), el("div", { class: "row", style: "gap:8px;align-items:center" }, el("span", { class: "muted small" }, "I'm fishing for"), fishSel), body);
+  P.est = Math.round(w.current.temperature_2m); draw();
+  advWaterTemp(loc, w).then((t) => { P.est = t; if (P.temp == null) draw(); });
+  return wrap;
 }
 
 function lureChart() {
@@ -606,6 +786,10 @@ function feedPosts() {
 }
 /* What's new. Newest first. Add a new entry on top each time the app changes. */
 const UPDATES = [
+  { id: "2026-11-04", date: "Nov 4", title: "Fishing advisor for real-life fishing", items: [
+    "New in the Bite tab: pick the fish you want and it ranks the 3 best lures, where to fish and the best times.",
+    "It mixes the weather, water temperature, clarity, wind and light with what people near you actually caught fish on.",
+    "Choose a time to plan for, and the lure and where advice changes to match it."] },
   { id: "2026-11-01d", date: "Nov 1", title: "Fishing game: more levels, higher prices, nicer look", items: [
     "Everything in the tackle shop costs 3x more, and lures cost more too.",
     "Every item has new top tiers that need a high level, up to a luxury charter yacht.",
