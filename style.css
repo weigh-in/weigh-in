@@ -305,3 +305,4 @@ a.btn.small{text-decoration:none;display:inline-flex;align-items:center}
 .sf-left{display:flex;flex-direction:column;gap:2px}.sf-left b{font-size:18px}
 .sf-menu{max-height:220px;overflow:auto;margin-top:-4px}
 .sf-facts{margin:0;padding-left:18px;font-size:13px;display:flex;flex-direction:column;gap:2px}
+.update-bar{position:fixed;top:0;left:0;right:0;z-index:99;display:flex;gap:10px;align-items:center;justify-content:space-between;padding:10px 16px;padding-top:calc(10px + env(safe-area-inset-top));background:#1F5C4D;color:#fff;font-size:14px}

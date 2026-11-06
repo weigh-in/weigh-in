@@ -785,8 +785,19 @@ function feedPosts() {
   return S.posts;
 }
 /* What's new. Newest first. Add a new entry on top each time the app changes. */
+/* Bump APP_VERSION every time you change the app, and add a matching entry on top of UPDATES (with v: the same number).
+   Phones check app.js every few minutes and offer the new version on their own. */
+const APP_VERSION = 15;
 const UPDATES = [
-  { id: "2026-11-06", date: "Nov 6", title: "Gate keep finder", items: [
+  { id: "2026-11-06b", v: 15, date: "Nov 6", title: "Updates install themselves, plus fixes", items: [
+    "The app now checks for new versions by itself. When one is ready you get a bar at the top that says Update now, and it also updates when you come back to the app.",
+    "Every update in this list now shows its version number. Yours is shown in Settings.",
+    "Fixed: the Use my location button works better and tells you what went wrong, like when location is turned off.",
+    "Fixed: the Gate keep finder remembers what you typed, shows a drop-down of angler names, and has a Search button at the bottom.",
+    "Fixed: Gate keep results now list details for each spot (public or private, free, fishing allowed, ground).",
+    "New: tap Rule out on a spot and say why. Ruled out spots move to a list you can put them back from.",
+    "Fixed: if the main map server is busy, it asks 3 others and then a simpler backup, so you get results instead of an error."] },
+  { id: "2026-11-06", v: 10, date: "Nov 6", title: "Gate keep finder", items: [
     "New in Profile: Gate keep finder. Type the angler name of who you're looking for, then say how many minutes you will drive.",
     "Tap clues like Rocky bank, Pier, Boat ramp, Dam, Bridge or Lake and the list of real lakes and spots gets smaller until you find it.",
     "It uses real map data only. It never uses anyone's catches or pins from Weigh-In."] },
@@ -823,8 +834,9 @@ function openWhatsNew(after) {
   const bg = el("div", { class: "sheet-bg", onclick: (e) => { if (e.target === bg) close(); } },
     el("div", { class: "sheet", role: "dialog", "aria-label": "What's new", style: "height:auto;max-height:90%" },
       el("div", { class: "sheet-h" }, el("h2", null, "What's new"), el("button", { class: "link", type: "button", id: "wn-close", onclick: close }, "Close")),
+      el("p", { class: "hint", id: "wn-ver", style: "margin:0 16px" }, `You have version ${APP_VERSION}`),
       el("div", { class: "msgs about", style: "overflow:auto" }, UPDATES.map((u, i) => el("div", { class: "stack", style: "gap:6px", "data-update": u.id },
-        el("div", { class: "row spread" }, el("b", null, u.title), el("span", { class: i === 0 ? "pill live" : "muted small" }, i === 0 ? "Latest" : u.date)),
+        el("div", { class: "row spread" }, el("b", null, (u.v ? `v${u.v} · ` : "") + u.title), el("span", { class: i === 0 ? "pill live" : "muted small" }, i === 0 ? "Latest" : u.date)),
         el("ul", { style: "margin:0;padding-left:20px;display:flex;flex-direction:column;gap:4px" }, u.items.map((t) => el("li", null, t))))))));
   document.body.append(bg);
 }
@@ -2050,6 +2062,33 @@ async function viewWater(p) {
   run();
 }
 
+/* ======================= AUTO UPDATE ======================= */
+let updatePending = 0;
+async function checkUpdate() {
+  try {
+    const r = await fetch("app.js?cb=" + Date.now(), { cache: "no-store" }); if (!r.ok) return;
+    const m = /const APP_VERSION = (\d+)/.exec(await r.text()); const v = m ? +m[1] : 0;
+    if (v > APP_VERSION && v !== updatePending) { updatePending = v; showUpdateBar(); }
+  } catch { /* offline: try again later */ }
+}
+function showUpdateBar() {
+  if (document.getElementById("update-bar")) return;
+  document.body.append(el("div", { class: "update-bar", id: "update-bar", role: "status" }, el("span", null, `A new version (v${updatePending}) is ready.`),
+    el("button", { class: "btn small", type: "button", id: "update-now", onclick: applyUpdate }, "Update now")));
+}
+async function applyUpdate() {
+  const b = document.getElementById("update-now"); if (b) { b.disabled = true; b.textContent = "Updating…"; }
+  try { await Promise.all(["app.js", "style.css", "index.html", "./"].map((u) => fetch(u, { cache: "reload" }).catch(() => {}))); } catch { /* reload anyway */ }
+  location.reload();
+}
+setTimeout(checkUpdate, 4000);
+setInterval(checkUpdate, 5 * 60 * 1000);
+document.addEventListener("visibilitychange", () => {
+  if (document.visibilityState !== "visible") return;
+  if (updatePending) { const a = document.activeElement; if (!(a && /^(INPUT|TEXTAREA|SELECT)$/.test(a.tagName))) applyUpdate(); }   // update when you come back, unless you're typing
+  else checkUpdate();
+});
+
 /* ======================= ME (profile, log, friends, settings) ======================= */
 function watchMine() {
   if (meUnsub) return;
@@ -2142,6 +2181,7 @@ function viewSettings(p) {
     el("section", { class: "stack" },
       el("button", { class: "btn ghost wide", type: "button", id: "s-about", onclick: openPrivacy }, "About and privacy"),
       el("button", { class: "btn wide", type: "button", onclick: () => { if (confirm("Sign out of Weigh-In?")) signOut(auth); } }, "Sign out")),
+    el("p", { class: "hint", id: "s-ver" }, `Weigh-In version ${APP_VERSION}`),
     el("p", { class: "hint" }, "Weigh-In is free. Don't post personal info like your address or school."));
 }
 
