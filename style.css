@@ -297,3 +297,9 @@ button.who{background:none;border:0;padding:0;color:inherit;text-align:left;curs
 .fc-card.hero .meter i{background:#ffd36b}
 .adv-win,.adv-lure{background:var(--water);border:1px solid var(--line);border-radius:10px;padding:8px 10px;display:flex;flex-direction:column;gap:2px}
 .adv .s{font-size:.92rem}
+.sf-card{background:var(--water);border:1px solid var(--line);border-radius:12px;padding:12px;display:flex;flex-direction:column;gap:8px}
+.sf-score{display:flex;flex-direction:column;align-items:center;min-width:54px;border:2px solid var(--line);border-radius:12px;padding:4px 8px}
+.sf-score b{font-size:20px;line-height:1.1}.sf-score span{font-size:11px;opacity:.75}
+#sf-q{flex:1;min-width:0}
+a.btn.small{text-decoration:none;display:inline-flex;align-items:center}
+.sf-left{display:flex;flex-direction:column;gap:2px}.sf-left b{font-size:18px}

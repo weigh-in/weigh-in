@@ -786,6 +786,10 @@ function feedPosts() {
 }
 /* What's new. Newest first. Add a new entry on top each time the app changes. */
 const UPDATES = [
+  { id: "2026-11-06", date: "Nov 6", title: "Gate keep finder", items: [
+    "New in Profile: Gate keep finder. Type the angler name of who you're looking for, then say how many minutes you will drive.",
+    "Tap clues like Rocky bank, Pier, Boat ramp, Dam, Bridge or Lake and the list of real lakes and spots gets smaller until you find it.",
+    "It uses real map data only. It never uses anyone's catches or pins from Weigh-In."] },
   { id: "2026-11-04", date: "Nov 4", title: "Fishing advisor for real-life fishing", items: [
     "New in the Bite tab: pick the fish you want and it ranks the 3 best lures, where to fish and the best times.",
     "It mixes the weather, water temperature, clarity, wind and light with what people near you actually caught fish on.",
@@ -1803,6 +1807,145 @@ function drawSpots(fit) {
   if (fit && pts.length) S.map.fitBounds(L.latLngBounds(pts).pad(0.25), { maxZoom: 12 });
 }
 
+const sfMinutes = (km_) => { const road = km_ * 1.3, speed = road < 8 ? 35 : road < 40 ? 55 : 80; return Math.round(road / speed * 60 + 2); };   // rough drive time
+/* ======================= GATE KEEP FINDER (public map data only) =======================
+   Looks up real places from OpenStreetMap (rocky banks, piers, boat ramps, dams, lakes...) near you, inside
+   the drive time you choose. Each clue you pick must be true for a place, so every extra clue narrows the list. */
+const WF_KINDS = {
+  rocky: { label: "Rocky bank", q: (a) => `(nwr["natural"~"^(bare_rock|cliff|scree|shingle)$"]${a};nwr["man_made"~"^(riprap|breakwater|groyne)$"]${a};)->.k;(nwr["natural"="water"](around.k:120);nwr["waterway"~"^(river|stream|canal)$"](around.k:120););->.w;nwr.k(around.w:120);` },
+  pier: { label: "Pier or dock", q: (a) => `nwr["man_made"="pier"]${a};` },
+  ramp: { label: "Boat ramp", q: (a) => `nwr["leisure"="slipway"]${a};` },
+  dam: { label: "Dam", q: (a) => `(nwr["waterway"~"^(dam|weir)$"]${a};nwr["man_made"="dam"]${a};);` },
+  marked: { label: "Marked fishing spot", q: (a) => `nwr["leisure"="fishing"]${a};` },
+  lake: { label: "Lake or pond", q: (a) => `nwr["natural"="water"]["water"~"^(lake|pond|reservoir)$"]["name"]${a};` },
+  bridge: { label: "Bridge", q: (a) => `(nwr["natural"="water"]${a};nwr["waterway"~"^(river|stream|canal)$"]${a};)->.w;way["bridge"="yes"](around.w:25);` },
+  beach: { label: "Sandy beach", q: (a) => `nwr["natural"="beach"]${a};` },
+  weeds: { label: "Weeds or marsh", q: (a) => `nwr["natural"="wetland"]${a};` },
+  river: { label: "River or creek", q: (a) => `way["waterway"~"^(river|stream)$"]["name"]${a};` },
+};
+const wfKinds = { rocky: "Rocky bank", pier: "Pier or dock", ramp: "Boat ramp", dam: "Dam", marked: "Marked fishing spot", lake: "Lake or pond", river: "River or creek", bridge: "Bridge", beach: "Sandy beach", weeds: "Weeds or marsh" };
+const wfCache = new Map();
+function wfRadiusKm(mins) { let k = 0.5; while (k < 40 && sfMinutes(k) <= mins) k += 0.5; return Math.max(0.5, k - 0.5); }
+async function wfFetch(kind, origin, rKm) {
+  const key = `${kind}|${origin.lat.toFixed(3)}|${origin.lng.toFixed(3)}|${rKm}`;
+  if (wfCache.has(key)) return wfCache.get(key);
+  const a = `(around:${Math.round(rKm * 1000)},${origin.lat},${origin.lng})`;
+  const body = "data=" + encodeURIComponent(`[out:json][timeout:25];${WF_KINDS[kind].q(a)}out center tags 80;`);
+  for (const host of ["https://overpass-api.de/api/interpreter", "https://overpass.kumi.systems/api/interpreter"]) {
+    const ctl = new AbortController(), t = setTimeout(() => ctl.abort(), 20000);
+    try {
+      const r = await fetch(host, { method: "POST", body, signal: ctl.signal, headers: { "Content-Type": "application/x-www-form-urlencoded" } });
+      if (!r.ok) continue;
+      const rows = ((await r.json()).elements || []).map((e) => ({ lat: e.lat ?? e.center?.lat, lng: e.lng ?? e.lon ?? e.center?.lon, name: e.tags?.name || "", id: e.type + "/" + e.id, tags: e.tags || {} }))
+        .filter((e) => Number.isFinite(e.lat) && Number.isFinite(e.lng));
+      wfCache.set(key, rows); return rows;
+    } catch { /* try the next server */ } finally { clearTimeout(t); }
+  }
+  return null;
+}
+async function wfSearch(st) {
+  const rKm = wfRadiusKm(st.mins), kinds = [...st.kinds];
+  const lists = await Promise.all(kinds.map((k) => wfFetch(k, st.origin, rKm)));
+  if (lists.some((l) => !l)) return null;
+  let base = lists[0].map((x) => ({ ...x, kinds: [kinds[0]] }));
+  for (let i = 1; i < kinds.length; i++) {         // every extra clue must be true within about 400 m
+    base = base.map((b) => ({ ...b, kinds: [...b.kinds, kinds[i]], near: lists[i].find((o) => km(b, o) <= 0.4) })).filter((b) => b.near);
+    base.forEach((b) => { if (!b.name && b.near.name) b.name = b.near.name; });
+  }
+  const seen = [];
+  const out = [];
+  for (const b of base.sort((a, c) => km(st.origin, a) - km(st.origin, c))) {   // drop duplicates closer than 300 m
+    if (seen.some((s) => km(s, b) < 0.3)) continue; seen.push(b);
+    const mins = sfMinutes(km(st.origin, b)); if (mins > st.mins) continue;
+    if (st.text && !b.name.toLowerCase().includes(st.text.toLowerCase())) continue;
+    out.push({ ...b, mins });
+  }
+  return out;
+}
+async function viewWater(p) {
+  const saved = (() => { try { return JSON.parse(getPref("wx", "null")); } catch { return null; } })();
+  const st = S.wf || (S.wf = { origin: saved && Number.isFinite(saved.lat) ? { lat: saved.lat, lng: saved.lng } : null, label: saved?.name || "", mins: 10, kinds: new Set(), text: "", person: null });
+  const out = el("div", { class: "stack", id: "wf-out" }), hits = el("div", { class: "list", id: "wf-hits" }), loc = el("p", { class: "hint", id: "wf-loc" });
+  let token = 0;
+  async function run() {
+    loc.textContent = st.origin ? `Starting from ${st.label || "your spot"}.` : "Pick where you are starting from, or use your location.";
+    if (!st.origin) { out.replaceChildren(); return; }
+    if (!st.kinds.size) { out.replaceChildren(el("p", { class: "muted", id: "wf-pick" }, "Tap what you want, like Rocky bank. Add more to narrow it down.")); return; }
+    const my = ++token; out.replaceChildren(el("p", { class: "muted" }, "Searching the map…"));
+    const rows = await wfSearch(st); if (my !== token) return;
+    if (!rows) { out.replaceChildren(el("p", { class: "empty" }, "Couldn't reach the map data. Check your connection and try again."), el("button", { class: "btn small", type: "button", onclick: run }, "Try again")); return; }
+    const shown = rows.slice(0, 15);
+    out.replaceChildren(el("div", { class: "sf-left", id: "wf-left" }, el("b", null, rows.length === 1 ? "1 spot left" : `${rows.length} spots left`),
+        el("span", { class: "hint" }, rows.length > 1 ? "Add more clues to narrow it down." : rows.length === 1 ? "That's the one." : "Nothing matches. Take off a clue or add more minutes."),
+        el("button", { class: "link small", type: "button", id: "wf-reset", style: "align-self:flex-start", onclick: () => { Object.assign(st, { mins: 10, kinds: new Set(), text: "" }); renderTab(); } }, "Clear clues")),
+      ...shown.map((r) => el("div", { class: "sf-card", "data-wf": r.id },
+        el("b", { style: "overflow-wrap:anywhere" }, r.name || r.kinds.map((k) => wfKinds[k]).join(" + ")),
+        el("div", { class: "chips" }, el("span", { class: "pill" }, `~${r.mins} min drive`), r.kinds.map((k) => el("span", { class: "pill live" }, wfKinds[k])),
+          null),
+        el("div", { class: "row", style: "gap:8px" },
+          el("a", { class: "btn small ghost", href: `https://www.google.com/maps/search/?api=1&query=${r.lat.toFixed(5)},${r.lng.toFixed(5)}`, target: "_blank", rel: "noopener" }, "Directions"),
+          el("a", { class: "btn small ghost", href: `https://www.openstreetmap.org/${r.id}`, target: "_blank", rel: "noopener" }, "Details")))),
+      rows.length > shown.length ? el("p", { class: "hint" }, `Showing the closest ${shown.length}. Add a clue to see the rest.`) : null,
+      el("p", { class: "hint" }, "From OpenStreetMap, so some places may be missing or be private land. Check the rules and where you're allowed to fish."));
+  }
+  async function search() {
+    const text = q.value.trim(); if (text.length < 2) return;
+    hits.replaceChildren(el("p", { class: "muted" }, "Searching…"));
+    const found = await findPlaces(text, 4);
+    if (!found.length) { hits.replaceChildren(el("p", { class: "muted" }, "Nothing found. Try a bigger town nearby.")); return; }
+    hits.replaceChildren(...found.map((h) => el("button", { class: "item", type: "button", onclick: () => { st.origin = { lat: h.lat, lng: h.lng }; st.label = h.full || h.name; hits.replaceChildren(); run(); } },
+      el("div", { class: "stack", style: "gap:2px;min-width:0" }, el("span", { class: "t" }, h.name || h.full), el("span", { class: "s" }, h.full)))));
+  }
+  const q = el("input", { type: "search", id: "wf-q", placeholder: "Search a town, like Crestwood", "aria-label": "Where are you starting from" });
+  q.addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); search(); } });
+  const gps = () => {
+    if (!navigator.geolocation) { toast("This phone can't share location."); return; }
+    navigator.geolocation.getCurrentPosition((pos) => { st.origin = { lat: pos.coords.latitude, lng: pos.coords.longitude }; st.label = "your location"; run(); },
+      () => toast("Couldn't get your location. Make sure location is allowed for this app."), { timeout: 10000, maximumAge: 60000 });
+  };
+  const chips = el("div", { class: "chips", id: "wf-kinds" });
+  const paint = () => chips.replaceChildren(...Object.entries(wfKinds).map(([k, v]) => el("button", { class: "chip", type: "button", "data-kind": k, "aria-pressed": String(st.kinds.has(k)),
+    onclick: () => { st.kinds.has(k) ? st.kinds.delete(k) : st.kinds.add(k); paint(); run(); } }, v)));
+  paint();
+  const mins = el("select", { id: "wf-mins", "aria-label": "How far will you drive", onchange: () => { st.mins = +mins.value; run(); } },
+    [5, 10, 15, 20, 30, 45].map((m) => el("option", { value: m, selected: m === st.mins ? "" : null }, `Within ${m} min`)));
+  const name = el("input", { type: "search", id: "wf-text", placeholder: "Name has… (optional)", "aria-label": "Name contains", value: st.text, oninput: () => { st.text = name.value.trim(); clearTimeout(name._t); name._t = setTimeout(run, 400); } });
+  // Whose spot is it? Only a label to keep your notes together. Nothing about that person comes from the app.
+  const who = el("div", { class: "stack", id: "gk-who", style: "gap:8px" });
+  const paintWho = () => {
+    if (st.person) {
+      const key = "gk-" + st.person.uid, notes = el("textarea", { id: "gk-notes", rows: 3, maxlength: 600, placeholder: "What do you know about the spot? Write clues here.",
+        oninput: () => setPref(key, notes.value) }); notes.value = getPref(key, "");
+      who.replaceChildren(el("div", { class: "row spread" }, el("b", null, `Looking for @${st.person.name}'s spot`),
+        el("button", { class: "link small", type: "button", id: "gk-clear", onclick: () => { st.person = null; paintWho(); } }, "Change")), notes,
+        el("span", { class: "hint" }, "Your notes stay on this phone. Weigh-In doesn't use anyone's catches or pins here. It only narrows real lakes and places from your clues."));
+      return;
+    }
+    const nm = el("input", { type: "search", id: "gk-name", maxlength: 20, placeholder: "Whose spot? Type their angler name", "aria-label": "Angler name" });
+    const set = async () => {
+      const name = nm.value.trim(); if (!name) return;
+      try {
+        const u = await getDoc(doc(db, "usernames", name.toLowerCase()));
+        const d = u.exists() ? u.data() : null;
+        if (!d || d.uid === OWNER_UID || d.uid === S.user.uid) { toast(`No angler named "${name}". Check the spelling.`); return; }   // the owner looks the same as someone who doesn't exist
+        st.person = { uid: d.uid, name: d.name || name }; paintWho();
+      } catch (e) { toast(errText(e)); }
+    };
+    nm.addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); set(); } });
+    who.replaceChildren(el("div", { class: "row", style: "gap:8px;flex-wrap:nowrap" }, nm, el("button", { class: "btn small", type: "button", id: "gk-set", onclick: set }, "Start")));
+  };
+  paintWho();
+  p.append(el("h1", null, "Gate keep finder"),
+    el("p", { class: "muted" }, "Type who you're looking for, say what you know, and narrow down the lakes and spots around an area. Pick how far you will drive, then tap clues. Every clue narrows the list."),
+    who,
+    el("section", { class: "stack" },
+      el("div", { class: "row", style: "gap:8px;flex-wrap:nowrap" }, q, el("button", { class: "btn small", type: "button", id: "wf-go", onclick: search }, "Search")),
+      el("button", { class: "btn ghost small", type: "button", id: "wf-gps", style: "align-self:flex-start", onclick: gps }, "📍 Use my location"), loc, hits,
+      mins, chips, name),
+    out);
+  run();
+}
+
 /* ======================= ME (profile, log, friends, settings) ======================= */
 function watchMine() {
   if (meUnsub) return;
@@ -1831,6 +1974,7 @@ const backBtn = (text) => el("button", { class: "link", type: "button", style: "
 function viewMe(p) {
   if (S.meView === "log") { p.append(backBtn("‹ Profile")); return viewLog(p); }
   if (S.meView === "friends") { p.append(backBtn("‹ Profile")); return viewFriends(p); }
+  if (S.meView === "water") { p.append(backBtn("‹ Profile")); return viewWater(p); }
   if (S.meView === "settings") return viewSettings(p);
   if (S.meView === "owner" && isStaff()) return viewOwner(p);
   const mine = [...S.mine].sort((a, b) => (b.createdAt?.toMillis?.() || 0) - (a.createdAt?.toMillis?.() || 0));
@@ -1852,6 +1996,7 @@ function viewMe(p) {
         el("span", { class: "row", style: "gap:10px" }, el("span", { class: "t" }, "🔔 What's new"), unseenUpdate() ? el("span", { class: "pill live" }, "New") : null), el("span", { class: "label" }, "›")),
       el("button", { class: "item", type: "button", onclick: open("friends") },
         el("span", { class: "row", style: "gap:10px" }, el("span", { class: "t" }, "Friends and chat"), S.reqIn.length ? el("span", { class: "pill live" }, `${S.reqIn.length} new`) : null), el("span", { class: "label" }, "›")),
+      el("button", { class: "item", type: "button", id: "me-water", onclick: open("water") }, el("span", { class: "t" }, "🔍 Gate keep finder"), el("span", { class: "label" }, "›")),
       el("button", { class: "item", type: "button", onclick: open("log") }, el("span", { class: "t" }, "My fishing log"), el("span", { class: "label" }, "›")),
       el("button", { class: "item", type: "button", id: "me-game", onclick: openFishGame }, el("span", { class: "t" }, "Fishing game"), el("span", { class: "label" }, "🎣")),
       isStaff() ? el("button", { class: "item", type: "button", onclick: open("owner") }, el("span", { class: "t" }, S.owner ? "Owner tools" : "Moderator tools"), el("span", { class: "label" }, "›")) : null,
