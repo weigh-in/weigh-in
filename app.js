@@ -787,8 +787,14 @@ function feedPosts() {
 /* What's new. Newest first. Add a new entry on top each time the app changes. */
 /* Bump APP_VERSION every time you change the app, and add a matching entry on top of UPDATES (with v: the same number).
    Phones check app.js every few minutes and offer the new version on their own. */
-const APP_VERSION = 15;
+const APP_VERSION = 16;
 const UPDATES = [
+  { id: "2026-11-06c", v: 16, date: "Nov 6", title: "Gate keep search fixed", items: [
+    "Fixed: Rocky bank never found anything because of a mistake in how the app asked the map server. It now finds rocky banks that are right next to a lake, river or creek.",
+    "Fixed: Bridge only counts bridges that actually go over water.",
+    "Fixed: the app asked the map server too many things at once, and it got blocked. It now asks one question at a time.",
+    "Searches can take up to a minute because the map server is free and busy. You now see a timer, and if the server is busy it counts down and tries again by itself.",
+    "Adding another clue only looks up the new clue, so narrowing down is faster."] },
   { id: "2026-11-06b", v: 15, date: "Nov 6", title: "Updates install themselves, plus fixes", items: [
     "The app now checks for new versions by itself. When one is ready you get a bar at the top that says Update now, and it also updates when you come back to the app.",
     "Every update in this list now shows its version number. Yours is shown in Settings.",
@@ -1834,39 +1840,58 @@ function wherePhone() {
 /* ======================= GATE KEEP FINDER (public map data only) =======================
    Looks up real places from OpenStreetMap (rocky banks, piers, boat ramps, dams, lakes...) near you, inside
    the drive time you choose. Each clue you pick must be true for a place, so every extra clue narrows the list. */
+// Each clue: q builds the map-server query (results saved into set s), is() tells if a map item counts as that clue.
 const WF_KINDS = {
-  rocky: { label: "Rocky bank", q: (a) => `(nwr["natural"~"^(bare_rock|cliff|scree|shingle)$"]${a};nwr["man_made"~"^(riprap|breakwater|groyne)$"]${a};)->.k;(nwr["natural"="water"](around.k:120);nwr["waterway"~"^(river|stream|canal)$"](around.k:120););->.w;nwr.k(around.w:120);` },
-  pier: { label: "Pier or dock", q: (a) => `nwr["man_made"="pier"]${a};` },
-  ramp: { label: "Boat ramp", q: (a) => `nwr["leisure"="slipway"]${a};` },
-  dam: { label: "Dam", q: (a) => `(nwr["waterway"~"^(dam|weir)$"]${a};nwr["man_made"="dam"]${a};);` },
-  marked: { label: "Marked fishing spot", q: (a) => `nwr["leisure"="fishing"]${a};` },
-  lake: { label: "Lake or pond", q: (a) => `nwr["natural"="water"]["water"~"^(lake|pond|reservoir)$"]["name"]${a};` },
-  bridge: { label: "Bridge", q: (a) => `(nwr["natural"="water"]${a};nwr["waterway"~"^(river|stream|canal)$"]${a};)->.w;way["bridge"="yes"](around.w:25);` },
-  beach: { label: "Sandy beach", q: (a) => `nwr["natural"="beach"]${a};` },
-  weeds: { label: "Weeds or marsh", q: (a) => `nwr["natural"="wetland"]${a};` },
-  river: { label: "River or creek", q: (a) => `way["waterway"~"^(river|stream)$"]["name"]${a};` },
+  rocky: { q: (a, s) => `(nwr["natural"~"^(bare_rock|cliff|scree|shingle)$"]${a};nwr["man_made"~"^(riprap|breakwater|groyne)$"]${a};)->.rk;node(w.rk)->.rkn;(way["natural"="water"](around.rkn:150);rel["natural"="water"](around.rkn:150);way["waterway"~"^(river|stream|canal|riverbank)$"](around.rkn:150);)->.rw;(way.rw;way(r.rw);)->.rww;node(w.rww)->.rwn;node.rkn(around.rwn:150)->.cn;way.rk(bn.cn)->${s};`,
+    is: (t) => /^(bare_rock|cliff|scree|shingle)$/.test(t.natural || "") || /^(riprap|breakwater|groyne)$/.test(t.man_made || "") },
+  pier: { q: (a, s) => `nwr["man_made"="pier"]${a}->${s};`, is: (t) => t.man_made === "pier" },
+  ramp: { q: (a, s) => `nwr["leisure"="slipway"]${a}->${s};`, is: (t) => t.leisure === "slipway" },
+  dam: { q: (a, s) => `(nwr["waterway"~"^(dam|weir)$"]${a};nwr["man_made"="dam"]${a};)->${s};`, is: (t) => /^(dam|weir)$/.test(t.waterway || "") || t.man_made === "dam" },
+  marked: { q: (a, s) => `nwr["leisure"="fishing"]${a}->${s};`, is: (t) => t.leisure === "fishing" },
+  lake: { q: (a, s) => `nwr["natural"="water"]["water"~"^(lake|pond|reservoir)$"]["name"]${a}->${s};`, is: (t) => t.natural === "water" && /^(lake|pond|reservoir)$/.test(t.water || "") },
+  bridge: { q: (a, s) => `way["bridge"]["bridge"!="no"]${a}->.br;node(w.br)->.brn;way["waterway"~"^(river|stream|canal)$"](around.brn:15)->.ww;node(w.ww)->.wwn;node.brn(around.wwn:15)->.bcn;way.br(bn.bcn)->${s};`, is: (t) => !!t.bridge && t.bridge !== "no" },
+  beach: { q: (a, s) => `nwr["natural"="beach"]${a}->${s};`, is: (t) => t.natural === "beach" },
+  weeds: { q: (a, s) => `nwr["natural"="wetland"]${a}->${s};`, is: (t) => t.natural === "wetland" },
+  river: { q: (a, s) => `way["waterway"~"^(river|stream)$"]["name"]${a}->${s};`, is: (t) => /^(river|stream)$/.test(t.waterway || "") },
 };
 const wfKinds = { rocky: "Rocky bank", pier: "Pier or dock", ramp: "Boat ramp", dam: "Dam", marked: "Marked fishing spot", lake: "Lake or pond", river: "River or creek", bridge: "Bridge", beach: "Sandy beach", weeds: "Weeds or marsh" };
 const wfCache = new Map();
 function wfRadiusKm(mins) { let k = 0.5; while (k < 40 && sfMinutes(k) <= mins) k += 0.5; return Math.max(0.5, k - 0.5); }
 let st_backup = false;   // true when the last search used the simpler backup map source
-let wfWhy = "";   // what went wrong last time, shown so it can be fixed
-const WF_HOSTS = ["https://overpass-api.de/api/interpreter", "https://overpass.kumi.systems/api/interpreter", "https://overpass.private.coffee/api/interpreter", "https://maps.mail.ru/osm/tools/overpass/api/interpreter"];
-const WF_LIGHT = { rocky: (a) => `(nwr["natural"~"^(bare_rock|cliff|scree|shingle)$"]${a};nwr["man_made"~"^(riprap|breakwater|groyne)$"]${a};);` };   // simpler version if the full one times out
-async function wfAsk(ql) {      // asks all the map servers at once and uses the first good answer
-  const body = "data=" + encodeURIComponent(`[out:json][timeout:20];${ql}out center tags 80;`);
-  const one = async (host) => {
-    const ctl = new AbortController(), t = setTimeout(() => ctl.abort(), 15000), name = new URL(host).hostname;
-    try {
-      const r = await fetch(host, { method: "POST", body, signal: ctl.signal, headers: { "Content-Type": "application/x-www-form-urlencoded" } });
-      if (!r.ok) { wfWhy = `${name} said ${r.status}`; throw new Error("bad"); }
-      const j = await r.json();
-      if (j.remark && !(j.elements || []).length && /error|timed out|memory/i.test(j.remark)) { wfWhy = `${name}: ${String(j.remark).slice(0, 60)}`; throw new Error("bad"); }
-      return (j.elements || []).map((e) => ({ lat: e.lat ?? e.center?.lat, lng: e.lng ?? e.lon ?? e.center?.lon, name: e.tags?.name || "", id: e.type + "/" + e.id, tags: e.tags || {} }))
-        .filter((e) => Number.isFinite(e.lat) && Number.isFinite(e.lng));
-    } catch (e) { if (e.message !== "bad") wfWhy = `${name}: ${e?.name === "AbortError" ? "took too long" : "blocked or offline"}`; throw e; } finally { clearTimeout(t); }
-  };
-  try { return await Promise.any(WF_HOSTS.map(one)); } catch { return null; }
+let wfWhy = "";          // what went wrong last time, shown so it can be fixed
+// The free map servers are slow (often 20-40 seconds) and block you if you ask too many things at once,
+// so this sends ONE combined question at a time and waits up to a minute.
+const WF_HOSTS = ["https://overpass-api.de/api/interpreter", "https://overpass.private.coffee/api/interpreter", "https://overpass.kumi.systems/api/interpreter"];
+const wfSleep = (ms) => new Promise((r) => setTimeout(r, ms));
+async function wfWaitSecs() {      // the main server says how long until it will take another question
+  try { const t = await (await fetch("https://overpass-api.de/api/status", { cache: "no-store" })).text(); const m = /in (\d+) seconds/.exec(t); return m ? +m[1] : (/slots available now/.test(t) ? 0 : 10); } catch { return 10; }
+}
+async function wfAsk(ql, onStep) {
+  const body = "data=" + encodeURIComponent(`[out:json][timeout:90];${ql}`);
+  for (const host of WF_HOSTS) {
+    const name = new URL(host).hostname, main = host === WF_HOSTS[0];
+    for (let tryN = 0; tryN < (main ? 3 : 1); tryN++) {
+      if (!main) onStep && onStep("Trying another map server…");
+      const ctl = new AbortController(), t = setTimeout(() => ctl.abort(), main ? 100000 : 45000);
+      try {
+        const r = await fetch(host, { method: "POST", body, signal: ctl.signal, headers: { "Content-Type": "application/x-www-form-urlencoded" } });
+        if (r.status === 429 || r.status === 502 || r.status === 503 || r.status === 504) {
+          wfWhy = `${name} said ${r.status} (busy)`;
+          if (!main) break;
+          const w = Math.min(45, Math.max(5, (await wfWaitSecs()) + 2) * (tryN + 1));
+          for (let k = w; k > 0; k--) { onStep && onStep(`The map server is busy. Trying again in ${k}s…`); await wfSleep(1000); }
+          onStep && onStep("Asking again…");
+          continue;
+        }
+        if (!r.ok) { wfWhy = `${name} said ${r.status}`; break; }
+        const j = await r.json();
+        if (j.remark && /runtime error|timed out|out of memory/i.test(j.remark) && !(j.elements || []).length) { wfWhy = `${name}: ${String(j.remark).slice(0, 70)}`; break; }
+        return (j.elements || []).map((e) => ({ lat: e.lat ?? e.center?.lat, lng: e.lon ?? e.center?.lon, name: e.tags?.name || "", id: e.type + "/" + e.id, tags: e.tags || {} }))
+          .filter((e) => Number.isFinite(e.lat) && Number.isFinite(e.lng));
+      } catch (e) { wfWhy = `${name}: ${e?.name === "AbortError" ? "took too long" : "blocked or offline"}`; break; } finally { clearTimeout(t); }
+    }
+  }
+  return null;
 }
 const WF_NOM = { rocky: "rocky shore", pier: "pier", ramp: "boat ramp", dam: "dam", marked: "fishing", lake: "lake", river: "creek", bridge: "bridge", beach: "beach", weeds: "marsh" };
 async function wfNominatim(kind, origin, rKm) {   // backup when the main map server is down: less detail, but it works
@@ -1875,7 +1900,7 @@ async function wfNominatim(kind, origin, rKm) {   // backup when the main map se
   try {
     const r = await fetch(`https://nominatim.openstreetmap.org/search?format=jsonv2&limit=40&bounded=1&extratags=1&viewbox=${origin.lng - dLng},${origin.lat + dLat},${origin.lng + dLng},${origin.lat - dLat}&q=${encodeURIComponent(WF_NOM[kind])}`, { signal: ctl.signal, headers: { Accept: "application/json" } });
     if (!r.ok) { wfWhy += ` · backup said ${r.status}`; return null; }
-    return (await r.json()).map((x) => ({ lat: +x.lat, lng: +x.lon, name: x.name || "", id: x.osm_type + "/" + x.osm_id, tags: { ...(x.extratags || {}), [x.category]: x.type } })).filter((x) => Number.isFinite(x.lat) && Number.isFinite(x.lng));
+    return (await r.json()).map((x) => ({ lat: +x.lat, lng: +x.lon, name: x.name || "", id: x.osm_type + "/" + x.osm_id, kindHint: kind, tags: { ...(x.extratags || {}), [x.category]: x.type } })).filter((x) => Number.isFinite(x.lat) && Number.isFinite(x.lng));
   } catch { wfWhy += " · backup also failed"; return null; } finally { clearTimeout(t); }
 }
 const WF_WORDS = { bare_rock: "bare rock", cliff: "cliff", scree: "loose rock", shingle: "pebbles", riprap: "riprap (stacked rocks)", breakwater: "breakwater", groyne: "rock wall into the water", pier: "pier", slipway: "boat ramp", marina: "marina", fishing: "marked for fishing",
@@ -1897,28 +1922,29 @@ function wfDetails(r) {      // plain-words facts from the map tags, so you can 
   if (t.description) out.push(String(t.description).slice(0, 90));
   return out;
 }
-async function wfFetch(kind, origin, rKm) {
-  const key = `${kind}|${origin.lat.toFixed(3)}|${origin.lng.toFixed(3)}|${rKm}`;
-  if (wfCache.has(key)) return wfCache.get(key);
-  const a = `(around:${Math.round(rKm * 1000)},${origin.lat},${origin.lng})`;
-  let rows = await wfAsk(WF_KINDS[kind].q(a));
-  if (!rows && WF_LIGHT[kind]) rows = await wfAsk(WF_LIGHT[kind](a));
-  if (!rows) { rows = await wfNominatim(kind, origin, rKm); if (rows) st_backup = true; }
-  if (rows) wfCache.set(key, rows);
-  return rows;
-}
-async function wfSearch(st) {
-  st_backup = false;
-  const rKm = wfRadiusKm(st.mins), kinds = [...st.kinds];
-  const lists = await Promise.all(kinds.map((k) => wfFetch(k, st.origin, rKm)));
-  if (lists.some((l) => !l)) return null;
+async function wfSearch(st, onStep) {
+  st_backup = false; wfWhy = "";
+  const rKm = wfRadiusKm(st.mins), kinds = [...st.kinds].sort();
+  const where = `${st.origin.lat.toFixed(3)}|${st.origin.lng.toFixed(3)}|${rKm}`;
+  const need = kinds.filter((k) => !wfCache.has(k + "|" + where));
+  if (need.length) {    // one question for all the new clues; clues you already searched come from memory
+    const a = `(around:${Math.round(rKm * 1000)},${st.origin.lat},${st.origin.lng})`;
+    const ql = need.map((k, i) => WF_KINDS[k].q(a, ".s" + i)).join("") + need.map((k, i) => `.s${i} out center tags 400;`).join("");
+    const items = await wfAsk(ql, onStep);
+    if (items) need.forEach((k) => wfCache.set(k + "|" + where, items.filter((x) => WF_KINDS[k].is(x.tags))));
+    else {      // every map server failed: use the simpler backup, one clue at a time
+      onStep && onStep("Using the backup map…");
+      for (const k of need) { const r = await wfNominatim(k, st.origin, rKm); if (!r) return null; wfCache.set(k + "|" + where + "|backup", r); await wfSleep(1100); }
+      st_backup = true;
+    }
+  }
+  const lists = kinds.map((k) => wfCache.get(k + "|" + where) || wfCache.get(k + "|" + where + "|backup") || []);
   let base = lists[0].map((x) => ({ ...x, kinds: [kinds[0]] }));
   for (let i = 1; i < kinds.length; i++) {         // every extra clue must be true within about 400 m
     base = base.map((b) => ({ ...b, kinds: [...b.kinds, kinds[i]], near: lists[i].find((o) => km(b, o) <= 0.4) })).filter((b) => b.near);
     base.forEach((b) => { if (!b.name && b.near.name) b.name = b.near.name; });
   }
-  const seen = [];
-  const out = [];
+  const seen = [], out = [];
   for (const b of base.sort((a, c) => km(st.origin, a) - km(st.origin, c))) {   // drop duplicates closer than 300 m
     if (seen.some((s) => km(s, b) < 0.3)) continue; seen.push(b);
     const mins = sfMinutes(km(st.origin, b)); if (mins > st.mins) continue;
@@ -1947,8 +1973,14 @@ async function viewWater(p) {
     loc.textContent = st.origin ? `Starting from ${st.label || "your spot"}.` : "Pick where you are starting from, or use your location.";
     if (!st.origin) { toast("Pick where you are starting from first."); return; }
     if (!st.kinds.size) { toast("Tap at least one clue first, like Rocky bank."); return; }
-    const my = ++token; out.replaceChildren(el("p", { class: "muted" }, "Searching the map…"));
-    const rows = await wfSearch(st); if (my !== token) return;
+    const my = ++token, t0 = Date.now();
+    const msg = el("b", null, "Searching the map…"), sub = el("span", { class: "hint", id: "wf-wait" }, "The free map server can take up to a minute. Keep the app open."), step = el("span", { class: "hint" });
+    out.replaceChildren(el("div", { class: "sf-left", id: "wf-busy" }, msg, sub, step));
+    const tick = setInterval(() => { if (my !== token) return clearInterval(tick); msg.textContent = `Searching the map… ${Math.round((Date.now() - t0) / 1000)}s`; }, 1000);
+    const btn = document.getElementById("wf-search"); if (btn) { btn.disabled = true; btn.textContent = "Searching…"; }
+    let rows;
+    try { rows = await wfSearch(st, (t) => { step.textContent = t; }); } finally { clearInterval(tick); if (btn) { btn.disabled = false; btn.textContent = "🔍 Search"; } }
+    if (my !== token) return;
     if (!rows) { out.replaceChildren(el("p", { class: "empty", id: "wf-err" }, "Couldn't reach the map data. Check your connection and try again."), wfWhy ? el("p", { class: "hint" }, "Problem: " + wfWhy) : null, el("button", { class: "btn small", type: "button", onclick: doSearch }, "Try again")); return; }
     last = rows; paintResults();
   }
