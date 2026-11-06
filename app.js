@@ -1837,26 +1837,53 @@ const WF_KINDS = {
 const wfKinds = { rocky: "Rocky bank", pier: "Pier or dock", ramp: "Boat ramp", dam: "Dam", marked: "Marked fishing spot", lake: "Lake or pond", river: "River or creek", bridge: "Bridge", beach: "Sandy beach", weeds: "Weeds or marsh" };
 const wfCache = new Map();
 function wfRadiusKm(mins) { let k = 0.5; while (k < 40 && sfMinutes(k) <= mins) k += 0.5; return Math.max(0.5, k - 0.5); }
+let st_backup = false;   // true when the last search used the simpler backup map source
 let wfWhy = "";   // what went wrong last time, shown so it can be fixed
 const WF_HOSTS = ["https://overpass-api.de/api/interpreter", "https://overpass.kumi.systems/api/interpreter", "https://overpass.private.coffee/api/interpreter", "https://maps.mail.ru/osm/tools/overpass/api/interpreter"];
 const WF_LIGHT = { rocky: (a) => `(nwr["natural"~"^(bare_rock|cliff|scree|shingle)$"]${a};nwr["man_made"~"^(riprap|breakwater|groyne)$"]${a};);` };   // simpler version if the full one times out
-async function wfAsk(ql) {
+async function wfAsk(ql) {      // asks all the map servers at once and uses the first good answer
   const body = "data=" + encodeURIComponent(`[out:json][timeout:20];${ql}out center tags 80;`);
-  for (let round = 0; round < 2; round++) {
-    for (const host of WF_HOSTS) {
-      const ctl = new AbortController(), t = setTimeout(() => ctl.abort(), 16000);
-      try {
-        const r = await fetch(host, { method: "POST", body, signal: ctl.signal, headers: { "Content-Type": "application/x-www-form-urlencoded" } });
-        if (!r.ok) { wfWhy = `${new URL(host).hostname} said ${r.status}`; continue; }
-        const j = await r.json();
-        if (j.remark && !(j.elements || []).length && /error|timed out|memory/i.test(j.remark)) { wfWhy = `${new URL(host).hostname}: ${String(j.remark).slice(0, 60)}`; continue; }
-        return (j.elements || []).map((e) => ({ lat: e.lat ?? e.center?.lat, lng: e.lng ?? e.lon ?? e.center?.lon, name: e.tags?.name || "", id: e.type + "/" + e.id, tags: e.tags || {} }))
-          .filter((e) => Number.isFinite(e.lat) && Number.isFinite(e.lng));
-      } catch (e) { wfWhy = `${new URL(host).hostname}: ${e?.name === "AbortError" ? "took too long" : "blocked or offline"}`; } finally { clearTimeout(t); }
-    }
-    await new Promise((r) => setTimeout(r, 1500));
-  }
-  return null;
+  const one = async (host) => {
+    const ctl = new AbortController(), t = setTimeout(() => ctl.abort(), 15000), name = new URL(host).hostname;
+    try {
+      const r = await fetch(host, { method: "POST", body, signal: ctl.signal, headers: { "Content-Type": "application/x-www-form-urlencoded" } });
+      if (!r.ok) { wfWhy = `${name} said ${r.status}`; throw new Error("bad"); }
+      const j = await r.json();
+      if (j.remark && !(j.elements || []).length && /error|timed out|memory/i.test(j.remark)) { wfWhy = `${name}: ${String(j.remark).slice(0, 60)}`; throw new Error("bad"); }
+      return (j.elements || []).map((e) => ({ lat: e.lat ?? e.center?.lat, lng: e.lng ?? e.lon ?? e.center?.lon, name: e.tags?.name || "", id: e.type + "/" + e.id, tags: e.tags || {} }))
+        .filter((e) => Number.isFinite(e.lat) && Number.isFinite(e.lng));
+    } catch (e) { if (e.message !== "bad") wfWhy = `${name}: ${e?.name === "AbortError" ? "took too long" : "blocked or offline"}`; throw e; } finally { clearTimeout(t); }
+  };
+  try { return await Promise.any(WF_HOSTS.map(one)); } catch { return null; }
+}
+const WF_NOM = { rocky: "rocky shore", pier: "pier", ramp: "boat ramp", dam: "dam", marked: "fishing", lake: "lake", river: "creek", bridge: "bridge", beach: "beach", weeds: "marsh" };
+async function wfNominatim(kind, origin, rKm) {   // backup when the main map server is down: less detail, but it works
+  const dLat = rKm / 111, dLng = rKm / (111 * Math.max(0.2, Math.cos(origin.lat * Math.PI / 180)));
+  const ctl = new AbortController(), t = setTimeout(() => ctl.abort(), 10000);
+  try {
+    const r = await fetch(`https://nominatim.openstreetmap.org/search?format=jsonv2&limit=40&bounded=1&extratags=1&viewbox=${origin.lng - dLng},${origin.lat + dLat},${origin.lng + dLng},${origin.lat - dLat}&q=${encodeURIComponent(WF_NOM[kind])}`, { signal: ctl.signal, headers: { Accept: "application/json" } });
+    if (!r.ok) { wfWhy += ` · backup said ${r.status}`; return null; }
+    return (await r.json()).map((x) => ({ lat: +x.lat, lng: +x.lon, name: x.name || "", id: x.osm_type + "/" + x.osm_id, tags: { ...(x.extratags || {}), [x.category]: x.type } })).filter((x) => Number.isFinite(x.lat) && Number.isFinite(x.lng));
+  } catch { wfWhy += " · backup also failed"; return null; } finally { clearTimeout(t); }
+}
+const WF_WORDS = { bare_rock: "bare rock", cliff: "cliff", scree: "loose rock", shingle: "pebbles", riprap: "riprap (stacked rocks)", breakwater: "breakwater", groyne: "rock wall into the water", pier: "pier", slipway: "boat ramp", marina: "marina", fishing: "marked for fishing",
+  dam: "dam", weir: "weir", lake: "lake", pond: "pond", reservoir: "reservoir", river: "river", stream: "creek", canal: "canal", beach: "sandy beach", wetland: "marsh or wetland", water: "water" };
+function wfDetails(r) {      // plain-words facts from the map tags, so you can tell the spots apart
+  const t = r.tags || {}, out = [];
+  const what = [...new Set([t.natural, t.man_made, t.leisure, t.waterway, t.water].map((v) => WF_WORDS[v]).filter(Boolean))];
+  if (what.length) out.push("Looks like: " + what.join(", "));
+  if (t.access === "private" || t.access === "no") out.push("⚠ Marked private. Don't fish here");
+  else if (t.access === "permissive" || t.access === "yes" || t.access === "public") out.push("Open to the public");
+  else if (t.access === "customers" || t.access === "permit") out.push("May need a permit or to be a customer");
+  if (t.fee === "yes") out.push("Costs money to use"); else if (t.fee === "no") out.push("Free");
+  if (t.fishing === "yes") out.push("Fishing is allowed"); else if (t.fishing === "no") out.push("⚠ Fishing is marked as not allowed");
+  if (t.boat === "yes" || t.motorboat === "yes") out.push("Boats allowed");
+  if (t.operator) out.push("Run by " + t.operator);
+  if (t.surface) out.push("Ground: " + String(t.surface).replace(/_/g, " "));
+  if (t.wheelchair === "yes") out.push("Wheelchair friendly");
+  if (t.opening_hours) out.push("Hours: " + String(t.opening_hours).slice(0, 40));
+  if (t.description) out.push(String(t.description).slice(0, 90));
+  return out;
 }
 async function wfFetch(kind, origin, rKm) {
   const key = `${kind}|${origin.lat.toFixed(3)}|${origin.lng.toFixed(3)}|${rKm}`;
@@ -1864,10 +1891,12 @@ async function wfFetch(kind, origin, rKm) {
   const a = `(around:${Math.round(rKm * 1000)},${origin.lat},${origin.lng})`;
   let rows = await wfAsk(WF_KINDS[kind].q(a));
   if (!rows && WF_LIGHT[kind]) rows = await wfAsk(WF_LIGHT[kind](a));
+  if (!rows) { rows = await wfNominatim(kind, origin, rKm); if (rows) st_backup = true; }
   if (rows) wfCache.set(key, rows);
   return rows;
 }
 async function wfSearch(st) {
+  st_backup = false;
   const rKm = wfRadiusKm(st.mins), kinds = [...st.kinds];
   const lists = await Promise.all(kinds.map((k) => wfFetch(k, st.origin, rKm)));
   if (lists.some((l) => !l)) return null;
@@ -1889,11 +1918,11 @@ async function wfSearch(st) {
 async function viewWater(p) {
   const saved = (() => { try { return JSON.parse(getPref("wx", "null")); } catch { return null; } })();
   const st = S.wf || (S.wf = (() => {   // remembers what you were doing, even after you close the app
-    const base = { origin: saved && Number.isFinite(saved.lat) ? { lat: saved.lat, lng: saved.lng } : null, label: saved?.name || "", mins: 10, kinds: new Set(), text: "", person: null, q: "", nameDraft: "" };
+    const base = { origin: saved && Number.isFinite(saved.lat) ? { lat: saved.lat, lng: saved.lng } : null, label: saved?.name || "", mins: 10, kinds: new Set(), text: "", person: null, q: "", nameDraft: "", ruled: {} };
     try { const m = JSON.parse(getPref("gk-state", "null")); if (m) return { ...base, ...m, kinds: new Set(m.kinds || []) }; } catch { /* start fresh */ }
     return base;
   })());
-  const keep = () => setPref("gk-state", JSON.stringify({ origin: st.origin, label: st.label, mins: st.mins, kinds: [...st.kinds], text: st.text, person: st.person, q: st.q, nameDraft: st.nameDraft }));
+  const keep = () => setPref("gk-state", JSON.stringify({ origin: st.origin, label: st.label, mins: st.mins, kinds: [...st.kinds], text: st.text, person: st.person, q: st.q, nameDraft: st.nameDraft, ruled: st.ruled }));
   const out = el("div", { class: "stack", id: "wf-out" }), hits = el("div", { class: "list", id: "wf-hits" }), loc = el("p", { class: "hint", id: "wf-loc" });
   let token = 0;
   function run() {   // a clue changed: save it and wait for the Search button
@@ -1909,18 +1938,39 @@ async function viewWater(p) {
     const my = ++token; out.replaceChildren(el("p", { class: "muted" }, "Searching the map…"));
     const rows = await wfSearch(st); if (my !== token) return;
     if (!rows) { out.replaceChildren(el("p", { class: "empty", id: "wf-err" }, "Couldn't reach the map data. Check your connection and try again."), wfWhy ? el("p", { class: "hint" }, "Problem: " + wfWhy) : null, el("button", { class: "btn small", type: "button", onclick: doSearch }, "Try again")); return; }
+    last = rows; paintResults();
+  }
+  let last = [];
+  const WHY = ["Private land", "Too crowded", "No parking", "Not rocky enough", "Too far", "Already checked", "Unsafe", "Other"];
+  function paintResults() {
+    const ruled = st.ruled || (st.ruled = {});
+    const rows = last.filter((r) => !ruled[r.id]), gone = last.filter((r) => ruled[r.id]);
     const shown = rows.slice(0, 15);
-    out.replaceChildren(el("div", { class: "sf-left", id: "wf-left" }, el("b", null, rows.length === 1 ? "1 spot left" : `${rows.length} spots left`),
-        el("span", { class: "hint" }, rows.length > 1 ? "Add more clues to narrow it down." : rows.length === 1 ? "That's the one." : "Nothing matches. Take off a clue or add more minutes."),
-        el("button", { class: "link small", type: "button", id: "wf-reset", style: "align-self:flex-start", onclick: () => { Object.assign(st, { mins: 10, kinds: new Set(), text: "" }); renderTab(); } }, "Clear clues")),
-      ...shown.map((r) => el("div", { class: "sf-card", "data-wf": r.id },
+    const card = (r) => {
+      const actions = el("div", { class: "row", style: "gap:8px" },
+        el("a", { class: "btn small ghost", href: `https://www.google.com/maps/search/?api=1&query=${r.lat.toFixed(5)},${r.lng.toFixed(5)}`, target: "_blank", rel: "noopener" }, "Directions"),
+        el("a", { class: "btn small ghost", href: `https://www.openstreetmap.org/${r.id}`, target: "_blank", rel: "noopener" }, "Details"),
+        el("button", { class: "btn small ghost", type: "button", "data-x": r.id, onclick: () => {
+          actions.replaceChildren(el("span", { class: "hint", style: "width:100%" }, "Why rule it out?"), ...WHY.map((w) => el("button", { class: "chip", type: "button", "data-why": w, onclick: () => { ruled[r.id] = { why: w, name: r.name || r.kinds.map((k) => wfKinds[k]).join(" + ") }; keep(); paintResults(); } }, w)),
+            el("button", { class: "link small", type: "button", onclick: paintResults }, "Cancel"));
+          actions.style.flexWrap = "wrap";
+        } }, "✕ Rule out"));
+      const facts = wfDetails(r);
+      return el("div", { class: "sf-card", "data-wf": r.id },
         el("b", { style: "overflow-wrap:anywhere" }, r.name || r.kinds.map((k) => wfKinds[k]).join(" + ")),
-        el("div", { class: "chips" }, el("span", { class: "pill" }, `~${r.mins} min drive`), r.kinds.map((k) => el("span", { class: "pill live" }, wfKinds[k])),
-          null),
-        el("div", { class: "row", style: "gap:8px" },
-          el("a", { class: "btn small ghost", href: `https://www.google.com/maps/search/?api=1&query=${r.lat.toFixed(5)},${r.lng.toFixed(5)}`, target: "_blank", rel: "noopener" }, "Directions"),
-          el("a", { class: "btn small ghost", href: `https://www.openstreetmap.org/${r.id}`, target: "_blank", rel: "noopener" }, "Details")))),
+        el("div", { class: "chips" }, el("span", { class: "pill" }, `~${r.mins} min drive`), r.kinds.map((k) => el("span", { class: "pill live" }, wfKinds[k]))),
+        facts.length ? el("ul", { class: "sf-facts" }, facts.map((f) => el("li", null, f))) : el("span", { class: "hint" }, "No more details on the map for this one."),
+        actions);
+    };
+    out.replaceChildren(el("div", { class: "sf-left", id: "wf-left" }, el("b", null, rows.length === 1 ? "1 spot left" : `${rows.length} spots left`),
+        el("span", { class: "hint" }, rows.length > 1 ? "Add more clues or rule spots out to narrow it down." : rows.length === 1 ? "That's the one." : "Nothing matches. Take off a clue or add more minutes."),
+        st_backup ? el("span", { class: "hint", id: "wf-backup" }, "The main map server is busy, so these have fewer details.") : null,
+        el("button", { class: "link small", type: "button", id: "wf-reset", style: "align-self:flex-start", onclick: () => { Object.assign(st, { mins: 10, kinds: new Set(), text: "", ruled: {} }); renderTab(); } }, "Clear clues")),
+      ...shown.map(card),
       rows.length > shown.length ? el("p", { class: "hint" }, `Showing the closest ${shown.length}. Add a clue to see the rest.`) : null,
+      gone.length ? el("div", { class: "stack", id: "wf-ruled", style: "gap:6px" }, el("b", null, `Ruled out (${gone.length})`),
+        gone.map((r) => el("div", { class: "row spread", style: "gap:8px" }, el("span", { class: "hint", style: "min-width:0;overflow-wrap:anywhere" }, `${ruled[r.id].name} · ${ruled[r.id].why}`),
+          el("button", { class: "link small", type: "button", "data-back": r.id, onclick: () => { delete ruled[r.id]; keep(); paintResults(); } }, "Put back")))) : null,
       el("p", { class: "hint" }, "From OpenStreetMap, so some places may be missing or be private land. Check the rules and where you're allowed to fish."));
   }
   async function search() {
