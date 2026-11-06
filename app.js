@@ -1837,22 +1837,35 @@ const WF_KINDS = {
 const wfKinds = { rocky: "Rocky bank", pier: "Pier or dock", ramp: "Boat ramp", dam: "Dam", marked: "Marked fishing spot", lake: "Lake or pond", river: "River or creek", bridge: "Bridge", beach: "Sandy beach", weeds: "Weeds or marsh" };
 const wfCache = new Map();
 function wfRadiusKm(mins) { let k = 0.5; while (k < 40 && sfMinutes(k) <= mins) k += 0.5; return Math.max(0.5, k - 0.5); }
+let wfWhy = "";   // what went wrong last time, shown so it can be fixed
+const WF_HOSTS = ["https://overpass-api.de/api/interpreter", "https://overpass.kumi.systems/api/interpreter", "https://overpass.private.coffee/api/interpreter", "https://maps.mail.ru/osm/tools/overpass/api/interpreter"];
+const WF_LIGHT = { rocky: (a) => `(nwr["natural"~"^(bare_rock|cliff|scree|shingle)$"]${a};nwr["man_made"~"^(riprap|breakwater|groyne)$"]${a};);` };   // simpler version if the full one times out
+async function wfAsk(ql) {
+  const body = "data=" + encodeURIComponent(`[out:json][timeout:20];${ql}out center tags 80;`);
+  for (let round = 0; round < 2; round++) {
+    for (const host of WF_HOSTS) {
+      const ctl = new AbortController(), t = setTimeout(() => ctl.abort(), 16000);
+      try {
+        const r = await fetch(host, { method: "POST", body, signal: ctl.signal, headers: { "Content-Type": "application/x-www-form-urlencoded" } });
+        if (!r.ok) { wfWhy = `${new URL(host).hostname} said ${r.status}`; continue; }
+        const j = await r.json();
+        if (j.remark && !(j.elements || []).length && /error|timed out|memory/i.test(j.remark)) { wfWhy = `${new URL(host).hostname}: ${String(j.remark).slice(0, 60)}`; continue; }
+        return (j.elements || []).map((e) => ({ lat: e.lat ?? e.center?.lat, lng: e.lng ?? e.lon ?? e.center?.lon, name: e.tags?.name || "", id: e.type + "/" + e.id, tags: e.tags || {} }))
+          .filter((e) => Number.isFinite(e.lat) && Number.isFinite(e.lng));
+      } catch (e) { wfWhy = `${new URL(host).hostname}: ${e?.name === "AbortError" ? "took too long" : "blocked or offline"}`; } finally { clearTimeout(t); }
+    }
+    await new Promise((r) => setTimeout(r, 1500));
+  }
+  return null;
+}
 async function wfFetch(kind, origin, rKm) {
   const key = `${kind}|${origin.lat.toFixed(3)}|${origin.lng.toFixed(3)}|${rKm}`;
   if (wfCache.has(key)) return wfCache.get(key);
   const a = `(around:${Math.round(rKm * 1000)},${origin.lat},${origin.lng})`;
-  const body = "data=" + encodeURIComponent(`[out:json][timeout:25];${WF_KINDS[kind].q(a)}out center tags 80;`);
-  for (const host of ["https://overpass-api.de/api/interpreter", "https://overpass.kumi.systems/api/interpreter"]) {
-    const ctl = new AbortController(), t = setTimeout(() => ctl.abort(), 20000);
-    try {
-      const r = await fetch(host, { method: "POST", body, signal: ctl.signal, headers: { "Content-Type": "application/x-www-form-urlencoded" } });
-      if (!r.ok) continue;
-      const rows = ((await r.json()).elements || []).map((e) => ({ lat: e.lat ?? e.center?.lat, lng: e.lng ?? e.lon ?? e.center?.lon, name: e.tags?.name || "", id: e.type + "/" + e.id, tags: e.tags || {} }))
-        .filter((e) => Number.isFinite(e.lat) && Number.isFinite(e.lng));
-      wfCache.set(key, rows); return rows;
-    } catch { /* try the next server */ } finally { clearTimeout(t); }
-  }
-  return null;
+  let rows = await wfAsk(WF_KINDS[kind].q(a));
+  if (!rows && WF_LIGHT[kind]) rows = await wfAsk(WF_LIGHT[kind](a));
+  if (rows) wfCache.set(key, rows);
+  return rows;
 }
 async function wfSearch(st) {
   const rKm = wfRadiusKm(st.mins), kinds = [...st.kinds];
@@ -1890,7 +1903,7 @@ async function viewWater(p) {
     if (!st.kinds.size) { out.replaceChildren(el("p", { class: "muted", id: "wf-pick" }, "Tap what you want, like Rocky bank. Add more to narrow it down.")); return; }
     const my = ++token; out.replaceChildren(el("p", { class: "muted" }, "Searching the map…"));
     const rows = await wfSearch(st); if (my !== token) return;
-    if (!rows) { out.replaceChildren(el("p", { class: "empty" }, "Couldn't reach the map data. Check your connection and try again."), el("button", { class: "btn small", type: "button", onclick: run }, "Try again")); return; }
+    if (!rows) { out.replaceChildren(el("p", { class: "empty", id: "wf-err" }, "Couldn't reach the map data. Check your connection and try again."), wfWhy ? el("p", { class: "hint" }, "Problem: " + wfWhy) : null, el("button", { class: "btn small", type: "button", onclick: run }, "Try again")); return; }
     const shown = rows.slice(0, 15);
     out.replaceChildren(el("div", { class: "sf-left", id: "wf-left" }, el("b", null, rows.length === 1 ? "1 spot left" : `${rows.length} spots left`),
         el("span", { class: "hint" }, rows.length > 1 ? "Add more clues to narrow it down." : rows.length === 1 ? "That's the one." : "Nothing matches. Take off a clue or add more minutes."),
