@@ -303,3 +303,4 @@ button.who{background:none;border:0;padding:0;color:inherit;text-align:left;curs
 #sf-q{flex:1;min-width:0}
 a.btn.small{text-decoration:none;display:inline-flex;align-items:center}
 .sf-left{display:flex;flex-direction:column;gap:2px}.sf-left b{font-size:18px}
+.sf-menu{max-height:220px;overflow:auto;margin-top:-4px}

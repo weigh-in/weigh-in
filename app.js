@@ -7,7 +7,7 @@ import {
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 import {
   getFirestore, collection, doc, setDoc, getDoc, getDocs, addDoc, deleteDoc, updateDoc, onSnapshot,
-  query, where, orderBy, limit, serverTimestamp, arrayUnion
+  query, where, orderBy, limit, serverTimestamp, arrayUnion, documentId
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
 const $app = document.getElementById("app");
@@ -1142,11 +1142,9 @@ function viewPost(p) {
     });
   } }, "🗺 Find or pick on map");
   const locBtn = el("button", { class: "btn ghost small", type: "button", id: "f-loc", onclick: () => {
-    if (!navigator.geolocation) { toast("This phone can't share location."); return; }
     locBtn.disabled = true; locBtn.textContent = "Finding you…";
-    navigator.geolocation.getCurrentPosition((pos) => { draftLoc = { lat: pos.coords.latitude, lng: pos.coords.longitude }; draftSrc = "manual"; draftWhere = ""; setPref("lastloc", JSON.stringify(draftLoc)); locBtn.disabled = false; paintLoc(); },
-      () => { locBtn.disabled = false; paintLoc(); toast("Couldn't get your location. Make sure location is allowed for this app."); },
-      { enableHighAccuracy: true, timeout: 12000, maximumAge: 60000 });
+    wherePhone().then((o) => { draftLoc = o; draftSrc = "manual"; draftWhere = ""; setPref("lastloc", JSON.stringify(draftLoc)); locBtn.disabled = false; paintLoc(); })
+      .catch((e) => { locBtn.disabled = false; paintLoc(); toast(e.message); });
   } }, "📍 Use my location");
   const locRemove = el("button", { class: "link", type: "button", style: "align-self:flex-start", onclick: () => { draftLoc = null; draftSrc = ""; draftWhere = ""; paintLoc(); } }, "Remove location");
   function paintLoc() {
@@ -1708,13 +1706,12 @@ function renderMap() {
   const box = el("div", { class: "map", id: "map" });
   const note = el("div", { class: "map-note", id: "map-note" }, "Loading map…");
   const fab = el("button", { class: "map-fab", type: "button", id: "map-locate", "aria-label": "Show where I am", onclick: () => {
-    if (!navigator.geolocation) { toast("This phone can't share location."); return; }
-    navigator.geolocation.getCurrentPosition((pos) => {
+    wherePhone().then((o) => {
       const L = window.L; if (!L || !S.map) return;
-      const ll = [pos.coords.latitude, pos.coords.longitude];
+      const ll = [o.lat, o.lng];
       S.map.setView(ll, 13);
       if (S.me) S.me.setLatLng(ll); else S.me = L.circleMarker(ll, { radius: 8, color: "#fff", weight: 3, fillColor: "#1F5C4D", fillOpacity: 1 }).addTo(S.map);
-    }, () => toast("Couldn't get your location. Make sure location is allowed for this app."), { timeout: 10000, maximumAge: 60000 });
+    }).catch((e) => toast(e.message));
   } }, "📍");
   function paintBar() {
     const valid = S.spots.filter((x) => typeof x.lat === "number");
@@ -1808,6 +1805,20 @@ function drawSpots(fit) {
 }
 
 const sfMinutes = (km_) => { const road = km_ * 1.3, speed = road < 8 ? 35 : road < 40 ? 55 : 80; return Math.round(road / speed * 60 + 2); };   // rough drive time
+/* Gets the phone's location. Tries a fast guess first, then GPS, and says clearly what went wrong. */
+function wherePhone() {
+  return new Promise((resolve, reject) => {
+    if (!navigator.geolocation) { reject(new Error("This phone can't share location. Type a town instead.")); return; }
+    const fail = (e) => reject(new Error(e && e.code === 1
+      ? "Location is turned off for Weigh-In. On iPhone: Settings, Privacy, Location Services, Safari Websites, While Using. Or just type a town."
+      : "Couldn't find you. Move near a window or outside and try again, or type a town."));
+    const ok = (pos) => resolve({ lat: pos.coords.latitude, lng: pos.coords.longitude });
+    navigator.geolocation.getCurrentPosition(ok, (e) => {
+      if (e && e.code === 1) return fail(e);
+      navigator.geolocation.getCurrentPosition(ok, fail, { enableHighAccuracy: true, timeout: 20000, maximumAge: 0 });   // second try with GPS
+    }, { enableHighAccuracy: false, timeout: 8000, maximumAge: 300000 });
+  });
+}
 /* ======================= GATE KEEP FINDER (public map data only) =======================
    Looks up real places from OpenStreetMap (rocky banks, piers, boat ramps, dams, lakes...) near you, inside
    the drive time you choose. Each clue you pick must be true for a place, so every extra clue narrows the list. */
@@ -1864,10 +1875,16 @@ async function wfSearch(st) {
 }
 async function viewWater(p) {
   const saved = (() => { try { return JSON.parse(getPref("wx", "null")); } catch { return null; } })();
-  const st = S.wf || (S.wf = { origin: saved && Number.isFinite(saved.lat) ? { lat: saved.lat, lng: saved.lng } : null, label: saved?.name || "", mins: 10, kinds: new Set(), text: "", person: null });
+  const st = S.wf || (S.wf = (() => {   // remembers what you were doing, even after you close the app
+    const base = { origin: saved && Number.isFinite(saved.lat) ? { lat: saved.lat, lng: saved.lng } : null, label: saved?.name || "", mins: 10, kinds: new Set(), text: "", person: null, q: "", nameDraft: "" };
+    try { const m = JSON.parse(getPref("gk-state", "null")); if (m) return { ...base, ...m, kinds: new Set(m.kinds || []) }; } catch { /* start fresh */ }
+    return base;
+  })());
+  const keep = () => setPref("gk-state", JSON.stringify({ origin: st.origin, label: st.label, mins: st.mins, kinds: [...st.kinds], text: st.text, person: st.person, q: st.q, nameDraft: st.nameDraft }));
   const out = el("div", { class: "stack", id: "wf-out" }), hits = el("div", { class: "list", id: "wf-hits" }), loc = el("p", { class: "hint", id: "wf-loc" });
   let token = 0;
   async function run() {
+    keep();
     loc.textContent = st.origin ? `Starting from ${st.label || "your spot"}.` : "Pick where you are starting from, or use your location.";
     if (!st.origin) { out.replaceChildren(); return; }
     if (!st.kinds.size) { out.replaceChildren(el("p", { class: "muted", id: "wf-pick" }, "Tap what you want, like Rocky bank. Add more to narrow it down.")); return; }
@@ -1896,12 +1913,11 @@ async function viewWater(p) {
     hits.replaceChildren(...found.map((h) => el("button", { class: "item", type: "button", onclick: () => { st.origin = { lat: h.lat, lng: h.lng }; st.label = h.full || h.name; hits.replaceChildren(); run(); } },
       el("div", { class: "stack", style: "gap:2px;min-width:0" }, el("span", { class: "t" }, h.name || h.full), el("span", { class: "s" }, h.full)))));
   }
-  const q = el("input", { type: "search", id: "wf-q", placeholder: "Search a town, like Crestwood", "aria-label": "Where are you starting from" });
+  const q = el("input", { type: "search", id: "wf-q", placeholder: "Search a town, like Crestwood", "aria-label": "Where are you starting from", value: st.q, oninput: () => { st.q = q.value; keep(); } });
   q.addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); search(); } });
   const gps = () => {
-    if (!navigator.geolocation) { toast("This phone can't share location."); return; }
-    navigator.geolocation.getCurrentPosition((pos) => { st.origin = { lat: pos.coords.latitude, lng: pos.coords.longitude }; st.label = "your location"; run(); },
-      () => toast("Couldn't get your location. Make sure location is allowed for this app."), { timeout: 10000, maximumAge: 60000 });
+    toast("Finding you…");
+    wherePhone().then((o) => { st.origin = o; st.label = "your location"; run(); }).catch((e) => toast(e.message));
   };
   const chips = el("div", { class: "chips", id: "wf-kinds" });
   const paint = () => chips.replaceChildren(...Object.entries(wfKinds).map(([k, v]) => el("button", { class: "chip", type: "button", "data-kind": k, "aria-pressed": String(st.kinds.has(k)),
@@ -1909,7 +1925,7 @@ async function viewWater(p) {
   paint();
   const mins = el("select", { id: "wf-mins", "aria-label": "How far will you drive", onchange: () => { st.mins = +mins.value; run(); } },
     [5, 10, 15, 20, 30, 45].map((m) => el("option", { value: m, selected: m === st.mins ? "" : null }, `Within ${m} min`)));
-  const name = el("input", { type: "search", id: "wf-text", placeholder: "Name has… (optional)", "aria-label": "Name contains", value: st.text, oninput: () => { st.text = name.value.trim(); clearTimeout(name._t); name._t = setTimeout(run, 400); } });
+  const name = el("input", { type: "search", id: "wf-text", placeholder: "Name has… (optional)", "aria-label": "Name contains", value: st.text, oninput: () => { st.text = name.value.trim(); keep(); clearTimeout(name._t); name._t = setTimeout(run, 400); } });
   // Whose spot is it? Only a label to keep your notes together. Nothing about that person comes from the app.
   const who = el("div", { class: "stack", id: "gk-who", style: "gap:8px" });
   const paintWho = () => {
@@ -1917,22 +1933,41 @@ async function viewWater(p) {
       const key = "gk-" + st.person.uid, notes = el("textarea", { id: "gk-notes", rows: 3, maxlength: 600, placeholder: "What do you know about the spot? Write clues here.",
         oninput: () => setPref(key, notes.value) }); notes.value = getPref(key, "");
       who.replaceChildren(el("div", { class: "row spread" }, el("b", null, `Looking for @${st.person.name}'s spot`),
-        el("button", { class: "link small", type: "button", id: "gk-clear", onclick: () => { st.person = null; paintWho(); } }, "Change")), notes,
+        el("button", { class: "link small", type: "button", id: "gk-clear", onclick: () => { st.person = null; keep(); paintWho(); } }, "Change")), notes,
         el("span", { class: "hint" }, "Your notes stay on this phone. Weigh-In doesn't use anyone's catches or pins here. It only narrows real lakes and places from your clues."));
       return;
     }
-    const nm = el("input", { type: "search", id: "gk-name", maxlength: 20, placeholder: "Whose spot? Type their angler name", "aria-label": "Angler name" });
+    const nm = el("input", { type: "search", id: "gk-name", maxlength: 20, autocomplete: "off", placeholder: "Whose spot? Type their angler name", "aria-label": "Angler name", value: st.nameDraft });
+    const menu = el("div", { class: "list sf-menu", id: "gk-menu", hidden: true });
+    let tm = 0, seq = 0;
+    const suggest = () => {
+      st.nameDraft = nm.value; keep(); clearTimeout(tm);
+      const pre = nm.value.trim().toLowerCase();
+      if (!pre) { menu.hidden = true; return; }
+      tm = setTimeout(async () => {
+        const my = ++seq;
+        try {
+          const r = await getDocs(query(collection(db, "usernames"), where(documentId(), ">=", pre), where(documentId(), "<", pre + "\uf8ff"), limit(8)));
+          if (my !== seq) return;
+          const rows = r.docs.map((d) => d.data()).filter((d) => d.uid !== OWNER_UID && d.uid !== S.user.uid);   // the owner never shows up
+          menu.hidden = !rows.length;
+          menu.replaceChildren(...rows.map((d) => el("button", { class: "item", type: "button", "data-pick": d.name, onclick: () => { nm.value = d.name; menu.hidden = true; set(); } }, el("span", { class: "t" }, "@" + d.name))));
+        } catch { menu.hidden = true; }
+      }, 200);
+    };
+    nm.addEventListener("input", suggest);
     const set = async () => {
       const name = nm.value.trim(); if (!name) return;
       try {
         const u = await getDoc(doc(db, "usernames", name.toLowerCase()));
         const d = u.exists() ? u.data() : null;
         if (!d || d.uid === OWNER_UID || d.uid === S.user.uid) { toast(`No angler named "${name}". Check the spelling.`); return; }   // the owner looks the same as someone who doesn't exist
-        st.person = { uid: d.uid, name: d.name || name }; paintWho();
+        st.person = { uid: d.uid, name: d.name || name }; st.nameDraft = ""; keep(); paintWho();
       } catch (e) { toast(errText(e)); }
     };
     nm.addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); set(); } });
-    who.replaceChildren(el("div", { class: "row", style: "gap:8px;flex-wrap:nowrap" }, nm, el("button", { class: "btn small", type: "button", id: "gk-set", onclick: set }, "Start")));
+    who.replaceChildren(el("div", { class: "row", style: "gap:8px;flex-wrap:nowrap" }, nm, el("button", { class: "btn small", type: "button", id: "gk-set", onclick: set }, "Start")), menu);
+    if (st.nameDraft) suggest();
   };
   paintWho();
   p.append(el("h1", null, "Gate keep finder"),
