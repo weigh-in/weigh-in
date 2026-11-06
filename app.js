@@ -1896,14 +1896,19 @@ async function viewWater(p) {
   const keep = () => setPref("gk-state", JSON.stringify({ origin: st.origin, label: st.label, mins: st.mins, kinds: [...st.kinds], text: st.text, person: st.person, q: st.q, nameDraft: st.nameDraft }));
   const out = el("div", { class: "stack", id: "wf-out" }), hits = el("div", { class: "list", id: "wf-hits" }), loc = el("p", { class: "hint", id: "wf-loc" });
   let token = 0;
-  async function run() {
+  function run() {   // a clue changed: save it and wait for the Search button
     keep();
     loc.textContent = st.origin ? `Starting from ${st.label || "your spot"}.` : "Pick where you are starting from, or use your location.";
-    if (!st.origin) { out.replaceChildren(); return; }
-    if (!st.kinds.size) { out.replaceChildren(el("p", { class: "muted", id: "wf-pick" }, "Tap what you want, like Rocky bank. Add more to narrow it down.")); return; }
+    out.replaceChildren(!st.origin ? el("p", { class: "muted" }, "Pick where you are starting from first.") : !st.kinds.size ? el("p", { class: "muted", id: "wf-pick" }, "Tap what you want, like Rocky bank. Add more to narrow it down, then tap Search.") : el("p", { class: "muted", id: "wf-ready" }, "Ready. Tap Search at the bottom."));
+  }
+  async function doSearch() {
+    keep();
+    loc.textContent = st.origin ? `Starting from ${st.label || "your spot"}.` : "Pick where you are starting from, or use your location.";
+    if (!st.origin) { toast("Pick where you are starting from first."); return; }
+    if (!st.kinds.size) { toast("Tap at least one clue first, like Rocky bank."); return; }
     const my = ++token; out.replaceChildren(el("p", { class: "muted" }, "Searching the map…"));
     const rows = await wfSearch(st); if (my !== token) return;
-    if (!rows) { out.replaceChildren(el("p", { class: "empty", id: "wf-err" }, "Couldn't reach the map data. Check your connection and try again."), wfWhy ? el("p", { class: "hint" }, "Problem: " + wfWhy) : null, el("button", { class: "btn small", type: "button", onclick: run }, "Try again")); return; }
+    if (!rows) { out.replaceChildren(el("p", { class: "empty", id: "wf-err" }, "Couldn't reach the map data. Check your connection and try again."), wfWhy ? el("p", { class: "hint" }, "Problem: " + wfWhy) : null, el("button", { class: "btn small", type: "button", onclick: doSearch }, "Try again")); return; }
     const shown = rows.slice(0, 15);
     out.replaceChildren(el("div", { class: "sf-left", id: "wf-left" }, el("b", null, rows.length === 1 ? "1 spot left" : `${rows.length} spots left`),
         el("span", { class: "hint" }, rows.length > 1 ? "Add more clues to narrow it down." : rows.length === 1 ? "That's the one." : "Nothing matches. Take off a clue or add more minutes."),
@@ -1990,7 +1995,8 @@ async function viewWater(p) {
       el("div", { class: "row", style: "gap:8px;flex-wrap:nowrap" }, q, el("button", { class: "btn small", type: "button", id: "wf-go", onclick: search }, "Search")),
       el("button", { class: "btn ghost small", type: "button", id: "wf-gps", style: "align-self:flex-start", onclick: gps }, "📍 Use my location"), loc, hits,
       mins, chips, name),
-    out);
+    out,
+    el("button", { class: "btn wide", type: "button", id: "wf-search", onclick: doSearch }, "🔍 Search"));
   run();
 }
 
