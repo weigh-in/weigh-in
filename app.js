@@ -622,7 +622,31 @@ function advCatches(loc, fish) {
   }
   return out;
 }
-function advRankLures(fish, at, waterT, clar, local) {
+/* "Was that a good suggestion?" answers, kept on this phone. A thumbs up makes that lure or time rank higher next time. */
+const advFbAll = () => { try { return JSON.parse(getPref("advfb", "{}")) || {}; } catch { return {}; } };
+const advFbGet = (key) => +advFbAll()[key] || 0;
+const advFbSet = (key, v) => { const a = advFbAll(); if (v) a[key] = v; else delete a[key]; setPref("advfb", JSON.stringify(a)); };
+/* What you see with your own eyes. Each answer nudges the advice. */
+const ADV_LEVEL = [["high", "Above average"], ["avg", "Average"], ["low", "Below average"], ["vlow", "Very low"]];
+const ADV_COLOR = [["clear", "Clear", 0], ["green", "Green", 1], ["tea", "Tea or stained", 1], ["muddy", "Muddy brown", 2], ["milky", "Chalky or milky", 2]];
+const ADV_FEEL = [["hot", "Hot", 86], ["warm", "Warm", 76], ["room", "Room temp", 70], ["cool", "Cool", 62], ["cold", "Cold", 50], ["freezing", "Freezing", 38]];
+const ADV_WIND = [["calm", "Calm", 1], ["light", "Light", 6], ["breezy", "Breezy", 12], ["windy", "Windy", 19], ["gusty", "Very windy", 27]];
+const ADV_ACT = [["breach", "Fish jumping or breaching"], ["rise", "Fish rising, rings on top"], ["boil", "Boils or swirls"], ["bait", "Baitfish skipping"], ["birds", "Birds diving"], ["bugs", "Bugs on the surface"], ["dead", "Nothing moving"]];
+const ADV_SURFACE = ["breach", "rise", "boil"], ADV_BAITERS = ["swimbait", "spoon", "jerkbait", "spinnerbait", "chatterbait", "crankShallow", "bigbait", "minnow", "spinner"], ADV_BOTTOM = ["jig", "worm", "dropshot", "cutbait", "crawler", "dough"], ADV_BUGGY = ["tinyjig", "spinner", "crawler", "dough"];
+function advObsFx(k, o) {      // returns [multiplier, reason] pairs for one lure
+  const out = [], acts = o.acts || [];
+  const surf = acts.some((a) => ADV_SURFACE.includes(a));
+  if (surf) { if (k === "topwater") out.push([1.8, "fish are hitting the surface right now"]); else if (ADV_BOTTOM.includes(k)) out.push([0.9, ""]); else if (ADV_BAITERS.includes(k)) out.push([1.08, ""]); }
+  if (acts.includes("bait") && ADV_BAITERS.includes(k)) out.push([k === "swimbait" || k === "minnow" ? 1.25 : 1.15, "baitfish are around, so match them"]);
+  if (acts.includes("birds")) { if (["swimbait", "spoon", "jerkbait", "bigbait"].includes(k)) out.push([1.25, "diving birds mean fish are chasing bait"]); else out.push([0.95, ""]); }
+  if (acts.includes("bugs") && ADV_BUGGY.includes(k)) out.push([1.25, "bugs are on the water, so fish are eating small stuff"]);
+  if (acts.includes("dead")) { if (k === "topwater") out.push([0.7, "nothing is moving on top"]); else if (["dropshot", "jig", "worm"].includes(k)) out.push([1.15, "slow finesse works when nothing is moving"]); }
+  if (o.level === "vlow") { if (["dropshot", "worm", "jig"].includes(k)) out.push([1.15, "very low water makes fish spooky, so go light and slow"]); else if (k === "crankDeep" || k === "bigbait") out.push([0.85, "very low water, so deep or big lures snag"]); }
+  else if (o.level === "low" && ["dropshot", "worm", "jig"].includes(k)) out.push([1.08, "below average water, fish pull off the bank"]);
+  else if (o.level === "high" && ["spinnerbait", "chatterbait", "jig", "cutbait"].includes(k)) out.push([1.12, "high water, fish tuck into cover"]);
+  return out;
+}
+function advRankLures(fish, at, waterT, clar, local, obs) {
   const rows = [];
   for (const [k, fit] of Object.entries(fish.lures)) {
     const L = ADV_LURES[k], why = [];
@@ -634,6 +658,8 @@ function advRankLures(fish, at, waterT, clar, local) {
     if (L.light === "low" && at.low) why.push("low light suits it"); if (L.light === "bright" && !at.low) why.push("bright light suits it");
     const cf = L.clar[clar]; sc *= cf; if (cf >= 1) why.push(`works well in ${ADV_CLAR[clar].toLowerCase()} water`); else if (cf < 0.6) why.push(`not ideal in ${ADV_CLAR[clar].toLowerCase()} water`);
     if (at.wind > 12) { if (!L.wind) { sc *= 0.5; why.push("wind will make it hard to fish"); } else if (k === "spinnerbait" || k === "chatterbait") { sc *= 1.1; why.push("the wind gives it cover"); } }
+    if (obs) for (const [m, w] of advObsFx(k, obs)) { sc *= m; if (w) why.unshift(w); }
+    const fv = advFbGet(fish.n + "|" + k); if (fv) { sc *= fv > 0 ? 1.3 : 0.65; why.unshift(fv > 0 ? "you said it was a good suggestion before" : "you said it wasn't a good suggestion before"); }
     const ev = local.filter((x) => x.cat === k), n = ev.length;
     if (n) { sc *= 1 + Math.min(5, n) * 0.15; why.push(`${n} catch${n > 1 ? "es" : ""} near you in the last 5 months used one`); }
     rows.push({ k, L, sc, why, n });
@@ -658,6 +684,7 @@ function advWindows(w, fish, waterT, local) {
     if (at.cloud > 60 && x.k === "day") { s += 8; why.push("cloud cover helps the midday bite"); }
     if (b0.dP <= -1 && b0.dP > -4) { s += 6; why.push("pressure is slowly falling"); }
     const mins = (ms) => { const d = new Date(ms); return d.getHours() * 60 + d.getMinutes(); }, a = mins(x.a), b = mins(x.b);
+    const fw = advFbGet(fish.n + "|win:" + x.k); if (fw) { s += fw > 0 ? 8 : -10; why.push(fw > 0 ? "you liked this time before" : "you didn't like this time before"); }
     const hits = local.filter((p) => { const m = mins(p.ms); return a <= b ? m >= a && m <= b : m >= a || m <= b; }).length;
     if (hits) { s += Math.min(24, hits * 6); why.push(`${hits} catch${hits > 1 ? "es" : ""} near you ${hits > 1 ? "were" : "was"} posted at this time of day`); }
     s = Math.max(5, Math.min(99, Math.round(s)));
@@ -665,7 +692,7 @@ function advWindows(w, fish, waterT, local) {
   });
   return res.sort((p, q) => q.s - p.s).slice(0, 3).sort((p, q) => p.a - q.a);
 }
-function advWhere(fish, at, waterT, kindRiver, w) {
+function advWhere(fish, at, waterT, kindRiver, w, obs) {
   const out = [], base = waterT < 48 ? "Fish are slow and deep. Try 10 to 25 ft near drop-offs, channel edges and deep docks, and fish slowly."
     : waterT < 60 ? "Fish move between depths. Try 5 to 15 ft on points, humps and creek mouths, and the sunny north-facing banks in the afternoon."
     : waterT < 76 ? "Fish are active and roam. Try 2 to 12 ft along weeds, docks and fallen trees."
@@ -676,37 +703,85 @@ function advWhere(fish, at, waterT, kindRiver, w) {
   if (at.wind >= 8) out.push(`Wind ${Math.round(at.wind)} mph: fish the bank or point the wind is blowing into. Baitfish get pushed there and the fish follow.`);
   else out.push("Calm water: stay back from the edge, use light line and make long casts.");
   out.push(at.low ? "Low light: fish come up shallow and into open water, so cover more of the lake." : "Bright sun: fish hold in shade and cover. Target docks, trees, weeds and the dark side of structure.");
+  if (obs) {
+    const acts = obs.acts || [];
+    if (obs.level === "vlow") out.push("Very low water: fish crowd into the deepest holes and any shade. Walk softly, use light line and make long casts.");
+    else if (obs.level === "low") out.push("Below average water: fish slide off the bank to the first drop-off. Fish a little deeper than usual.");
+    else if (obs.level === "high") out.push("High water: fish hide behind cover and out of the current. Try flooded bushes, slack water and eddies.");
+    if (obs.color === "muddy" || obs.color === "milky") out.push("Dirty water: fish by feel and sound. Use bright or noisy lures and cast close to shallow cover.");
+    else if (obs.color === "clear") out.push("Clear water: fish can see you. Use natural colors and thin line, and stay back from the edge.");
+    else if (obs.color === "green") out.push("Green water has algae in it. Fish stay shallow where the algae is thick, and bright or chartreuse lures stand out.");
+    if (acts.some((a) => ADV_SURFACE.includes(a))) out.push("Fish are showing on top. Cast to the rings or splash right away, because the fish moves on fast.");
+    if (acts.includes("birds")) out.push("Diving birds are over feeding fish. Get within casting range without running over them.");
+    if (acts.includes("bait")) out.push("Baitfish are skipping, so something is chasing them. Fish the edge of that water.");
+    if (acts.includes("bugs")) out.push("Bugs on the surface mean fish are eating small food. Go smaller and slower.");
+    if (acts.includes("dead")) out.push("Nothing is moving. Slow down, go smaller, and try a different depth every few casts.");
+  }
   return out;
 }
 function advisorCard(w, loc) {
   const st = getPref("advset", ""); let saved = {}; try { saved = JSON.parse(st) || {}; } catch { saved = {}; }
-  const P = { fish: Math.min(ADV_FISH.length - 1, +saved.fish || 0), clar: [0, 1, 2].includes(saved.clar) ? saved.clar : 1, river: !!saved.river, plan: 0, temp: null };
+  const P = { fish: Math.min(ADV_FISH.length - 1, +saved.fish || 0), clar: [0, 1, 2].includes(saved.clar) ? saved.clar : 1, river: !!saved.river, plan: 0, temp: null, obsOpen: false };
+  // what you see on the water. Kept for 4 hours, because conditions change.
+  P.obs = (() => { try { const o = JSON.parse(getPref("advobs", "null")); if (o && Date.now() - o.ts < 4 * 3600000) return { level: o.level || "", color: o.color || "", feel: o.feel || "", wind: o.wind || "", acts: Array.isArray(o.acts) ? o.acts : [] }; } catch { /* none */ } return { level: "", color: "", feel: "", wind: "", acts: [] }; })();
+  if (P.obs.feel) P.temp = (ADV_FEEL.find((f) => f[0] === P.obs.feel) || [])[2] ?? null;
+  const saveObs = () => setPref("advobs", JSON.stringify({ ts: Date.now(), ...P.obs }));
   const wrap = el("div", { class: "bite adv", id: "advisor" }), body = el("div", { class: "stack", style: "gap:10px" });
   const save = () => setPref("advset", JSON.stringify({ fish: P.fish, clar: P.clar, river: P.river }));
   const fishSel = el("select", { "aria-label": "What fish are you after", id: "adv-fish", onchange: (e) => { P.fish = +e.target.value; P.plan = 0; save(); draw(); } }, ADV_FISH.map((f, i) => el("option", { value: String(i), selected: i === P.fish ? "" : null }, f.n)));
-  const tempIn = el("input", { type: "number", id: "adv-temp", inputmode: "numeric", min: 32, max: 95, "aria-label": "Water temperature in degrees", style: "width:80px", onchange: (e) => { const v = +e.target.value; if (v >= 32 && v <= 95) { P.temp = v; draw(); } } });
+  const tempIn = el("input", { type: "number", id: "adv-temp", inputmode: "numeric", min: 32, max: 95, "aria-label": "Water temperature in degrees", style: "width:80px", onchange: (e) => { const v = +e.target.value; if (v >= 32 && v <= 95) { P.temp = v; P.obs.feel = ""; saveObs(); draw(); } } });
   const draw = () => {
+    const O = P.obs, colorRow = ADV_COLOR.find((c) => c[0] === O.color), clarNow = colorRow ? colorRow[2] : P.clar;
     const fish = ADV_FISH[P.fish], waterT = P.temp ?? P.est, local = advCatches(loc, fish), wins = advWindows(w, fish, waterT, local);
     const plans = [{ label: "Right now", ms: new Date(w.current.time).getTime(), kind: "" }, ...wins.map((x) => ({ label: `${new Date(x.a).getDate() === new Date(w.current.time).getDate() ? "Today" : "Tomorrow"} ${WINDOW_NAMES[x.k].toLowerCase()}`, ms: x.mid, kind: x.k, win: x }))];
     if (P.plan >= plans.length) P.plan = 0;
-    const plan = plans[P.plan], at = advAt(w, plan.ms, plan.kind), lures = advRankLures(fish, at, waterT, P.clar, local);
+    const plan = plans[P.plan], at = advAt(w, plan.ms, plan.kind);
+    const windRow = ADV_WIND.find((x) => x[0] === O.wind); if (windRow && P.plan === 0) at.wind = windRow[2];      // what you feel beats the forecast, for right now
+    const lures = advRankLures(fish, at, waterT, clarNow, local, P.plan === 0 ? O : { ...O, acts: [] });
     const near = local.slice().sort((a, b) => a.dKm - b.dKm).slice(0, 3);
     const range = (x) => timeOf(new Date(Math.max(x.a, new Date(w.current.time).getTime()))) + " to " + timeOf(new Date(x.b));
     tempIn.value = String(waterT);
+    const pick = (group, list, multi) => el("div", { class: "chips", role: "group", "aria-label": group }, list.map(([v, label]) => {
+      const on = multi ? O.acts.includes(v) : O[group] === v;
+      return el("button", { class: "chip", type: "button", "data-obs": group + ":" + v, "aria-pressed": String(on), onclick: () => {
+        if (multi) { O.acts = O.acts.includes(v) ? O.acts.filter((a) => a !== v) : [...O.acts.filter((a) => !(v === "dead" || a === "dead")), v]; }
+        else { O[group] = O[group] === v ? "" : v; if (group === "feel") P.temp = O.feel ? ADV_FEEL.find((f) => f[0] === O.feel)[2] : null; }
+        saveObs(); draw(); } }, label);
+    }));
+    const vote = (key) => {
+      const row = el("div", { class: "adv-vote" }), note = el("span", { class: "muted small" });
+      const paint = () => { const cur = advFbGet(key); row.querySelectorAll("button").forEach((b) => b.setAttribute("aria-pressed", String(+b.dataset.val === cur))); note.textContent = cur > 0 ? "Thanks! I'll suggest this more." : cur < 0 ? "Thanks! I'll suggest this less." : ""; };
+      row.append(el("span", { class: "muted small" }, "Good suggestion?"),
+        ...[[1, "👍 Yes"], [-1, "👎 No"]].map(([v, t]) => el("button", { class: "chip small", type: "button", "data-vote": key, "data-val": v, "aria-pressed": "false", onclick: () => { advFbSet(key, advFbGet(key) === v ? 0 : v); paint(); } }, t)), note);
+      paint(); return row;
+    };
+    const any = O.level || O.color || O.feel || O.wind || O.acts.length;
+    const feeding = P.plan === 0 && O.acts.some((a) => a !== "dead" && a !== "bugs");
     body.replaceChildren(
-      el("div", { class: "row", style: "gap:8px;align-items:center;flex-wrap:wrap" }, el("span", { class: "muted small" }, "Water temp °F"), tempIn, el("span", { class: "muted small" }, P.temp == null ? "estimated from this week's weather" : "your number")),
-      el("div", { class: "chips", role: "group", "aria-label": "Water clarity" }, ADV_CLAR.map((n, i) => el("button", { class: "chip", type: "button", "data-clar": i, "aria-pressed": String(P.clar === i), onclick: () => { P.clar = i; save(); draw(); } }, n))),
+      el("details", { class: "adv-obs", id: "adv-obs", open: P.obsOpen || any ? "" : null, ontoggle: (e) => { P.obsOpen = e.target.open; } },
+        el("summary", null, any ? "What you see right now (filled in)" : "What you see right now"),
+        el("div", { class: "stack", style: "gap:8px;margin-top:8px" },
+          el("span", { class: "muted small" }, "Tell the advisor what you see at the water. It changes the lure, where and when advice."),
+          el("b", null, "Water level"), pick("level", ADV_LEVEL),
+          el("b", null, "Water color"), pick("color", ADV_COLOR),
+          el("b", null, "How the water feels on your skin"), pick("feel", ADV_FEEL),
+          el("b", null, "Wind"), pick("wind", ADV_WIND),
+          el("b", null, "What's moving on the water"), pick("acts", ADV_ACT, true),
+          any ? el("button", { class: "link small", type: "button", id: "adv-obs-clear", style: "align-self:flex-start", onclick: () => { P.obs = { level: "", color: "", feel: "", wind: "", acts: [] }; P.temp = null; saveObs(); draw(); } }, "Clear what I see") : null)),
+      feeding ? el("p", { class: "adv-hot", id: "adv-hot" }, "🔥 Fish are feeding right now. Go with what's in front of you and cast fast.") : null,
+      el("div", { class: "row", style: "gap:8px;align-items:center;flex-wrap:wrap" }, el("span", { class: "muted small" }, "Water temp °F"), tempIn, el("span", { class: "muted small" }, P.temp == null ? "estimated from this week's weather" : O.feel ? `from how it feels (${ADV_FEEL.find((f) => f[0] === O.feel)[1].toLowerCase()})` : "your number")),
+      colorRow ? null : el("div", { class: "chips", role: "group", "aria-label": "Water clarity" }, ADV_CLAR.map((n, i) => el("button", { class: "chip", type: "button", "data-clar": i, "aria-pressed": String(P.clar === i), onclick: () => { P.clar = i; save(); draw(); } }, n))),
       el("div", { class: "chips", role: "group", "aria-label": "Type of water" }, [[false, "Lake or pond"], [true, "River or creek"]].map(([v, n]) => el("button", { class: "chip", type: "button", "data-river": v ? 1 : 0, "aria-pressed": String(P.river === v), onclick: () => { P.river = v; save(); draw(); } }, n))),
       el("b", null, "When"),
       el("div", { class: "stack", style: "gap:6px", id: "adv-when" }, wins.length ? wins.map((x) => el("div", { class: "adv-win" }, el("div", { class: "row spread" }, el("b", null, `${new Date(x.a).getDate() === new Date(w.current.time).getDate() ? "Today" : "Tomorrow"} ${WINDOW_NAMES[x.k].toLowerCase()}`), el("span", { class: "tag " + (x.s >= 75 ? "good" : x.s >= 55 ? "ok" : "bad") }, x.s + "/100")),
-        el("span", { class: "s" }, range(x)), x.why.length ? el("span", { class: "muted small" }, x.why.slice(0, 3).join(". ") + ".") : null)) : [el("p", { class: "muted small" }, "No good windows left in this forecast. Check again later.")]),
+        el("span", { class: "s" }, range(x)), x.why.length ? el("span", { class: "muted small" }, x.why.slice(0, 3).join(". ") + ".") : null, vote(fish.n + "|win:" + x.k))) : [el("p", { class: "muted small" }, "No good windows left in this forecast. Check again later.")]),
       el("b", null, "Plan for"),
       el("div", { class: "chips", role: "group", "aria-label": "Pick a time to plan for" }, plans.map((p, i) => el("button", { class: "chip", type: "button", "data-plan": i, "aria-pressed": String(P.plan === i), onclick: () => { P.plan = i; draw(); } }, p.label))),
       el("b", null, "Lure"),
       el("div", { class: "stack", style: "gap:6px", id: "adv-lures" }, lures.map((r, i) => el("div", { class: "adv-lure" }, el("div", { class: "row spread" }, el("b", null, `${i + 1}. ${r.L.n}`), r.n ? el("span", { class: "pill live" }, `${r.n} nearby`) : null),
-        el("span", { class: "s" }, `Fish it ${r.L.d}. ${r.L.how}`), el("span", { class: "muted small" }, "Why: " + r.why.slice(0, 3).join("; ") + ".")))),
+        el("span", { class: "s" }, `Fish it ${r.L.d}. ${r.L.how}`), el("span", { class: "muted small" }, "Why: " + r.why.slice(0, 3).join("; ") + "."), vote(fish.n + "|" + r.k)))),
       el("b", null, "Where"),
-      el("ul", { class: "why", id: "adv-where" }, advWhere(fish, at, waterT, P.river, w).map((x) => el("li", null, x))),
+      el("ul", { class: "why", id: "adv-where" }, advWhere(fish, at, waterT, P.river, w, P.plan === 0 ? O : { ...O, acts: [] }).map((x) => el("li", null, x))),
       near.length ? el("div", { class: "stack", style: "gap:6px", id: "adv-near" }, el("b", null, "Catches near you"),
         near.map((x) => el("div", { class: "row spread adv-near", style: "gap:8px" }, el("span", { class: "s" }, `${(x.dKm / 1.609).toFixed(1)} mi away · ${x.species}${x.lb ? " " + x.lb + " lb" : ""}${x.lure ? " on " + x.lure : ""} · ${ago(x.createdAt)}`),
           el("button", { class: "btn small ghost", type: "button", onclick: () => { S.mapFilter = { species: "", lure: "", mine: false }; S.focusSpot = x.id; go("map"); } }, "Map")))) :
@@ -787,8 +862,17 @@ function feedPosts() {
 /* What's new. Newest first. Add a new entry on top each time the app changes. */
 /* Bump APP_VERSION every time you change the app, and add a matching entry on top of UPDATES (with v: the same number).
    Phones check app.js every few minutes and offer the new version on their own. */
-const APP_VERSION = 16;
+const APP_VERSION = 18;
 const UPDATES = [
+  { id: "2026-11-08b", v: 18, date: "Nov 8", title: "Rate the advisor's suggestions", items: [
+    "New: every lure and every time in the Fishing advisor now asks Good suggestion? with a thumbs up or thumbs down.",
+    "A thumbs up makes that lure or time show up higher next time for that fish. A thumbs down pushes it lower. Tap again to take your answer back.",
+    "Your answers stay on your phone."] },
+  { id: "2026-11-08", v: 17, date: "Nov 8", title: "Tell the advisor what you see", items: [
+    "New in the Fishing advisor: What you see right now. Set the water level (above average, average, below average, very low) and the water color (clear, green, tea, muddy, chalky).",
+    "Say how the water feels on your skin (hot, warm, room temp, cool, cold, freezing). It sets the water temperature for you.",
+    "Say how windy it is, and what's moving on the water, like fish jumping, boils, baitfish skipping, birds diving or bugs.",
+    "The lure ideas, where to fish and the feeding alert change to match what you see. It remembers for 4 hours, then forgets because conditions change."] },
   { id: "2026-11-06c", v: 16, date: "Nov 6", title: "Gate keep search fixed", items: [
     "Fixed: Rocky bank never found anything because of a mistake in how the app asked the map server. It now finds rocky banks that are right next to a lake, river or creek.",
     "Fixed: Bridge only counts bridges that actually go over water.",
