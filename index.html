@@ -10,11 +10,24 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Weigh-In">
 <link rel="manifest" href="manifest.webmanifest">
-<link rel="icon" href="icon-192.png">
-<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<link rel="icon" href="icons/icon-192.png">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Alfa+Slab+One&family=Barlow:wght@400;500;600;700&family=Barlow+Condensed:wght@500;600;700&display=swap">
-<link rel="stylesheet" href="style.css">
+<script>
+  // Decides which copy of the app to load, so a new version is never stuck behind an old saved copy.
+  // The ?v=N in a link wins, then the version this phone last updated to, then a fresh copy every 5 minutes.
+  (function () {
+    var v = "", stored = 0;
+    try { stored = parseInt(localStorage.getItem("weighin-appv"), 10) || 0; } catch (e) {}
+    try { v = new URLSearchParams(location.search).get("v") || ""; } catch (e) {}
+    var n = parseInt(v, 10);
+    if (n > stored) { stored = n; try { localStorage.setItem("weighin-appv", String(n)); } catch (e) {} }
+    if (!v) v = stored ? String(stored) : "t" + Math.floor(Date.now() / 300000);
+    window.__appv = v;
+    document.write('<link rel="stylesheet" href="style.css?v=' + encodeURIComponent(v) + '">');
+  })();
+</script>
 </head>
 <body>
 <div id="app">
@@ -36,7 +49,12 @@
   <option>Spoon</option><option>Inline spinner</option><option>Fly</option><option>Live minnow</option>
   <option>Nightcrawler</option><option>Cut bait</option><option>Chicken liver</option>
 </datalist>
-<script type="module" src="app.js"></script>
+<script>
+  (function () {
+    var m = document.createElement("script"); m.type = "module"; m.src = "app.js?v=" + encodeURIComponent(window.__appv || "");
+    document.body.appendChild(m);
+  })();
+</script>
 <script>
   if ("serviceWorker" in navigator) {
     window.addEventListener("load", () => navigator.serviceWorker.register("sw.js").catch(() => {}));

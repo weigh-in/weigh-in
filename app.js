@@ -884,8 +884,13 @@ function feedPosts() {
 /* What's new. Newest first. Add a new entry on top each time the app changes. */
 /* Bump APP_VERSION every time you change the app, and add a matching entry on top of UPDATES (with v: the same number).
    Phones check app.js every few minutes and offer the new version on their own. */
-const APP_VERSION = 19;
+const APP_VERSION = 20;
+try { if ((parseInt(localStorage.getItem("weighin-appv"), 10) || 0) < APP_VERSION) localStorage.setItem("weighin-appv", String(APP_VERSION)); } catch { /* private mode */ }
 const UPDATES = [
+  { id: "2026-11-08d", v: 20, date: "Nov 8", title: "Updates really install now", items: [
+    "Fixed: some phones kept showing an old copy of the app even after an update, so new buttons never appeared. The app now loads the right version every time.",
+    "Open the link with the version number on the end, like ?v=20, to force the newest copy.",
+    "From now on the green Update now bar installs the new version for real."] },
   { id: "2026-11-08c", v: 19, date: "Nov 8", title: "Different lures every time", items: [
     "The Fishing advisor now mixes up its lure ideas, so you don't get the same three every time. Better lures still come up more often.",
     "New 💡 Suggest a lure button. Each press gives you one new lure to try, with how to fish it and why. It won't repeat the last few.",
@@ -2220,7 +2225,8 @@ function showUpdateBar() {
 }
 async function applyUpdate() {
   const b = document.getElementById("update-now"); if (b) { b.disabled = true; b.textContent = "Updating…"; }
-  try { await Promise.all(["app.js", "style.css", "index.html", "./"].map((u) => fetch(u, { cache: "reload" }).catch(() => {}))); } catch { /* reload anyway */ }
+  try { localStorage.setItem("weighin-appv", String(updatePending)); } catch { /* private mode */ }     // the page loads app.js?v=<this>, a copy the phone has never saved
+  try { await Promise.all(["index.html", "./"].map((u) => fetch(u, { cache: "reload" }).catch(() => {}))); } catch { /* reload anyway */ }
   location.reload();
 }
 setTimeout(checkUpdate, 4000);
