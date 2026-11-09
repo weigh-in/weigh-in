@@ -884,9 +884,13 @@ function feedPosts() {
 /* What's new. Newest first. Add a new entry on top each time the app changes. */
 /* Bump APP_VERSION every time you change the app, and add a matching entry on top of UPDATES (with v: the same number).
    Phones check app.js every few minutes and offer the new version on their own. */
-const APP_VERSION = 23;
+const APP_VERSION = 24;
 try { if ((parseInt(localStorage.getItem("weighin-appv"), 10) || 0) < APP_VERSION) localStorage.setItem("weighin-appv", String(APP_VERSION)); } catch { /* private mode */ }
 const UPDATES = [
+  { id: "2026-11-09d", v: 24, date: "Nov 9", title: "Videos in posts", items: [
+    "You can add a video of up to 30 seconds to a catch. Tap Record a video, or Choose a video, when you post.",
+    "Videos show a Play video button on the feed. Tap it to watch.",
+    "The free app has no file storage, so clips are squeezed small. If a video is too big, record a shorter one inside the app."] },
   { id: "2026-11-09c", v: 23, date: "Nov 9", title: "Knot pictures and videos", items: [
     "New Knot book in Fishing school: step by step pictures for the improved clinch, Palomar and uni knots.",
     "Every lesson now has a Watch a video button that opens a YouTube search for that topic."] },
@@ -1025,6 +1029,7 @@ function makeCard(p) {
   const mine = p.uid === S.user.uid;
   return el("article", { class: "card", "data-id": p.id },
     p.photo ? el("img", { src: p.photo, alt: `${p.species} caught by ${p.name}`, loading: "lazy" }) : el("div", { class: "nophoto" }, "No photo"),
+    p.vid ? vidCardLayer(p) : null,
     el("div", { class: "shade" }),
     el("div", { class: "info" },
       el("button", { class: "who", type: "button", "aria-label": `See ${p.name}'s catches`, onclick: () => openAngler(p.uid, p.name) }, avatar(p.uid, p.name, 30), el("span", null, "@" + p.name + "  ·  " + catchLabel(p))),
@@ -1055,10 +1060,123 @@ async function toggleLike(p) {
   try { on ? await deleteDoc(doc(db, "likes", id)) : await setDoc(doc(db, "likes", id), { postId: p.id, uid: S.user.uid, createdAt: serverTimestamp() }); }
   catch (e) { S.likes.set(p.id, set); paintLikes(); toast(errText(e)); }
 }
+/* ======================= VIDEOS (up to 30 seconds) ======================= */
+// The free plan has no file storage, so a clip is squeezed small and saved in pieces inside the database.
+const VID_MAX_SEC = 30, VID_BITS = 450000, VID_MAX_BYTES = 2800000, VID_CHUNK = 600000;
+let draftVid = null;   // { blob, mime, dur, poster }
+const vidUrls = new Map();
+const vidMime = () => { for (const m of ["video/mp4;codecs=avc1", "video/webm;codecs=vp8,opus", "video/webm", "video/mp4"]) { try { if (window.MediaRecorder?.isTypeSupported(m)) return m; } catch { /* ignore */ } } return ""; };
+const vidTime = (s) => `${Math.floor(s / 60)}:${String(Math.round(s % 60)).padStart(2, "0")}`;
+function vidPoster(v) {
+  try { const w = v.videoWidth || 640, h = v.videoHeight || 480, k = Math.min(1, 720 / Math.max(w, h)); const c = document.createElement("canvas"); c.width = Math.round(w * k); c.height = Math.round(h * k);
+    c.getContext("2d").drawImage(v, 0, 0, c.width, c.height); return c.toDataURL("image/jpeg", 0.7); } catch { return ""; }
+}
+function vidRecord(stream, onTick) {   // records a stream at a low bitrate; resolves with { blob, mime, dur }
+  return new Promise((resolve, reject) => {
+    const mime = vidMime(); let rec;
+    try { rec = new MediaRecorder(stream, { ...(mime ? { mimeType: mime } : {}), videoBitsPerSecond: VID_BITS, audioBitsPerSecond: 48000 }); } catch (e) { reject(e); return; }
+    const parts = []; const t0 = Date.now(); let timer;
+    rec.ondataavailable = (e) => { if (e.data?.size) parts.push(e.data); };
+    rec.onstop = () => { clearInterval(timer); resolve({ blob: new Blob(parts, { type: rec.mimeType || mime || "video/webm" }), mime: rec.mimeType || mime || "video/webm", dur: Math.min(VID_MAX_SEC, (Date.now() - t0) / 1000) }); };
+    rec.onerror = (e) => { clearInterval(timer); reject(e.error || new Error("record")); };
+    rec.start(500);
+    timer = setInterval(() => { const sec = (Date.now() - t0) / 1000; onTick?.(sec); if (sec >= VID_MAX_SEC && rec.state !== "inactive") rec.stop(); }, 200);
+    vidRecord.stop = () => { if (rec.state !== "inactive") rec.stop(); };
+  });
+}
+function vidField(onChange) {
+  const box = el("div", { class: "field", id: "vid-box" });
+  const paint = () => {
+    if (draftVid) {
+      const v = el("video", { src: URL.createObjectURL(draftVid.blob), controls: "", playsinline: "", muted: "", class: "vid-prev", id: "vid-prev" });
+      box.replaceChildren(el("span", null, "Video"), v, el("span", { class: "hint" }, `${vidTime(draftVid.dur)} · ${(draftVid.blob.size / 1e6).toFixed(1)} MB`),
+        el("button", { class: "link", type: "button", id: "vid-remove", style: "align-self:flex-start", onclick: () => { draftVid = null; onChange(); paint(); } }, "Remove video"));
+      return;
+    }
+    const file = el("input", { type: "file", accept: "video/*", id: "vid-file", hidden: "", onchange: async (e) => { const f = e.target.files?.[0]; e.target.value = ""; if (f) await fromFile(f); } });
+    box.replaceChildren(el("span", null, "Video (optional, up to 30 seconds)"),
+      el("div", { class: "row", style: "gap:8px;flex-wrap:wrap" },
+        el("button", { class: "btn small", type: "button", id: "vid-rec", onclick: openRecorder }, "🎥 Record a video"),
+        el("button", { class: "btn small ghost", type: "button", id: "vid-pick", onclick: () => file.click() }, "Choose a video"), file),
+      el("span", { class: "hint" }, "Clips are squeezed small so the free app can hold them. Fishing videos only."));
+  };
+  async function fromFile(f) {
+    toast("Getting your video ready…");
+    const url = URL.createObjectURL(f), v = document.createElement("video"); v.muted = true; v.playsInline = true; v.src = url;
+    try {
+      await new Promise((ok, no) => { v.onloadedmetadata = ok; v.onerror = no; });
+      if (v.duration > VID_MAX_SEC + 1) { toast(`That video is ${Math.round(v.duration)} seconds. The limit is 30.`); return; }
+      if (f.size <= VID_MAX_BYTES) { await new Promise((ok) => { v.onseeked = ok; v.currentTime = Math.min(0.5, v.duration / 2); }); draftVid = { blob: f, mime: f.type || "video/mp4", dur: v.duration, poster: vidPoster(v) }; onChange(); paint(); return; }
+      const cap = v.captureStream || v.mozCaptureStream;
+      if (!cap || !window.MediaRecorder) { toast("That video is too big for the free app. Tap Record a video to film one inside the app."); return; }
+      toast("Squeezing your video. This takes about as long as the video.");
+      await v.play(); const poster = vidPoster(v);
+      v.onended = () => vidRecord.stop?.();
+      const out = await vidRecord(cap.call(v), () => { if (v.ended) vidRecord.stop?.(); });
+      if (out.blob.size > VID_MAX_BYTES) { toast("Still too big. Try a shorter video."); return; }
+      draftVid = { ...out, dur: v.duration || out.dur, poster }; onChange(); paint();
+    } catch { toast("Couldn't read that video. Try Record a video instead."); }
+    finally { URL.revokeObjectURL(url); }
+  }
+  function openRecorder() {
+    if (!navigator.mediaDevices?.getUserMedia || !window.MediaRecorder) { toast("This phone can't record in the app. Try Choose a video."); return; }
+    let stream = null, closed = false;
+    const live = el("video", { class: "vid-prev", id: "vid-live", muted: "", playsinline: "", autoplay: "" });
+    const clock = el("b", { id: "vid-clock" }, "0:00 / 0:30");
+    const go = el("button", { class: "btn", type: "button", id: "vid-go" }, "● Start");
+    const cancel = el("button", { class: "link", type: "button", id: "vid-cancel" }, "Cancel");
+    const shut = () => { closed = true; stream?.getTracks().forEach((t) => t.stop()); box.replaceChildren(); paint(); };
+    cancel.onclick = () => { vidRecord.stop?.(); shut(); };
+    box.replaceChildren(el("span", null, "Record a video"), live, el("div", { class: "row", style: "gap:10px;align-items:center" }, go, clock, cancel));
+    navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment", width: { ideal: 640 }, height: { ideal: 480 } }, audio: true }).then((s) => {
+      if (closed) { s.getTracks().forEach((t) => t.stop()); return; }
+      stream = s; live.srcObject = s; live.muted = true; live.play().catch(() => {});
+      let running = false;
+      go.onclick = async () => {
+        if (running) { vidRecord.stop?.(); return; }
+        running = true; go.textContent = "■ Stop"; go.classList.add("danger");
+        try {
+          const out = await vidRecord(s, (sec) => { clock.textContent = `${vidTime(sec)} / 0:30`; });
+          const poster = vidPoster(live);
+          s.getTracks().forEach((t) => t.stop());
+          if (out.blob.size > VID_MAX_BYTES) { toast("That clip came out too big. Try a shorter one."); closed = true; box.replaceChildren(); paint(); return; }
+          draftVid = { ...out, poster }; closed = true; onChange(); paint();
+        } catch { toast("Couldn't record. Check that the camera is allowed."); shut(); }
+      };
+    }).catch(() => { toast("Allow the camera and microphone to record, or tap Choose a video."); shut(); });
+  }
+  paint();
+  return box;
+}
+async function vidSave(pid, uid, d) {   // stores the clip in pieces: vids/{pid}_{n}
+  const url = await new Promise((ok, no) => { const r = new FileReader(); r.onload = () => ok(r.result); r.onerror = no; r.readAsDataURL(d.blob); });
+  const b64 = String(url).slice(String(url).lastIndexOf(",") + 1), n = Math.ceil(b64.length / VID_CHUNK);
+  for (let i = 0; i < n; i++) await setDoc(doc(db, "vids", `${pid}_${i}`), { pid, uid, i, d: b64.slice(i * VID_CHUNK, (i + 1) * VID_CHUNK) });
+  return n;
+}
+async function vidLoad(p) {
+  if (vidUrls.has(p.id)) return vidUrls.get(p.id);
+  const snap = await getDocs(query(collection(db, "vids"), where("pid", "==", p.id)));
+  const parts = snap.docs.map((d) => d.data()).sort((a, b) => a.i - b.i);
+  if (!parts.length || parts.length < (p.vid?.n || 1)) throw new Error("missing");
+  const bin = atob(parts.map((x) => x.d).join("")), u8 = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) u8[i] = bin.charCodeAt(i);
+  const url = URL.createObjectURL(new Blob([u8], { type: p.vid?.mime || "video/mp4" })); vidUrls.set(p.id, url); return url;
+}
+function vidCardLayer(p) {
+  const btn = el("button", { class: "vid-play", type: "button", "aria-label": `Play video, ${vidTime(p.vid.dur || 0)}`, onclick: async (e) => {
+    e.stopPropagation(); btn.disabled = true; btn.textContent = "Loading…";
+    try { const url = await vidLoad(p); const v = el("video", { class: "vid-feed", src: url, controls: "", playsinline: "", autoplay: "", loop: "" }); btn.replaceWith(v); v.play().catch(() => {}); }
+    catch { btn.disabled = false; btn.textContent = "▶ Play video"; toast("Couldn't load the video. Try again."); }
+  } }, `▶ Play video · ${vidTime(p.vid.dur || 0)}`);
+  return btn;
+}
+async function vidDelete(pid, n) { for (let i = 0; i < (n || 12); i++) await deleteDoc(doc(db, "vids", `${pid}_${i}`)).catch(() => {}); }
 async function deletePost(p) {
   if (!confirm("Delete this catch? This can't be undone.")) return;
   try {
     await deleteDoc(doc(db, "posts", p.id)); cardCache.delete(p.id);
+    if (p.vid) vidDelete(p.id, p.vid.n);
     deleteDoc(doc(db, "spots", p.id)).catch(() => {}); // its map pin, if it had one
     toast("Catch deleted.");
   } catch (e) { toast(errText(e)); }
@@ -1333,6 +1451,7 @@ function viewPost(p) {
   const f = el("form", { novalidate: true },
     el("div", { class: "field" }, el("span", null, "Photo"), preview, removeBtn,
       el("span", { class: "hint" }, "Fishing photos only. Anything else gets removed and the account can be banned.")),
+    vidField(() => { if (draftVid && !draftPhoto) { draftPhoto = draftVid.poster || ""; paintPhoto(); } }),
     el("label", { class: "field" }, el("span", null, "Fish type"),
       el("input", { id: "f-species", name: "species", list: "species", maxlength: 40, placeholder: "Largemouth Bass", autocomplete: "off", required: true })),
     el("div", { class: "two" },
@@ -1385,8 +1504,15 @@ function viewPost(p) {
     }
     try {
       const lure = String(fd.get("lure") || "").trim();
-      const ref = await addDoc(collection(db, "posts"), {
-        uid: S.user.uid, name: S.name, species, lb, inches,
+      const ref = doc(collection(db, "posts")); let vinfo = null;
+      if (draftVid) {
+        btn.textContent = "Saving video…";
+        try { const n = await vidSave(ref.id, S.user.uid, draftVid); vinfo = { n, mime: draftVid.mime.split(";")[0], dur: Math.round(draftVid.dur * 10) / 10 }; }
+        catch (err) { vidDelete(ref.id, 8); toast("Couldn't save the video: " + errText(err)); btn.disabled = false; btn.textContent = "Post catch"; return; }
+        btn.textContent = "Posting…";
+      }
+      await setDoc(ref, {
+        uid: S.user.uid, name: S.name, species, lb, inches, ...(vinfo ? { vid: vinfo } : {}),
         lure, spot: spotText, city: cityText, state: stateCode,
         catchDate: dateStr, photo: draftPhoto || "", tournamentId: t ? t.id : "", tournamentName: t ? t.name : "",
         phase: phaseIdx, createdAt: serverTimestamp(),
@@ -1400,7 +1526,7 @@ function viewPost(p) {
             precise: exact, catchDate: dateStr, spot: spotText, city: cityText, state: stateCode, thumb: draftPhoto ? await thumbFrom(draftPhoto) : "", createdAt: serverTimestamp() });
         } catch { pinFailed = true; }
       }
-      draftPhoto = ""; draftLoc = null; draftSrc = ""; draftWhere = "";
+      draftPhoto = ""; draftVid = null; draftLoc = null; draftSrc = ""; draftWhere = "";
       toast(pinFailed ? `Posted your ${species}, but the map pin didn't save.` : pin ? `Posted your ${species} and put it on the map!` : `Posted your ${species}!`); go("feed");
     } catch (err) { toast(errText(err)); btn.disabled = false; btn.textContent = "Post catch"; }
   });
