@@ -311,3 +311,25 @@ a.btn.small{text-decoration:none;display:inline-flex;align-items:center}
 .adv-hot{margin:0;padding:8px 10px;border-radius:10px;background:rgba(231,111,61,.15);font-weight:600}
 .adv-vote{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:2px}.adv-vote .chip{padding:2px 10px;min-height:30px}
 .adv-feature{border:2px solid var(--accent,#1F5C4D);border-radius:12px;padding:10px;background:rgba(31,92,77,.08)}
+/* fishing school */
+.sch-me{display:flex;align-items:center;gap:12px;width:100%;padding:12px;border-radius:14px;border:2px solid var(--line);background:var(--water);font:inherit;color:inherit;cursor:pointer}
+.sch-badge{font-size:30px;line-height:1;flex:none}
+.sch-rank{display:flex;flex-direction:column;gap:8px;padding:14px;border-radius:14px;background:var(--water);border:1px solid var(--line)}
+.sch-bar{height:10px;border-radius:99px;background:rgba(127,127,127,.25);overflow:hidden}
+.sch-bar i{display:block;height:100%;border-radius:99px;background:#1F5C4D;transition:width .3s}
+.sch-course{display:flex;align-items:center;gap:12px;width:100%;padding:12px;border-radius:14px;border:1px solid var(--line);background:var(--water);font:inherit;color:inherit;cursor:pointer;text-align:left}
+.sch-ico{font-size:30px;flex:none}
+.sch-day{display:flex;align-items:center;gap:10px;padding:12px;border-radius:14px;border:1px solid var(--line);background:var(--water);opacity:.7}
+.sch-day.open,.sch-day.done{opacity:1}.sch-day.open{border-color:#1F5C4D;border-width:2px}
+.sch-dot{font-size:22px;flex:none}
+.sch-lib{border:1px solid var(--line);border-radius:12px;padding:10px 12px;background:var(--water)}
+.sch-lib summary{cursor:pointer;font-weight:600}
+.sch-card{padding:16px;border-radius:14px;background:var(--water);border:1px solid var(--line)}
+.sch-card h2{margin:0 0 8px}.sch-card p{margin:0;font-size:17px;line-height:1.5}
+.sch-opt{display:block;width:100%;text-align:left;padding:14px;border-radius:12px;border:2px solid var(--line);background:var(--water);font:inherit;color:inherit;cursor:pointer;font-size:16px}
+.sch-opt.right{border-color:#2e8b57;background:rgba(46,139,87,.18)}.sch-opt.wrong{border-color:#c0392b;background:rgba(192,57,43,.15)}
+.sch-opt:disabled{opacity:1;cursor:default}
+.sch-why{padding:12px;border-radius:12px}.sch-why.ok{background:rgba(46,139,87,.15)}.sch-why.bad{background:rgba(192,57,43,.12)}
+.sch-result{display:flex;flex-direction:column;align-items:center;gap:6px;padding:20px;border-radius:14px;background:var(--water);border:1px solid var(--line);text-align:center}
+.sch-big{font-size:44px;font-weight:800;line-height:1}
+.sch-rankup{padding:8px 14px;border-radius:99px;background:#E76F3D;color:#fff;font-weight:700}

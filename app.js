@@ -884,9 +884,16 @@ function feedPosts() {
 /* What's new. Newest first. Add a new entry on top each time the app changes. */
 /* Bump APP_VERSION every time you change the app, and add a matching entry on top of UPDATES (with v: the same number).
    Phones check app.js every few minutes and offer the new version on their own. */
-const APP_VERSION = 20;
+const APP_VERSION = 21;
 try { if ((parseInt(localStorage.getItem("weighin-appv"), 10) || 0) < APP_VERSION) localStorage.setItem("weighin-appv", String(APP_VERSION)); } catch { /* private mode */ }
 const UPDATES = [
+  { id: "2026-11-09", v: 21, date: "Nov 9", title: "Fishing school", items: [
+    "New in Profile: Fishing school. Learn to fish with short daily lessons, like Duolingo.",
+    "Pick a course: Permits and rules (1 day), Weekend start (2 days), Beginner in 5 days, or the Full week (7 days). Each day opens one lesson, and a final quiz comes after.",
+    "Don't want to wait? Tap Do it now to open the next day early.",
+    "Or take a regular quiz on any topic. A higher score gives more points and a higher fishing rank, from Minnow all the way up to Lake legend.",
+    "New Beginner guide with your first 10 minutes, a rules checklist and a list of fishing words.",
+    "See who has the most points in Top anglers."] },
   { id: "2026-11-08d", v: 20, date: "Nov 8", title: "Updates really install now", items: [
     "Fixed: some phones kept showing an old copy of the app even after an update, so new buttons never appeared. The app now loads the right version every time.",
     "Open the link with the version number on the end, like ?v=20, to force the newest copy.",
@@ -2209,6 +2216,298 @@ async function viewWater(p) {
   run();
 }
 
+/* ======================= FISHING SCHOOL: lessons, quizzes, ranks =======================
+   Lessons are general, beginner-level fishing knowledge. Fishing laws differ by state and country, so the rules lesson
+   teaches how to find and follow YOUR local rules. It is not legal advice. */
+const Q = (q, right, wrong, why) => ({ q, right, wrong, why });
+const SCH_LESSONS = {
+  gear: { n: "Your gear", icon: "🎣", sum: "Rod, reel, line, hooks and the small stuff.", cards: [
+    ["The basic setup", "You need a rod, a reel, line, a hook, and something on the hook (bait or a lure). That's it. Start simple. A spinning rod and reel about 6 to 7 feet long with medium power catches almost anything in a pond or lake."],
+    ["Spinning or baitcasting?", "A spinning reel hangs under the rod. It's the easiest to learn and the best place to start. A baitcasting reel sits on top and is great later, but beginners get tangles called backlash. Start with spinning."],
+    ["Fishing line", "Monofilament is cheap, stretchy and forgiving. Good first line. Braid is thin and very strong with no stretch. Fluorocarbon is hard for fish to see. The number on the spool, like 8 lb test, is about how many pounds of pull the line can take before it breaks. 6 to 10 lb is a good start."],
+    ["Hooks", "Hook sizes can be confusing. With plain numbers, a bigger number means a smaller hook: #12 is tiny and #1 is bigger. After that comes 1/0, 2/0 and so on, and there a bigger number means a bigger hook. Small hooks (#6 to #10) for panfish, bigger ones for bass and catfish. Pinching the barb flat makes a hook easier to remove."],
+    ["Small stuff that helps", "Bring pliers, line clippers, a measuring tape, a small net, a few bobbers and weights, and a bag for trash. Polarized sunglasses cut the glare so you can see into the water, and they protect your eyes. Also bring water, sunscreen and a hat."]],
+    q: [Q("Which reel is the easiest for a beginner?", "A spinning reel", ["A baitcasting reel", "A fly reel", "A trolling reel"], "Spinning reels hang under the rod and rarely tangle, so they're the best place to start."),
+      Q("What does \"10 lb test\" mean on fishing line?", "The line can take about 10 pounds of pull before it breaks", ["The line is 10 pounds heavy", "The line is 10 feet long", "It only catches fish up to 10 inches"], "Test is the strength of the line."),
+      Q("Which line is cheap, a little stretchy and forgiving?", "Monofilament", ["Braid", "Steel wire", "Fluorocarbon only"], "Mono is the classic beginner line."),
+      Q("Which hook is bigger?", "A #1 hook", ["A #12 hook", "They are the same size", "It depends on the color"], "With plain numbers, a smaller number is a bigger hook."),
+      Q("Polarized sunglasses help because they...", "Cut glare so you can see into the water and protect your eyes", ["Make fish bite more", "Make the line stronger", "Keep bugs away"], "They also protect your eyes from hooks.")] },
+  knots: { n: "Knots and rigs", icon: "🪢", sum: "Tie your line on so it doesn't break, and set up simple rigs.", cards: [
+    ["Why knots matter", "Your knot is the weakest point of your line. A bad knot loses fish. Always wet the knot with water before you tighten it. Dry line gets hot from friction and weakens. Pull it tight slowly, then trim the tail."],
+    ["Improved clinch knot", "A classic for hooks and lures. Thread the line through the eye, wrap the tail around the line 5 to 7 times, pass the tail through the small loop next to the eye, then back through the big loop. Wet it, pull tight, trim."],
+    ["Palomar knot", "Strong and easy. Double about 6 inches of line into a loop. Pass the loop through the eye, tie a loose overhand knot, then slip the hook or lure through the loop. Wet it and pull tight. It works on mono, braid and fluorocarbon."],
+    ["Three easy rigs", "Bobber rig: a bobber on the line above the hook holds the bait at the depth you want and shows you bites. Split shot rig: tiny weights pinched on the line above a hook for bait. Texas rig: a bullet weight on the line, then a hook buried in a plastic worm so the point doesn't snag weeds."],
+    ["Check your line", "After a snag or a big fish, run your fingers down the last few feet of line. If it feels rough or nicked, cut it off and tie on again. Twisted line? Add a small swivel or let the lure drift behind a boat to untwist it."]],
+    q: [Q("What should you do before tightening a knot?", "Wet it with water", ["Heat it with a lighter", "Pull it as hard as you can fast", "Add glue"], "Wetting stops friction heat from weakening the line."),
+      Q("Which is a strong, easy knot beginners learn?", "The Palomar knot", ["A square knot", "A shoelace bow", "A granny knot"], "The Palomar is simple and very strong."),
+      Q("Where does the bobber go on a bobber rig?", "On the line above the hook", ["On the hook", "At the end of the rod", "Under the weight"], "It holds the bait at a depth and shows the bite."),
+      Q("Why is a Texas rig good around weeds and wood?", "The hook point hides in the plastic, so it snags less", ["It floats on the surface", "It makes a loud splash", "It uses no hook"], "That is called weedless."),
+      Q("The last few feet of your line feel rough. You should...", "Cut it off and tie on again", ["Keep fishing", "Add more weight", "Dry it in the sun"], "Nicked line breaks on the next fish.")] },
+  where: { n: "Where the fish are", icon: "📍", sum: "Find food, cover and comfortable water.", cards: [
+    ["Food, cover, comfort", "Fish need three things: food to eat, cover to hide in, and comfortable water (the right temperature and enough oxygen). Find those and you find fish. Open featureless water is usually empty."],
+    ["Structure and edges", "Fish hang around things: docks, fallen trees, weed lines, rocks, drop-offs and points. Even better are edges, where two things meet, like weeds next to open water or shallow water next to deep water."],
+    ["Fishing from shore", "You don't need a boat. Try points that stick out, creek mouths where water flows in, dams, bridges, fishing piers, and the bank around docks. Walk and cast a lot. Move on if nothing bites in 20 minutes."],
+    ["Rivers and creeks", "Fish face upstream and wait for food to drift to them. They rest in slow water next to fast water. Look for eddies behind rocks, deep holes, bends and the end of a pool. Cast upstream and let the bait drift down naturally."],
+    ["Read the water", "Rings or splashes on top mean fish are feeding. Birds diving mean fish are pushing baitfish up. Tiny fish jumping or flicking mean something is chasing them. Muddy water makes fish stay close to cover. Clear water makes them spooky."]],
+    q: [Q("Fish need food, cover and what else?", "Comfortable water (temperature and oxygen)", ["Loud noise", "Sunburn", "Cold concrete"], "If the water isn't comfortable they leave."),
+      Q("Which is a good place to try first from shore?", "Where a creek flows into the lake", ["The middle of a bare sandy flat", "A parking lot", "Far from any cover"], "Moving water brings food and fish."),
+      Q("In a river, which way do fish usually face?", "Upstream", ["Downstream", "At the bank", "Straight up"], "They wait for food to drift to them."),
+      Q("Birds diving at the water usually mean...", "Fish are pushing baitfish to the top", ["The water is too cold", "There are no fish", "It will rain"], "Follow the birds."),
+      Q("What is an \"edge\"?", "Where two types of areas meet, like weeds and open water", ["The end of your line", "The side of a boat", "A kind of hook"], "Fish like to hunt along edges.")] },
+  weather: { n: "Weather, seasons and timing", icon: "🌤️", sum: "When fish bite, and when to stay home.", cards: [
+    ["Water temperature runs everything", "Fish are cold-blooded, so water temperature sets how active they are. Most freshwater fish feed best in water that is not too cold and not too hot. In cold water they slow down. In very hot water they get lazy and go deep or into shade."],
+    ["Time of day", "Dawn and dusk are low light, so fish feel safe and feed in the shallows. Midday sun pushes fish into shade or deeper water. Cloudy days can make the bite last all day."],
+    ["Wind", "A light breeze ruffles the surface, so fish are less spooked, and wind pushes food against the bank where fish wait. Strong wind makes casting and boating hard and dangerous."],
+    ["Fronts and pressure", "When a storm is coming and the pressure falls slowly, fish often feed hard. After a sudden cold front the bite often slows. Then use smaller baits and fish slowly."],
+    ["Seasons", "Spring: fish move shallow to spawn. Be gentle and release them. Summer: fish early and late, then deeper and shaded. Fall: fish feed heavily before winter, so moving baits work. Winter: fish are slow and deep, so use small baits and fish slowly."],
+    ["Storm safety", "If you hear thunder, leave the water and the shore. Don't stand under a tree. Wait 30 minutes after the last thunder before you go back. A fishing rod is a lightning rod."]],
+    q: [Q("Why are dawn and dusk often the best times?", "Low light makes fish feel safe to feed", ["The water is warmest then", "Fish are asleep", "There are no boats"], "Low light means safe hunting."),
+      Q("After a sudden cold front, fish often...", "Slow down, so use small baits fished slowly", ["Bite faster than ever", "Leave the lake", "Only eat at midday"], "Slow down to match them."),
+      Q("You hear thunder. What should you do?", "Leave the water and shore and wait 30 minutes after the last thunder", ["Keep fishing but stay low", "Stand under a tree", "Use a shorter rod"], "Lightning can strike from miles away."),
+      Q("Why does water temperature matter so much?", "Fish are cold-blooded, so it sets how active they are", ["It changes the color of the fish", "It makes line stretch", "It changes the moon"], "Temperature controls their metabolism."),
+      Q("In fall, fish usually...", "Feed heavily to get ready for winter", ["Stop eating", "Only eat plants", "Hide in mud"], "Moving baits work well.")] },
+  lures: { n: "Lures and bait", icon: "🪱", sum: "What to put on the hook and how to work it.", cards: [
+    ["Live and natural bait", "Worms, minnows, crickets and corn are simple and work for many fish, especially panfish, trout and catfish. A worm under a bobber is a classic first setup. Check the rules: some waters ban certain live bait, like live fish."],
+    ["Lures", "Hard baits: crankbaits dive and wobble, topwater lures splash on the surface, jerkbaits look like a hurt minnow. Soft plastics: worms, creature baits and swimbaits. Metal: spoons, spinners and jigs. You don't need them all. Pick a few and learn them."],
+    ["Colors", "In dirty water use bright or loud lures so fish can find them. In clear water use natural colors like green, brown and silver, that match the baitfish. Don't overthink color. Where you put the lure matters more."],
+    ["How you move it", "Try a steady retrieve, then stop-and-go, then twitches. Fish tell you what they want by biting. Go slower in cold water and faster in warm water. If nothing bites in 20 minutes, change something: the lure, the depth or the spot."],
+    ["Feel the bite", "When you feel a tap or see the line jump, reel down and sweep the rod up firmly to set the hook. With circle hooks don't jerk. Just reel steadily and let the fish hook itself. Keep the line tight and the rod tip up while you fight the fish."]],
+    q: [Q("Where does a topwater lure work?", "On the surface", ["On the bottom", "Only under ice", "Only in rivers"], "It splashes and fish hit it from below."),
+      Q("In muddy water you should usually try...", "Bright or noisy lures", ["Clear lures only", "No lure at all", "Very small, dull lures"], "Fish find them by sight and sound."),
+      Q("You are using a circle hook. How do you set it?", "Reel steadily without a big jerk", ["Swing the rod over your head", "Let the fish run for a minute", "Loosen the drag"], "Circle hooks set themselves."),
+      Q("In cold water, how should you move your bait?", "Slowly", ["As fast as you can", "Not at all, ever", "Only with big splashes"], "Cold fish are slow."),
+      Q("You feel a bite. What do you do first?", "Keep the line tight and set the hook with a firm sweep", ["Drop the rod", "Let the line go slack", "Pull the line by hand"], "A tight line keeps the hook in.")] },
+  rules: { n: "Licenses, permits and rules", icon: "📋", sum: "What you need to fish legally, and where to check.", cards: [
+    ["Fishing license", "In most places, adults need a fishing license to fish public waters. The age is different in each state and country. Kids are often free. Some places have free fishing days. You can buy a license from your state wildlife agency, online, or at licensed shops. Carry it, or a digital copy, when you fish."],
+    ["Extra permits and stamps", "Some waters and fish need more than the basic license. Examples are a trout stamp, a salmon or steelhead card, a saltwater registry, a park or reservoir day pass, or a special lake permit. Always read the rules for the water you're going to."],
+    ["Size and bag limits", "A size limit is the shortest (or sometimes longest) fish you may keep. A slot limit means fish in a certain size range must go back. A bag or creel limit is the most fish you can keep in a day. A possession limit is how many you can have at once. Seasons say when you may fish for a species. Measure on a ruler with the fish flat, mouth closed, and tail pinched. Your state may use a different method, so check."],
+    ["Bait and gear rules", "Some waters ban live fish as bait, limit you to a number of rods or hooks, require barbless hooks, or ban lead. Never dump your bait bucket into the water and never move fish, plants or water from one lake to another. That spreads invasive species. Clean, drain and dry your boat and gear."],
+    ["Where you can fish", "Public land and water are open, but private land needs the owner's permission. Obey posted signs and closed areas. Some shorelines, refuges and dams have special rules or hours."],
+    ["Where to check the rules", "Your state wildlife agency (often called Fish and Game, Wildlife, or the DNR) posts the current rules in a booklet and on a website or app. Rules change every year. If you're not sure, ask a game warden or conservation officer. This app teaches the basics. It is not legal advice, so always check your own local rules."]],
+    q: [Q("Where do you find the official, current rules for your lake?", "Your state wildlife agency's website, app or rule booklet", ["A random video online", "Your friend's memory", "The lure package"], "Rules change every year and differ by place."),
+      Q("What is a bag (creel) limit?", "The most fish you can keep in a day", ["The size of your net", "The weight of your tackle box", "The number of rods you own"], "It protects fish populations."),
+      Q("A fish is under the minimum size limit. What do you do?", "Release it gently right away", ["Keep it and hide it", "Keep it if it's dead already", "Trade it"], "Under-size fish must be released."),
+      Q("Is a basic fishing license always enough?", "No. Some waters and fish need extra permits or stamps", ["Yes, always", "Only for saltwater", "Only for kids"], "Check the rules for the exact water."),
+      Q("What should you do with leftover live bait?", "Throw it in the trash", ["Dump it in the lake", "Release it in the creek", "Take it to a different lake"], "Dumped bait can spread invasive species."),
+      Q("\"Clean, Drain, Dry\" is about...", "Stopping the spread of invasive species", ["Washing your hands", "Drying your clothes", "Cleaning fish"], "Plants and animals hitch rides on boats and gear."),
+      Q("To fish on private land you need...", "The owner's permission", ["Nothing, if there's water", "A bigger hook", "A tournament entry"], "Always ask first."),
+      Q("What is a slot limit?", "Fish in a certain size range must be released", ["You can only fish in the slot between two docks", "A limit on how many rods you use", "The time you may fish"], "For example, fish from 14 to 18 inches go back."),
+      Q("Which is true about license age?", "It is different in each state or country, so check yours", ["It is the same everywhere", "Nobody ever needs one", "Only people over 60 need one"], "Always check locally.")] },
+  care: { n: "Safety, ethics and fish care", icon: "🦺", sum: "Stay safe, treat fish well, leave it clean.", cards: [
+    ["Water safety", "Wear a life jacket in a boat. Many places require it for kids. Tell someone where you're going and when you'll be back. Watch the weather. Wet rocks and mud are slippery, so wear shoes with grip. Don't wade in fast or deep water alone."],
+    ["Hook safety", "Look behind you before you cast. Wear a hat and sunglasses. Bring pliers and clippers. If a hook is stuck in a person past the barb, don't yank it. Cut the line and get medical help."],
+    ["Handle fish gently", "Wet your hands before you touch a fish, so you don't remove its protective slime. Support it with two hands and keep it low over the water. Keep fingers out of the gills and eyes. Take the photo fast. If a hook is deep, cut the line near the hook and let the fish go. Don't rip it out."],
+    ["Release or keep", "Only keep fish you'll eat, within the limits. To release a tired fish, hold it upright in the water facing the current and move it gently forward until it swims off on its own. Fish that are bleeding or can't swim may do better if you keep them, if the rules allow."],
+    ["Take care of the water", "Pick up your trash and any old fishing line. Line can trap birds and turtles. Use a line recycling bin if there is one. Don't leave hooks or bait containers. Share the bank and keep noise down. Leave the place cleaner than you found it."]],
+    q: [Q("Why wet your hands before touching a fish?", "To avoid wiping off its protective slime", ["To make it slippery so it escapes", "So you can see it better", "To warm the fish"], "Dry hands damage the slime coat."),
+      Q("A fish swallowed the hook deep. What should you do?", "Cut the line close to the hook and release it", ["Pull the hook out hard", "Keep pulling until it comes out", "Throw the fish back with the line attached"], "Ripping out a deep hook usually kills the fish."),
+      Q("What should you wear in a small boat?", "A life jacket", ["Heavy boots", "A raincoat only", "Nothing special"], "Life jackets save lives."),
+      Q("What should you do with old fishing line?", "Put it in the trash or a line recycling bin", ["Leave it on the bank", "Throw it in the water", "Hang it in a tree"], "Loose line traps birds and turtles."),
+      Q("How do you revive a tired fish?", "Hold it upright in the water facing the current and move it gently forward", ["Shake it", "Squeeze its belly", "Lay it on dry grass"], "It needs water flowing over its gills.")] }
+};
+const SCH_COURSES = [
+  { id: "rules1", n: "Permits and rules", days: ["rules"], icon: "📋", d: "1 day. What you need to fish legally." },
+  { id: "start2", n: "Weekend start", days: ["gear", "rules"], icon: "🌅", d: "2 days. Get gear and rules sorted so you can go fishing." },
+  { id: "begin5", n: "Beginner in 5 days", days: ["gear", "knots", "where", "lures", "rules"], icon: "🎓", d: "5 days. Everything you need for your first trips." },
+  { id: "week7", n: "Full week", days: ["gear", "knots", "where", "weather", "lures", "rules", "care"], icon: "🏆", d: "7 days. The full beginner school." }
+];
+const SCH_RANKS = [[0, "Minnow", "🐟"], [60, "Bluegill", "🐠"], [150, "Perch", "🐡"], [300, "Crappie", "🎣"], [500, "Bass", "🏅"], [800, "Walleye", "🥈"], [1200, "Pike", "🥇"], [1800, "Musky", "🏆"], [2600, "Master angler", "👑"], [3600, "Lake legend", "🌟"]];
+function schRank(xp) {
+  let i = 0; SCH_RANKS.forEach((r, k) => { if (xp >= r[0]) i = k; });
+  const cur = SCH_RANKS[i], nxt = SCH_RANKS[i + 1];
+  return { i, title: cur[1], icon: cur[2], from: cur[0], next: nxt ? nxt[0] : null, nextTitle: nxt ? nxt[1] : "", pct: nxt ? Math.round((xp - cur[0]) / (nxt[0] - cur[0]) * 100) : 100 };
+}
+const SCH_GUIDE = [
+  ["What you need to start", ["A spinning rod and reel, about 6 to 7 feet, with 8 lb monofilament", "A few hooks (size 6 to 10), split shot weights and two bobbers", "Bait: worms are the easiest. Or a small jig or spinner", "Pliers, line clippers and a way to measure fish", "Your fishing license, if you need one", "Water, sunscreen, a hat and a bag for trash"]],
+  ["Your first 10 minutes", ["Tie a hook on with the Palomar or improved clinch knot", "Pinch a split shot on the line 12 inches above the hook", "Add a bobber about 3 feet above the hook", "Put a piece of worm on the hook", "Open the bail, hold the line with your finger, swing the rod back and forward and let go to cast", "Close the bail by turning the handle. Watch the bobber. When it goes under, reel and lift the rod"]],
+  ["Good first places", ["A small pond or lake with a public dock or pier", "A creek flowing into a lake, from the bank", "A park pond that is stocked with fish", "Any place with other people fishing, so you can ask", "Search your state wildlife agency for stocked ponds and free fishing days"]],
+  ["The rules checklist", ["Do I need a license? (check your state)", "Does this water need an extra permit or stamp?", "What are the size and bag limits for the fish I might catch?", "Is the water open to the public, or is it private?", "Are there bait or gear rules, like no live fish?", "Clean, drain and dry gear that touched other waters"]],
+  ["Fishing words", ["Bite: when a fish takes your bait", "Hookset: the firm lift that sinks the hook in", "Drag: the part of the reel that lets a big fish pull out line", "Retrieve: how you reel the lure back", "Structure: docks, wood, rocks or weeds that hold fish", "Tackle: all your fishing gear", "Leader: a short strong line between your main line and the hook", "Bag or creel limit: how many fish you may keep a day", "Slot limit: fish of a size range that must be released", "Catch and release: letting a fish go after you catch it"]],
+  ["Be a good angler", ["Follow every rule, even when nobody is looking", "Handle fish with wet hands and let them go quickly", "Never leave line, hooks or trash behind", "Ask before you fish on private land", "Help a new angler. Everyone started somewhere"]]
+];
+
+/* ---- progress, saved on this phone, and your XP score is shared so friends can see your rank ---- */
+const schDayNum = () => Math.floor((Date.now() - new Date().getTimezoneOffset() * 60000) / 864e5);
+let SCH = null, schTimer = 0;
+function sch() {
+  const uid = S.user?.uid || "";
+  if (SCH && SCH.__uid === uid) return SCH;
+  let s = {}; try { s = JSON.parse(getPref("sch-" + uid, "{}")) || {}; } catch { s = {}; }
+  s.xp = +s.xp || 0; s.lessons ||= {}; s.courses ||= {}; s.free ||= { day: 0, xp: 0 }; s.streak ||= { last: 0, n: 0 }; s.__uid = uid;
+  SCH = s; return s;
+}
+function schSave() {
+  const s = sch(); setPref("sch-" + s.__uid, JSON.stringify(s));
+  clearTimeout(schTimer);
+  schTimer = setTimeout(() => { if (!S.user) return; setDoc(doc(db, "users", S.user.uid), { lx: s.xp }, { merge: true }).then(() => userCache.delete(S.user.uid)).catch(() => {}); }, 1500);
+}
+function schTouch() {      // keeps your day streak
+  const s = sch(), d = schDayNum();
+  if (s.streak.last === d) return;
+  s.streak = { last: d, n: s.streak.last === d - 1 ? s.streak.n + 1 : 1 };
+}
+function schAward(n) { const s = sch(), before = schRank(s.xp).i; schTouch(); s.xp += Math.max(0, Math.round(n)); schSave(); const after = schRank(s.xp); return after.i > before ? after : null; }
+const schShuffle = (a) => { const r = a.slice(); for (let i = r.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [r[i], r[j]] = [r[j], r[i]]; } return r; };
+const schPrep = (q) => { const o = schShuffle([q.right, ...q.wrong]); return { q: q.q, opts: o, c: o.indexOf(q.right), why: q.why }; };
+const schAllQs = (lids) => lids.flatMap((id) => SCH_LESSONS[id].q);
+function schCourseState(c) {      // what is open in a course today
+  const st = sch().courses[c.id]; if (!st) return null;
+  const day = schDayNum() - st.start;
+  const items = c.days.map((lid, i) => {
+    const done = st.done.includes(lid), open = i === 0 || st.done.includes(c.days[i - 1]);
+    const unlocked = open && (day >= i || st.skip.includes(i));
+    return { lid, i, done, open, unlocked };
+  });
+  const allDone = items.every((x) => x.done), finUnlocked = allDone && (day >= c.days.length || st.skip.includes("final"));
+  return { st, day, items, allDone, finUnlocked };
+}
+function schNext() {      // the next thing you can do in any course you started
+  for (const c of SCH_COURSES) { const cs = schCourseState(c); if (!cs || cs.st.fin) continue;
+    const it = cs.items.find((x) => !x.done && x.unlocked); if (it) return { c, text: `${c.n}: day ${it.i + 1} is ready`, kind: "lesson" };
+    if (cs.finUnlocked) return { c, text: `${c.n}: final quiz is ready`, kind: "final" }; }
+  return null;
+}
+function viewSchool(p) {
+  const V = S.sch || (S.sch = { v: "home" });
+  const go2 = (v, extra) => { Object.assign(V, { v }, extra || {}); renderTab(); };
+  p.append(el("button", { class: "link", type: "button", id: "sch-back", style: "align-self:flex-start", onclick: () => { if (V.v === "home") { S.meView = "main"; renderTab(); } else go2(V.back || "home", { back: null }); } }, V.v === "home" ? "‹ Profile" : "‹ Fishing school"));
+  const fn = { home: schHome, guide: schGuide, course: schCourse, play: schPlay, quizpick: schQuizPick, board: schBoard }[V.v] || schHome;
+  fn(p, V, go2);
+}
+function schRankCard() {
+  const s = sch(), r = schRank(s.xp), streakOn = s.streak.last >= schDayNum() - 1 ? s.streak.n : 0;
+  return el("div", { class: "sch-rank", id: "sch-rank" },
+    el("div", { class: "row spread", style: "align-items:center" },
+      el("div", { class: "row", style: "gap:10px;align-items:center" }, el("span", { class: "sch-badge" }, r.icon), el("div", { class: "stack", style: "gap:0" }, el("b", { style: "font-size:20px" }, r.title), el("span", { class: "hint" }, "Your fishing rank"))),
+      el("div", { class: "stack", style: "gap:0;text-align:right" }, el("b", { id: "sch-xp" }, `${s.xp} XP`), el("span", { class: "hint" }, streakOn ? `🔥 ${streakOn} day streak` : "Start a streak today"))),
+    el("div", { class: "sch-bar", role: "progressbar", "aria-valuenow": String(r.pct), "aria-valuemin": "0", "aria-valuemax": "100" }, el("i", { style: `width:${Math.max(3, r.pct)}%` })),
+    el("span", { class: "hint" }, r.next ? `${r.next - s.xp} XP to ${r.nextTitle}` : "Top rank. You're a legend."));
+}
+function schHome(p, V, go2) {
+  const s = sch(), nxt = schNext();
+  getUser(S.user.uid).then((u) => { if (+u.lx > s.xp) { s.xp = +u.lx; schSave(); if (S.tab === "me" && S.meView === "school" && V.v === "home") renderTab(); } });   // new phone: pick up your score
+  p.append(el("h1", null, "Fishing school"), schRankCard());
+  if (nxt) p.append(el("button", { class: "btn wide", type: "button", id: "sch-continue", onclick: () => go2("course", { cid: nxt.c.id }) }, "▶ " + nxt.text));
+  p.append(el("h2", null, "Courses"),
+    el("div", { class: "stack", id: "sch-courses" }, SCH_COURSES.map((c) => {
+      const cs = schCourseState(c);
+      const status = !cs ? "Not started" : cs.st.fin ? "✅ Finished" : `${cs.st.done.length} of ${c.days.length} days done`;
+      return el("button", { class: "sch-course", type: "button", "data-course": c.id, onclick: () => go2("course", { cid: c.id }) },
+        el("span", { class: "sch-ico" }, c.icon), el("span", { class: "stack", style: "gap:2px;text-align:left;min-width:0" }, el("b", null, c.n), el("span", { class: "hint" }, c.d), el("span", { class: "pill" + (cs ? " live" : "") }, status)));
+    })),
+    el("h2", null, "Quiz yourself"),
+    el("div", { class: "row", style: "gap:8px" },
+      el("button", { class: "btn", type: "button", id: "sch-quick", onclick: () => go2("quizpick") }, "🎯 Regular quiz"),
+      el("button", { class: "btn ghost", type: "button", id: "sch-guide", onclick: () => go2("guide") }, "📖 Beginner guide")),
+    el("details", { class: "sch-lib" }, el("summary", null, "Lesson library"),
+      el("div", { class: "stack", style: "gap:6px;margin-top:8px" }, Object.entries(SCH_LESSONS).map(([id, L]) => el("button", { class: "item", type: "button", "data-lesson": id,
+        onclick: () => go2("play", { kind: "lesson", lid: id, cid: "", qs: schShuffle(L.q).map(schPrep), back: "home" }) }, el("span", { class: "t" }, `${L.icon} ${L.n}`), el("span", { class: "label" }, s.lessons[id]?.done ? `Best ${s.lessons[id].best}/${L.q.length}` : "›"))))),
+    el("button", { class: "btn ghost wide", type: "button", id: "sch-board", onclick: () => go2("board") }, "🏅 Top anglers"),
+    el("p", { class: "hint" }, "This is beginner knowledge. Fishing rules are different in every state and country, so always check your local wildlife agency. It isn't legal advice."));
+}
+function schGuide(p) {
+  p.append(el("h1", null, "Beginner guide"), el("p", { class: "muted" }, "Everything you need for your first day on the water."),
+    SCH_GUIDE.map(([h, items], i) => el("details", { class: "sch-lib", id: "guide-" + i, open: i === 0 ? "" : null }, el("summary", null, h),
+      el("ul", { class: "why", style: "margin-top:8px" }, items.map((t) => el("li", null, t))))),
+    el("p", { class: "hint" }, "Ready to learn more? Start the Beginner in 5 days course."));
+}
+function schCourse(p, V, go2) {
+  const c = SCH_COURSES.find((x) => x.id === V.cid) || SCH_COURSES[0], cs = schCourseState(c);
+  p.append(el("h1", null, `${c.icon} ${c.n}`), el("p", { class: "muted" }, c.d + " One lesson a day, then a final quiz."));
+  if (!cs) { p.append(el("button", { class: "btn wide", type: "button", id: "sch-start", onclick: () => { sch().courses[c.id] = { start: schDayNum(), done: [], skip: [], fbest: 0, fin: false }; schSave(); renderTab(); } }, "Start this course today"),
+    el("div", { class: "stack" }, c.days.map((lid, i) => el("div", { class: "item", style: "cursor:default" }, el("span", { class: "t" }, `Day ${i + 1}: ${SCH_LESSONS[lid].icon} ${SCH_LESSONS[lid].n}`), el("span", { class: "s" }, SCH_LESSONS[lid].sum)))));
+    return; }
+  const { st, items, allDone, finUnlocked } = cs;
+  p.append(el("div", { class: "stack", id: "sch-days" }, items.map((x) => {
+    const L = SCH_LESSONS[x.lid], play = () => go2("play", { kind: "lesson", lid: x.lid, cid: c.id, qs: schShuffle(L.q).map(schPrep), back: "course" });
+    return el("div", { class: "sch-day" + (x.done ? " done" : x.unlocked ? " open" : ""), "data-day": x.i + 1 },
+      el("span", { class: "sch-dot" }, x.done ? "✅" : x.unlocked ? "▶" : "🔒"),
+      el("div", { class: "stack", style: "gap:2px;flex:1;min-width:0" }, el("b", null, `Day ${x.i + 1}: ${L.n}`), el("span", { class: "hint" }, L.sum),
+        !x.open ? el("span", { class: "hint" }, "Finish the day before first.") : !x.unlocked ? el("span", { class: "hint" }, "Opens tomorrow.") : null),
+      x.unlocked ? el("button", { class: "btn small" + (x.done ? " ghost" : ""), type: "button", "data-play": x.i + 1, onclick: play }, x.done ? "Again" : "Start")
+        : x.open ? el("button", { class: "btn small ghost", type: "button", "data-skip": x.i + 1, onclick: () => { st.skip.push(x.i); schSave(); renderTab(); } }, "Do it now") : null);
+  })));
+  const ids = c.days, finQs = () => schShuffle(schAllQs(ids)).slice(0, 10).map(schPrep);
+  p.append(el("div", { class: "sch-day" + (st.fin ? " done" : finUnlocked ? " open" : ""), id: "sch-final" },
+    el("span", { class: "sch-dot" }, st.fin ? "🏆" : finUnlocked ? "▶" : "🔒"),
+    el("div", { class: "stack", style: "gap:2px;flex:1" }, el("b", null, "Final quiz"), el("span", { class: "hint" }, st.fbest ? `Best ${st.fbest}/10. Get 7 or more to finish the course.` : "10 questions from every lesson. Get 7 or more to finish the course."),
+      !allDone ? el("span", { class: "hint" }, "Finish all the days first.") : !finUnlocked ? el("span", { class: "hint" }, "Opens the day after your last lesson.") : null),
+    finUnlocked ? el("button", { class: "btn small", type: "button", id: "sch-final-go", onclick: () => go2("play", { kind: "final", cid: c.id, qs: finQs(), back: "course" }) }, st.fin ? "Again" : "Start")
+      : allDone ? el("button", { class: "btn small ghost", type: "button", id: "sch-final-skip", onclick: () => { st.skip.push("final"); schSave(); renderTab(); } }, "Take it now") : null));
+  p.append(el("button", { class: "link danger small", type: "button", style: "align-self:flex-start", onclick: () => { if (confirm("Start this course over? Your XP stays.")) { delete sch().courses[c.id]; schSave(); renderTab(); } } }, "Start over"));
+}
+function schQuizPick(p, V, go2) {
+  const q = V.pick || (V.pick = { topic: "all", n: 10 });
+  const paint = () => { const box = document.getElementById("sch-pick"); if (!box) return renderTab(); renderTab(); };
+  p.append(el("h1", null, "Regular quiz"), el("p", { class: "muted" }, "Pick a topic and how many questions. Your best scores earn rank points, up to 100 XP a day."),
+    el("b", null, "Topic"), el("div", { class: "chips", id: "sch-topics" }, [["all", "Everything"], ...Object.entries(SCH_LESSONS).map(([id, L]) => [id, L.n])].map(([id, n]) => el("button", { class: "chip", type: "button", "data-topic": id, "aria-pressed": String(q.topic === id), onclick: () => { q.topic = id; paint(); } }, n))),
+    el("b", null, "Questions"), el("div", { class: "chips", id: "sch-count" }, [5, 10, 15].map((n) => el("button", { class: "chip", type: "button", "data-n": n, "aria-pressed": String(q.n === n), onclick: () => { q.n = n; paint(); } }, String(n)))),
+    el("button", { class: "btn wide", type: "button", id: "sch-quiz-go", onclick: () => { const pool = q.topic === "all" ? schAllQs(Object.keys(SCH_LESSONS)) : SCH_LESSONS[q.topic].q; go2("play", { kind: "free", cid: "", qs: schShuffle(pool).slice(0, q.n).map(schPrep), back: "quizpick" }); } }, "Start quiz"));
+}
+function schPlay(p, V, go2) {
+  const L = V.kind === "lesson" ? SCH_LESSONS[V.lid] : null, qs = V.qs;
+  const steps = [...(L ? L.cards.map((c) => ({ t: "card", c })) : []), ...qs.map((q) => ({ t: "q", q }))];
+  const box = el("div", { class: "stack sch-play", id: "sch-play" }); p.append(box);
+  let i = 0, right = 0;
+  const title = V.kind === "lesson" ? `${L.icon} ${L.n}` : V.kind === "final" ? "Final quiz" : "Regular quiz";
+  const bar = () => el("div", { class: "sch-bar" }, el("i", { style: `width:${Math.round(i / steps.length * 100)}%` }));
+  const draw = () => {
+    if (i >= steps.length) return finish();
+    const st = steps[i];
+    if (st.t === "card") {
+      box.replaceChildren(el("b", { class: "hint" }, title), bar(), el("div", { class: "sch-card", id: "sch-cardbox" }, el("h2", null, st.c[0]), el("p", null, st.c[1])),
+        el("button", { class: "btn wide", type: "button", id: "sch-next", onclick: () => { i++; draw(); } }, i === L.cards.length - 1 ? "Start the quiz" : "Next"));
+      return;
+    }
+    const q = st.q; let answered = false;
+    const note = el("div", { class: "sch-why", id: "sch-why", hidden: true }), next = el("button", { class: "btn wide", type: "button", id: "sch-next", hidden: true, onclick: () => { i++; draw(); } }, i === steps.length - 1 ? "See my score" : "Next");
+    const opts = q.opts.map((o, k) => el("button", { class: "sch-opt", type: "button", "data-opt": k, onclick: () => {
+      if (answered) return; answered = true;
+      const ok = k === q.c; if (ok) right++;
+      opts.forEach((b, j) => { b.disabled = true; if (j === q.c) b.classList.add("right"); else if (j === k) b.classList.add("wrong"); });
+      note.hidden = false; note.replaceChildren(el("b", null, ok ? "Correct! " : "Not quite. "), q.why); note.className = "sch-why " + (ok ? "ok" : "bad"); next.hidden = false; next.focus?.();
+    } }, o));
+    box.replaceChildren(el("b", { class: "hint" }, title), bar(), el("h2", { id: "sch-q" }, q.q), el("div", { class: "stack", style: "gap:8px" }, opts), note, next);
+  };
+  const finish = () => {
+    const s = sch(), total = qs.length, pass = right / total >= (V.kind === "final" ? 0.7 : 0.6);
+    let gain = 0, extra = "", rankUp = null;
+    if (V.kind === "lesson") {
+      const rec = s.lessons[V.lid] || (s.lessons[V.lid] = { done: false, best: 0 });
+      if (pass && !rec.done) { rec.done = true; gain += 20; }
+      gain += 8 * Math.max(0, right - rec.best); rec.best = Math.max(rec.best, right);
+      if (V.cid && pass) { const st = s.courses[V.cid]; if (st && !st.done.includes(V.lid)) st.done.push(V.lid); }
+      extra = pass ? "Lesson complete!" : "You need at least 60% to finish the lesson. Try again.";
+    } else if (V.kind === "final") {
+      const st = s.courses[V.cid]; gain += 10 * Math.max(0, right - st.fbest); st.fbest = Math.max(st.fbest, right);
+      if (pass && !st.fin) { st.fin = true; gain += 50; extra = "Course finished! 🏆"; } else extra = pass ? "You passed again." : "You need 7 out of 10 to finish. Review the lessons and try again.";
+    } else {
+      const today = schDayNum(); if (s.free.day !== today) s.free = { day: today, xp: 0 };
+      gain = Math.min(5 * right, Math.max(0, 100 - s.free.xp)); s.free.xp += gain;
+      extra = gain < 5 * right ? "You hit today's 100 XP limit for regular quizzes. Come back tomorrow." : "";
+    }
+    rankUp = schAward(gain);
+    const r = schRank(s.xp), pct = Math.round(right / total * 100);
+    box.replaceChildren(el("div", { class: "sch-result", id: "sch-result" }, el("div", { class: "sch-big" }, `${right} / ${total}`), el("b", null, pct === 100 ? "Perfect! 🎉" : pass ? "Nice work!" : "Keep practicing"),
+      extra ? el("span", null, extra) : null, el("b", { id: "sch-gain" }, `+${gain} XP`),
+      rankUp ? el("div", { class: "sch-rankup", id: "sch-rankup" }, `New rank: ${rankUp.icon} ${rankUp.title}!`) : el("span", { class: "hint" }, `${r.icon} ${r.title} · ${s.xp} XP`)),
+      el("button", { class: "btn wide", type: "button", id: "sch-done", onclick: () => go2(V.back || "home", { back: null }) }, V.cid ? "Back to the course" : "Done"),
+      el("button", { class: "btn ghost wide", type: "button", id: "sch-again", onclick: () => { const fresh = V.kind === "lesson" ? schShuffle(SCH_LESSONS[V.lid].q).map(schPrep) : V.kind === "final" ? schShuffle(schAllQs(SCH_COURSES.find((c) => c.id === V.cid).days)).slice(0, 10).map(schPrep) : schShuffle(V.qs.map((x) => ({ q: x.q, right: x.opts[x.c], wrong: x.opts.filter((_, j) => j !== x.c), why: x.why }))).map(schPrep); go2("play", { qs: fresh }); } }, "Try again"));
+  };
+  draw();
+}
+function schBoard(p) {
+  const list = el("div", { class: "list", id: "sch-list" }, el("p", { class: "muted" }, "Loading…"));
+  p.append(el("h1", null, "Top anglers"), el("p", { class: "muted" }, "Ranked by fishing school points."), list);
+  getDocs(query(collection(db, "users"), orderBy("lx", "desc"), limit(20))).then((s) => {
+    const rows = s.docs.map((d) => ({ uid: d.id, ...d.data() })).filter((u) => u.lx > 0 && u.uid !== OWNER_UID);
+    if (!rows.length) { list.replaceChildren(el("p", { class: "empty" }, "Nobody has points yet. Be the first.")); return; }
+    list.replaceChildren(...rows.map((u, i) => { const r = schRank(u.lx); return el("div", { class: "item" + (u.uid === S.user.uid ? " me" : ""), style: "cursor:default" },
+      el("span", { class: "row", style: "gap:10px;min-width:0;flex-wrap:nowrap" }, el("span", { class: "rank-n" }, String(i + 1)), avatar(u.uid, u.name || "?", 32), el("span", { class: "stack", style: "gap:0;min-width:0" }, el("span", { class: "t", style: "overflow-wrap:anywhere" }, "@" + (u.name || "angler")), el("span", { class: "s" }, `${r.icon} ${r.title}`))),
+      el("b", null, `${u.lx} XP`)); }));
+  }).catch(() => list.replaceChildren(el("p", { class: "empty" }, "Couldn't load the list. Try again later.")));
+}
+
 /* ======================= AUTO UPDATE ======================= */
 let updatePending = 0;
 async function checkUpdate() {
@@ -2266,6 +2565,7 @@ function viewMe(p) {
   if (S.meView === "log") { p.append(backBtn("‹ Profile")); return viewLog(p); }
   if (S.meView === "friends") { p.append(backBtn("‹ Profile")); return viewFriends(p); }
   if (S.meView === "water") { p.append(backBtn("‹ Profile")); return viewWater(p); }
+  if (S.meView === "school") return viewSchool(p);
   if (S.meView === "settings") return viewSettings(p);
   if (S.meView === "owner" && isStaff()) return viewOwner(p);
   const mine = [...S.mine].sort((a, b) => (b.createdAt?.toMillis?.() || 0) - (a.createdAt?.toMillis?.() || 0));
@@ -2282,6 +2582,8 @@ function viewMe(p) {
       el("div", null, el("b", null, String(mine.reduce((n, x) => n + (S.likes.get(x.id)?.size || 0), 0))), el("span", null, "Likes")),
       el("div", null, el("b", null, biggest ? fmtLb(biggest) : "–"), el("span", null, "Biggest")),
       el("div", null, el("b", null, String(pins)), el("span", null, "Map pins"))),
+    (() => { const r = schRank(sch().xp), nx = schNext(); return el("button", { class: "sch-me", type: "button", id: "me-school", onclick: () => { S.sch = { v: "home" }; S.meView = "school"; renderTab(); } },
+      el("span", { class: "sch-badge" }, r.icon), el("span", { class: "stack", style: "gap:2px;text-align:left;flex:1;min-width:0" }, el("b", null, "🎓 Fishing school"), el("span", { class: "hint" }, `${r.title} · ${sch().xp} XP${nx ? " · " + nx.text : ""}`)), el("span", { class: "label" }, "›")); })(),
     el("div", { class: "list" },
       el("button", { class: "item", type: "button", id: "me-new", onclick: () => openWhatsNew(renderTab) },
         el("span", { class: "row", style: "gap:10px" }, el("span", { class: "t" }, "🔔 What's new"), unseenUpdate() ? el("span", { class: "pill live" }, "New") : null), el("span", { class: "label" }, "›")),
