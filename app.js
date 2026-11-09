@@ -76,6 +76,7 @@ function errText(e) {
 }
 
 const ICON = {
+  swap: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 8h13l-3-3M20 16H7l3 3"/></svg>',
   feed: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12c3-5 9-6 14-3l5-3-1 6 1 6-5-3c-5 3-11 2-14-3z"/><circle cx="7" cy="11" r="1" fill="currentColor"/></svg>',
   plus: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>',
   trophy: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 21h8M12 17v4M7 4h10v5a5 5 0 0 1-10 0V4zM7 6H4a3 3 0 0 0 3 4M17 6h3a3 3 0 0 1-3 4"/></svg>',
@@ -142,13 +143,13 @@ function setPref(k, v) { try { localStorage.setItem("weighin-" + k, v); } catch 
 const S = {
   user: null, name: "", tab: "feed",
   posts: [], tournaments: [], log: [],
-  reqIn: [], reqOut: [], friendships: [],
+  reqIn: [], reqOut: [], friendships: [], offIn: [], offOut: [], tradeAll: [], tradeMine: [],
   openTournament: null, tourPosts: [], viewing: null, creatingTour: false,
   meView: "main", mine: [], spots: [], map: null, markers: null, likes: new Map(), mod: null,
 };
 const unsubs = [];
 let tourUnsub = null, meUnsub = null;
-function stopAll() { unsubs.splice(0).forEach((u) => u()); tourUnsub?.(); tourUnsub = null; meUnsub?.(); meUnsub = null; destroyMap(); stopOwner(); cardCache.clear(); S.mine = []; }
+function stopAll() { unsubs.splice(0).forEach((u) => u()); stopTrade(); tourUnsub?.(); tourUnsub = null; meUnsub?.(); meUnsub = null; destroyMap(); stopOwner(); cardCache.clear(); S.mine = []; }
 
 /* ======================= auth screens ======================= */
 const NAME_RE = /^[A-Za-z0-9_]{2,20}$/;
@@ -290,13 +291,19 @@ onAuthStateChanged(auth, async (user) => {
 
 /* ======================= main app ======================= */
 function startApp() {
-  stopAll(); S.postsSeen = false;
+  stopAll(); S.postsSeen = false; S.trade = null; S.tradeAll = []; S.tradeMine = []; S.offIn = []; S.offOut = []; S.tradeErr = false;
   const uid = S.user.uid;
   unsubs.push(onSnapshot(query(collection(db, "posts"), orderBy("createdAt", "desc"), limit(40)), (s) => {
     S.posts = s.docs.map((d) => ({ id: d.id, ...d.data({ serverTimestamps: "estimate" }) }));
     if (S.postsSeen) s.docChanges().forEach((ch) => { if (ch.type !== "added") return; const p = { id: ch.doc.id, ...ch.doc.data({ serverTimestamps: "estimate" }) }; if (p.pb && p.uid !== uid) pbAlert(p); });
     S.postsSeen = true;
     if (S.tab === "feed") renderFeedCards();
+  }, () => {}));
+  unsubs.push(onSnapshot(query(collection(db, "tradeOffers"), where("tuid", "==", uid)), (s) => {
+    S.offIn = s.docs.map((d) => ({ id: d.id, ...d.data({ serverTimestamps: "estimate" }) })); updateDot(); S.tradePaint?.();
+  }, () => {}));
+  unsubs.push(onSnapshot(query(collection(db, "tradeOffers"), where("uid", "==", uid)), (s) => {
+    S.offOut = s.docs.map((d) => ({ id: d.id, ...d.data({ serverTimestamps: "estimate" }) })); updateDot(); S.tradePaint?.();
   }, () => {}));
   unsubs.push(onSnapshot(collection(db, "tournaments"), (s) => {
     S.tournaments = s.docs.map((d) => ({ id: d.id, ...d.data() }));
@@ -349,32 +356,37 @@ function refreshMe(view) { if (S.tab === "me" && (S.meView === view || S.meView 
 let $screen, $nav;
 function buildShell() {
   $screen = el("div", { class: "screen" });
-  const tabs = [["feed", "Feed", ICON.feed], ["map", "Map", ICON.map], ["post", "Post", ICON.plus], ["bite", "Bite", ICON.sun], ["tours", "Tourneys", ICON.trophy], ["me", "Me", ICON.me]];
+  const tabs = [["trade", "Trade", ICON.swap], ["feed", "Feed", ICON.feed], ["map", "Map", ICON.map], ["post", "Post", ICON.plus], ["bite", "Bite", ICON.sun], ["tours", "Tourneys", ICON.trophy], ["me", "Me", ICON.me]];
   $nav = el("nav", { class: "tabs", "aria-label": "Sections" }, el("div", { class: "in" }, tabs.map(([k, label, icon]) =>
     el("button", { class: "tab" + (k === "post" ? " post" : ""), type: "button", "data-tab": k, onclick: () => go(k) },
       k === "post" ? el("span", { class: "bob", html: icon }) : el("span", { html: icon }), label,
-      k === "me" ? el("span", { class: "dot", hidden: true }) : null))));
+      k === "me" || k === "trade" ? el("span", { class: "dot", hidden: true }) : null))));
   $app.replaceChildren($screen, $nav);
   go(S.tab);
 }
 function go(tab) {
   if (tab === "me") S.meView = "main";
+  if (tab === "trade" && S.tab !== "trade" && S.trade) S.trade.open = null;
   S.tab = tab;
   if (tab !== "tours") { S.openTournament = null; S.creatingTour = false; tourUnsub?.(); tourUnsub = null; }
   $nav.querySelectorAll(".tab").forEach((b) => b.dataset.tab === tab ? b.setAttribute("aria-current", "page") : b.removeAttribute("aria-current"));
   renderTab();
 }
-function updateDot() { $nav?.querySelector(".dot")?.toggleAttribute("hidden", S.reqIn.length === 0 && !unseenUpdate()); }
+function updateDot() {
+  $nav?.querySelector(".tab[data-tab=me] .dot")?.toggleAttribute("hidden", S.reqIn.length === 0 && !unseenUpdate());
+  $nav?.querySelector(".tab[data-tab=trade] .dot")?.toggleAttribute("hidden", !tradeUnseen());
+}
 function renderTab() {
   clearInterval(tick);
   if (S.tab !== "me" || S.meView !== "owner") stopOwner();
   if (S.tab !== "map") destroyMap();
+  if (S.tab !== "trade") stopTrade();
   if (S.tab === "feed") return renderFeed();
   if (S.tab === "map") return renderMap();
   if (S.tab === "me") watchMine();
   $screen.className = "screen";
   const p = el("div", { class: "pad" });
-  ({ post: viewPost, bite: viewBite, tours: viewTours, me: viewMe })[S.tab](p);
+  ({ post: viewPost, bite: viewBite, tours: viewTours, me: viewMe, trade: viewTrade })[S.tab](p);
   $screen.replaceChildren(p);
   updateDot();
 }
@@ -899,9 +911,14 @@ function feedPosts() {
 /* What's new. Newest first. Add a new entry on top each time the app changes. */
 /* Bump APP_VERSION every time you change the app, and add a matching entry on top of UPDATES (with v: the same number).
    Phones check app.js every few minutes and offer the new version on their own. */
-const APP_VERSION = 28;
+const APP_VERSION = 29;
 try { if ((parseInt(localStorage.getItem("weighin-appv"), 10) || 0) < APP_VERSION) localStorage.setItem("weighin-appv", String(APP_VERSION)); } catch { /* private mode */ }
 const UPDATES = [
+  { id: "2026-11-09i", v: 29, date: "Nov 9", title: "Trade tab, entry fees and prizes", items: [
+    "New Trade tab on the left, with Post still in the middle. List a lure, rod, reel, line or other gear, and trade with other anglers.",
+    "Make an offer with one or more items, add more items later, and the owner can accept, decline or ask for more. When it's accepted you open each other's profile to set up the swap.",
+    "Tournaments can now have an entry fee, a prize, both, or neither. Weigh-In doesn't handle money. The organizer collects the fee and ticks people off as paid.",
+    "Needs the new Firebase rules to work. Trading and paid tick-offs won't save until they're published."] },
   { id: "2026-11-09h", v: 28, date: "Nov 9", title: "Polish and easier updates", items: [
     "The Bite tab is sorted into three parts: Forecast, Advisor and What's biting.",
     "The video play button is centered, and a video pauses when you scroll away from it.",
@@ -1596,6 +1613,227 @@ function viewPost(p) {
   p.append(el("h1", null, "Post a catch"), f);
 }
 
+/* ======================= TRADE ======================= */
+// Swap fishing gear with other anglers. The app never handles money or shipping.
+const TRADE_KINDS = [["lure", "Lures"], ["rod", "Rods"], ["reel", "Reels"], ["line", "Line"], ["tackle", "Hooks and tackle"], ["other", "Other gear"]];
+const TRADE_ICON = { lure: "🪝", rod: "🎣", reel: "⚙️", line: "🧵", tackle: "🧰", other: "📦" };
+const TRADE_CONDS = ["New", "Like new", "Used", "Worn"];
+const tkName = (k) => (TRADE_KINDS.find((x) => x[0] === k) || ["", "Gear"])[1];
+const NOT_GEAR = /\b(guns?|firearms?|ammo|ammunition|pistols?|rifles?|drugs?|weed|vapes?|alcohol|beer)\b/i;
+let tradeUns = [];
+function stopTrade() { tradeUns.splice(0).forEach((u) => u()); S.tradePaint = null; }
+const tradeSeenKey = (o) => o.status + "|" + (o.counter || "");
+function tradeSeenMap() { try { return JSON.parse(getPref("tradeSeen", "{}")) || {}; } catch { return {}; } }
+function tradeUnseen() {
+  const seen = tradeSeenMap();
+  return S.offIn.some((o) => o.status === "pending" && seen["in" + o.id] !== "pending") || S.offOut.some((o) => (o.status === "accepted" || o.status === "declined" || o.counter) && seen["out" + o.id] !== tradeSeenKey(o));
+}
+function tradeMarkSeen() {
+  const seen = {}; S.offIn.forEach((o) => { if (o.status === "pending") seen["in" + o.id] = "pending"; }); S.offOut.forEach((o) => { seen["out" + o.id] = tradeSeenKey(o); });
+  setPref("tradeSeen", JSON.stringify(seen)); updateDot();
+}
+function viewTrade(p) {
+  stopTrade();
+  const T = S.trade || (S.trade = { seg: "browse", open: null, kind: "" });
+  const box = el("div", { class: "stack", id: "trade-box" }); p.append(box);
+  let loaded = false;
+  const find = (id) => (S.tradeMine || []).find((x) => x.id === id) || (S.tradeAll || []).find((x) => x.id === id);
+  const paint = () => {
+    if (!box.isConnected && S.tab !== "trade") return;
+    if (T.open === "new") return box.replaceChildren(tradeForm(T, paint));
+    if (T.open) return box.replaceChildren(tradeDetail(T, paint, find));
+    box.replaceChildren(tradeHome(T, paint, loaded));
+  };
+  S.tradePaint = paint;
+  tradeUns.push(onSnapshot(query(collection(db, "trades"), orderBy("createdAt", "desc"), limit(40)), (s) => {
+    S.tradeAll = s.docs.map((d) => ({ id: d.id, ...d.data({ serverTimestamps: "estimate" }) })); loaded = true; paint();
+  }, () => { loaded = true; S.tradeErr = true; paint(); }));
+  tradeUns.push(onSnapshot(query(collection(db, "trades"), where("uid", "==", S.user.uid)), (s) => {
+    S.tradeMine = s.docs.map((d) => ({ id: d.id, ...d.data({ serverTimestamps: "estimate" }) })); paint();
+  }, () => {}));
+  paint();
+}
+function tradeCard(t, onOpen) {
+  const offers = S.offIn.filter((o) => o.tid === t.id && o.status === "pending").length, mine = t.uid === S.user.uid;
+  return el("button", { class: "trade-card", type: "button", "data-trade": t.id, onclick: () => onOpen(t.id) },
+    t.photo ? el("img", { src: t.photo, alt: "", loading: "lazy" }) : el("span", { class: "trade-ph" }, TRADE_ICON[t.kind] || "📦"),
+    el("span", { class: "stack", style: "gap:2px;min-width:0;flex:1;text-align:left" },
+      el("b", { class: "trade-t" }, t.title),
+      el("span", { class: "hint" }, [tkName(t.kind), t.cond].filter(Boolean).join(" · ")),
+      t.wants ? el("span", { class: "muted small" }, "Wants: " + t.wants) : null,
+      el("span", { class: "hint" }, mine ? "Yours · " + ago(t.createdAt) : `@${t.name} · ${ago(t.createdAt)}`)),
+    t.status === "traded" ? el("span", { class: "pill final" }, "Traded") : t.status === "closed" ? el("span", { class: "pill final" }, "Closed")
+      : mine && offers ? el("span", { class: "pill live" }, `${offers} offer${offers > 1 ? "s" : ""}`) : null);
+}
+function tradeHome(T, paint, loaded) {
+  const me = S.user.uid, open = (id) => { T.open = id; paint(); };
+  const inPend = S.offIn.filter((o) => o.status === "pending").length;
+  const seg = el("div", { class: "seg", id: "trade-seg", role: "tablist" }, [["browse", "Browse"], ["mine", "My gear"], ["offers", "Offers" + (inPend ? ` (${inPend})` : "")]].map(([k, n]) =>
+    el("button", { type: "button", role: "tab", id: "trade-seg-" + k, "aria-selected": String(T.seg === k), onclick: () => { T.seg = k; if (k === "offers") tradeMarkSeen(); paint(); } }, n)));
+  const out = [el("div", { class: "row spread" }, el("h1", null, "Trade"), el("button", { class: "btn small", type: "button", id: "trade-new", onclick: () => open("new") }, "＋ List gear")), seg];
+  if (T.seg === "browse") {
+    out.push(el("div", { class: "chips", id: "trade-kinds" }, [["", "All"], ...TRADE_KINDS].map(([k, n]) => el("button", { class: "chip", type: "button", "data-kind": k, "aria-pressed": String(T.kind === k), onclick: () => { T.kind = k; paint(); } }, n))));
+    const rows = (S.tradeAll || []).filter((t) => t.status === "open" && t.uid !== me && (!T.kind || t.kind === T.kind));
+    if (S.tradeErr && !(S.tradeAll || []).length) out.push(el("p", { class: "empty" }, "Trading isn't switched on yet. Try again after the owner updates the app rules."));
+    else if (!loaded) out.push(el("p", { class: "muted" }, "Loading…"));
+    else if (!rows.length) out.push(el("p", { class: "empty" }, "Nothing here yet. Tap List gear to put up a lure, rod, reel or line you want to trade."));
+    else out.push(el("div", { class: "stack", id: "trade-list" }, rows.map((t) => tradeCard(t, open))));
+  } else if (T.seg === "mine") {
+    const rows = [...(S.tradeMine || [])].sort((a, b) => (b.createdAt?.seconds || 9e9) - (a.createdAt?.seconds || 9e9));
+    out.push(rows.length ? el("div", { class: "stack", id: "trade-mine" }, rows.map((t) => tradeCard(t, open))) : el("p", { class: "empty" }, "You haven't listed anything. Tap List gear."));
+  } else {
+    const byNew = (a, b) => (b.updatedAt?.seconds || 9e9) - (a.updatedAt?.seconds || 9e9), offCard = (o, sent) => el("button", { class: "trade-card", type: "button", "data-offer": o.id, onclick: () => open(o.tid) },
+      el("span", { class: "trade-ph" }, sent ? "📤" : "📥"),
+      el("span", { class: "stack", style: "gap:2px;min-width:0;flex:1;text-align:left" }, el("b", { class: "trade-t" }, sent ? `For ${o.ttitle}` : `@${o.name} offers for ${o.ttitle}`),
+        el("span", { class: "hint" }, (o.items || []).map((i) => i.t).join(", ")), o.counter ? el("span", { class: "muted small" }, "💬 " + o.counter) : null),
+      el("span", { class: "pill " + (o.status === "pending" ? "soon" : o.status === "accepted" ? "live" : "final") }, { pending: "Waiting", accepted: "Accepted", declined: "Declined", withdrawn: "Withdrawn" }[o.status] || o.status));
+    out.push(el("h2", null, "Offers on my gear"), S.offIn.length ? el("div", { class: "stack", id: "trade-in" }, [...S.offIn].sort(byNew).map((o) => offCard(o, false))) : el("p", { class: "empty" }, "No offers yet."),
+      el("h2", null, "Offers I made"), S.offOut.length ? el("div", { class: "stack", id: "trade-out" }, [...S.offOut].sort(byNew).map((o) => offCard(o, true))) : el("p", { class: "empty" }, "You haven't made any offers. Open something in Browse and tap Make an offer."));
+  }
+  out.push(el("p", { class: "hint" }, "Fishing gear only. Weigh-In never handles money or shipping. Meet in a public place and check what you're getting. Report anything that looks wrong."));
+  return el("div", { class: "stack" }, out);
+}
+function tradeForm(T, paint) {
+  let photo = "";
+  const prev = el("div", { class: "photo-pick", style: "min-height:110px" });
+  const fileIn = el("input", { type: "file", accept: "image/*", id: "tr-photo", "aria-label": "Photo of the gear", onchange: async (e) => {
+    const f = e.target.files?.[0]; e.target.value = ""; if (!f) return;
+    toast("Getting your photo ready…");
+    try { const big = await shrinkPhoto(f); photo = big ? await thumbFrom(big, 480) : ""; if (photo.length > 150000) photo = await thumbFrom(photo, 320); } catch { toast("Couldn't read that photo."); }
+    drawPrev();
+  } });
+  const drawPrev = () => prev.replaceChildren(photo ? el("img", { src: photo, alt: "Your gear" }) : el("span", { class: "muted" }, "Tap to add a photo (optional)"), fileIn);
+  drawPrev();
+  const f = el("form", { novalidate: true, class: "stack" },
+    el("label", { class: "field" }, el("span", null, "What is it?"), el("input", { id: "tr-title", name: "title", maxlength: 60, placeholder: "Shimano Stradic 2500 reel", required: true })),
+    el("div", { class: "two" },
+      el("label", { class: "field" }, el("span", null, "Type"), el("select", { id: "tr-kind", name: "kind" }, TRADE_KINDS.map(([k, n]) => el("option", { value: k }, n)))),
+      el("label", { class: "field" }, el("span", null, "Condition"), el("select", { id: "tr-cond", name: "cond" }, TRADE_CONDS.map((c) => el("option", { value: c, selected: c === "Used" ? "" : null }, c))))),
+    el("label", { class: "field" }, el("span", null, "Details (optional)"), el("textarea", { id: "tr-desc", name: "desc", maxlength: 400, placeholder: "Size, brand, how much it's been used…" })),
+    el("label", { class: "field" }, el("span", null, "What would you like in trade? (optional)"), el("input", { id: "tr-wants", name: "wants", maxlength: 120, placeholder: "A baitcasting reel or a box of crankbaits" })),
+    el("div", { class: "field" }, el("span", null, "Photo"), prev),
+    el("p", { class: "hint" }, "Fishing gear only. No weapons or anything illegal. Weigh-In doesn't take payments, so this is for swaps."),
+    el("button", { class: "btn wide", type: "submit", id: "tr-post" }, "Post listing"));
+  f.addEventListener("submit", async (e) => {
+    e.preventDefault(); const fd = new FormData(f);
+    const title = String(fd.get("title") || "").trim(), desc = String(fd.get("desc") || "").trim(), wants = String(fd.get("wants") || "").trim();
+    if (!title) { toast("Say what you're trading."); return; }
+    if (isBad(title, desc, wants)) { toast(NO_SLURS); return; }
+    if (NOT_GEAR.test([title, desc, wants].join(" "))) { toast("Fishing gear only, please."); return; }
+    const btn = f.querySelector("button[type=submit]"); btn.disabled = true; btn.textContent = "Posting…";
+    try {
+      await addDoc(collection(db, "trades"), { uid: S.user.uid, name: S.name, title, kind: String(fd.get("kind")), cond: String(fd.get("cond")), desc, wants, photo, status: "open", createdAt: serverTimestamp() });
+      T.open = null; T.seg = "mine"; toast("Your gear is listed."); paint();
+    } catch (err) { toast(errText(err)); btn.disabled = false; btn.textContent = "Post listing"; }
+  });
+  return el("div", { class: "stack" }, el("button", { class: "link", type: "button", style: "align-self:flex-start", id: "tr-back", onclick: () => { T.open = null; paint(); } }, "‹ Back"), el("h1", null, "List gear"), f);
+}
+function tradeItemsInput(items, max, onChange) {   // rows of "item" + "note" the person can add to
+  const wrap = el("div", { class: "stack", id: "tr-items" });
+  const draw = () => {
+    wrap.replaceChildren(...items.map((it, i) => el("div", { class: "trade-item" },
+      el("input", { class: "tr-it", maxlength: 50, placeholder: i === 0 ? "Item you'll give, like Penn spinning reel" : "Another item", value: it.t, "aria-label": "Item " + (i + 1), oninput: (e) => { it.t = e.target.value; onChange?.(); } }),
+      el("input", { class: "tr-note", maxlength: 60, placeholder: "Condition or note (optional)", value: it.n || "", "aria-label": "Note " + (i + 1), oninput: (e) => { it.n = e.target.value; } }),
+      items.length > 1 ? el("button", { class: "link danger small", type: "button", onclick: () => { items.splice(i, 1); draw(); } }, "Remove") : null)),
+      items.length < max ? el("button", { class: "btn ghost small", type: "button", id: "tr-more", style: "align-self:flex-start", onclick: () => { items.push({ t: "", n: "" }); draw(); } }, "＋ Add another item") : null);
+  };
+  draw(); return wrap;
+}
+const cleanItems = (items) => items.map((i) => ({ t: String(i.t || "").trim(), n: String(i.n || "").trim() })).filter((i) => i.t);
+function tradeDetail(T, paint, find) {
+  const t = find(T.open), me = S.user.uid;
+  const back = el("button", { class: "link", type: "button", id: "tr-back", style: "align-self:flex-start", onclick: () => { T.open = null; paint(); } }, "‹ Back");
+  if (!t) {
+    getDoc(doc(db, "trades", T.open)).then((d) => { if (d.exists()) { (S.tradeAll || (S.tradeAll = [])).push({ id: d.id, ...d.data() }); paint(); } else { T.open = null; toast("That listing is gone."); paint(); } }).catch(() => { T.open = null; paint(); });
+    return el("div", { class: "stack" }, back, el("p", { class: "muted" }, "Loading…"));
+  }
+  const mine = t.uid === me, offersHere = S.offIn.filter((o) => o.tid === t.id), myOffer = S.offOut.find((o) => o.tid === t.id);
+  const head = el("div", { class: "stack" }, back,
+    t.photo ? el("img", { class: "trade-big", src: t.photo, alt: t.title }) : null,
+    el("div", { class: "row" }, el("span", { class: "pill soon" }, tkName(t.kind)), t.cond ? el("span", { class: "pill final" }, t.cond) : null,
+      t.status !== "open" ? el("span", { class: "pill final" }, t.status === "traded" ? "Traded" : "Closed") : null),
+    el("h1", null, t.title),
+    el("button", { class: "who-link", type: "button", onclick: () => openAngler(t.uid, t.name) }, avatar(t.uid, t.name, 28), el("span", null, mine ? "Your listing" : "@" + t.name)),
+    t.desc ? el("p", { style: "margin:0;white-space:pre-wrap" }, t.desc) : null,
+    t.wants ? el("p", { class: "muted", style: "margin:0" }, "Wants: " + t.wants) : null);
+  const parts = [head];
+  if (mine) {
+    parts.push(el("h2", null, `Offers (${offersHere.length})`));
+    if (!offersHere.length) parts.push(el("p", { class: "empty" }, "No offers yet."));
+    [...offersHere].sort((a, b) => (a.status === "pending" ? 0 : 1) - (b.status === "pending" ? 0 : 1)).forEach((o) => {
+      const ask = el("input", { class: "tr-counter", maxlength: 200, placeholder: "Ask for more, like: add a spool of line", "aria-label": "Ask for more" });
+      const upd = async (data, ok) => { try { await updateDoc(doc(db, "tradeOffers", o.id), { ...data, updatedAt: serverTimestamp() }); if (ok) toast(ok); } catch (err) { toast(errText(err)); } };
+      parts.push(el("div", { class: "trade-offer", "data-offer": o.id },
+        el("div", { class: "row spread" }, el("span", { class: "row", style: "gap:8px;flex-wrap:nowrap" }, avatar(o.uid, o.name, 28), el("b", null, "@" + o.name)),
+          el("span", { class: "pill " + (o.status === "pending" ? "soon" : o.status === "accepted" ? "live" : "final") }, { pending: "Waiting", accepted: "Accepted", declined: "Declined", withdrawn: "Withdrawn" }[o.status] || o.status)),
+        el("ul", { class: "why", style: "margin:4px 0" }, (o.items || []).map((i) => el("li", null, i.t + (i.n ? ` (${i.n})` : "")))),
+        o.message ? el("p", { class: "muted", style: "margin:0" }, "“" + o.message + "”") : null,
+        o.counter ? el("p", { class: "hint", style: "margin:0" }, "You asked: " + o.counter) : null,
+        o.status === "pending" && t.status === "open" ? el("div", { class: "stack", style: "gap:8px" },
+          el("div", { class: "row" },
+            el("button", { class: "btn small", type: "button", "data-act": "accept", onclick: async () => {
+              if (!confirm(`Accept @${o.name}'s offer? Your listing will be marked as traded.`)) return;
+              try { await updateDoc(doc(db, "tradeOffers", o.id), { status: "accepted", updatedAt: serverTimestamp() }); await updateDoc(doc(db, "trades", t.id), { status: "traded", tradedWith: o.name }); toast("Deal! Open their profile to set up the swap."); } catch (err) { toast(errText(err)); }
+            } }, "Accept"),
+            el("button", { class: "btn ghost small", type: "button", "data-act": "decline", onclick: () => upd({ status: "declined" }, "Offer declined.") }, "Decline")),
+          el("div", { class: "row", style: "gap:6px;flex-wrap:nowrap" }, ask, el("button", { class: "btn ghost small", type: "button", "data-act": "ask", onclick: () => { const v = ask.value.trim(); if (!v) { toast("Type what you'd like added."); return; } if (isBad(v)) { toast(NO_SLURS); return; } upd({ counter: v }, "Sent. They can add to their offer."); } }, "Ask for more")))
+          : null,
+        o.status === "accepted" ? el("button", { class: "btn small", type: "button", onclick: () => openAngler(o.uid, o.name) }, `Open @${o.name} to set up the swap`) : null));
+    });
+    parts.push(el("div", { class: "row" },
+      t.status === "open" ? el("button", { class: "btn ghost small", type: "button", id: "tr-close", onclick: async () => { try { await updateDoc(doc(db, "trades", t.id), { status: "closed" }); toast("Listing closed."); } catch (err) { toast(errText(err)); } } }, "Close listing") : null,
+      t.status === "closed" ? el("button", { class: "btn ghost small", type: "button", onclick: async () => { try { await updateDoc(doc(db, "trades", t.id), { status: "open" }); toast("Listing is open again."); } catch (err) { toast(errText(err)); } } }, "Open again") : null,
+      el("button", { class: "link danger small", type: "button", id: "tr-del", onclick: async () => {
+        if (!confirm("Delete this listing and its offers? This can't be undone.")) return;
+        try { await Promise.all(offersHere.map((o) => deleteDoc(doc(db, "tradeOffers", o.id)).catch(() => {}))); await deleteDoc(doc(db, "trades", t.id)); T.open = null; toast("Listing deleted."); paint(); } catch (err) { toast(errText(err)); }
+      } }, "Delete")));
+    return el("div", { class: "stack" }, parts);
+  }
+  // someone else's listing
+  const idOffer = `${t.id}_${me}`;
+  const form = (restart) => {
+    const items = [{ t: "", n: "" }], msg = el("textarea", { id: "tr-msg", maxlength: 300, placeholder: "Say something (optional)", "aria-label": "Message" });
+    return el("div", { class: "stack trade-offer", id: "tr-offerform" }, el("h2", null, "Make an offer"), el("span", { class: "hint" }, "List what you'd trade. You can add more items later if they ask."),
+      tradeItemsInput(items, 6), msg,
+      el("button", { class: "btn wide", type: "button", id: "tr-send", onclick: async (e) => {
+        const its = cleanItems(items); if (!its.length) { toast("Add at least one item to offer."); return; }
+        const m = msg.value.trim(); if (isBad(m, ...its.flatMap((i) => [i.t, i.n]))) { toast(NO_SLURS); return; }
+        if (NOT_GEAR.test([m, ...its.map((i) => i.t)].join(" "))) { toast("Fishing gear only, please."); return; }
+        e.target.disabled = true;
+        try {
+          if (restart) await deleteDoc(doc(db, "tradeOffers", idOffer));
+          await setDoc(doc(db, "tradeOffers", idOffer), { tid: t.id, tuid: t.uid, tname: t.name, ttitle: t.title, uid: me, name: S.name, items: its, message: m, status: "pending", createdAt: serverTimestamp(), updatedAt: serverTimestamp() });
+          toast("Offer sent."); 
+        } catch (err) { toast(errText(err)); e.target.disabled = false; }
+      } }, "Send offer"));
+  };
+  if (t.status !== "open" && !myOffer) parts.push(el("p", { class: "empty" }, "This one isn't available anymore."));
+  else if (!myOffer) parts.push(form(false));
+  else {
+    const o = myOffer;
+    parts.push(el("div", { class: "stack trade-offer", id: "tr-myoffer" },
+      el("div", { class: "row spread" }, el("h2", null, "Your offer"), el("span", { class: "pill " + (o.status === "pending" ? "soon" : o.status === "accepted" ? "live" : "final") }, { pending: "Waiting", accepted: "Accepted", declined: "Declined", withdrawn: "Withdrawn" }[o.status] || o.status)),
+      el("ul", { class: "why", style: "margin:4px 0" }, (o.items || []).map((i) => el("li", null, i.t + (i.n ? ` (${i.n})` : "")))),
+      o.message ? el("p", { class: "muted", style: "margin:0" }, "“" + o.message + "”") : null,
+      o.counter ? el("p", { class: "trade-counter", id: "tr-counter" }, `💬 @${t.name} asks: ${o.counter}`) : null,
+      o.status === "accepted" ? el("button", { class: "btn small", type: "button", onclick: () => openAngler(t.uid, t.name) }, `🎉 Accepted! Open @${t.name} to set up the swap`) : null,
+      o.status === "pending" ? (() => {
+        const more = [{ t: "", n: "" }];
+        return el("div", { class: "stack" }, el("b", null, "Add to your offer"), tradeItemsInput(more, Math.max(1, 6 - (o.items || []).length)),
+          el("div", { class: "row" },
+            el("button", { class: "btn small", type: "button", id: "tr-add", onclick: async () => {
+              const its = cleanItems(more); if (!its.length) { toast("Type the item you want to add."); return; }
+              if (isBad(...its.flatMap((i) => [i.t, i.n]))) { toast(NO_SLURS); return; }
+              if ((o.items || []).length + its.length > 6) { toast("An offer can have up to 6 items."); return; }
+              try { await updateDoc(doc(db, "tradeOffers", o.id), { items: [...(o.items || []), ...its], updatedAt: serverTimestamp() }); toast("Added to your offer."); } catch (err) { toast(errText(err)); }
+            } }, "Add to offer"),
+            el("button", { class: "link danger small", type: "button", id: "tr-withdraw", onclick: async () => { try { await updateDoc(doc(db, "tradeOffers", o.id), { status: "withdrawn", updatedAt: serverTimestamp() }); toast("Offer withdrawn."); } catch (err) { toast(errText(err)); } } }, "Withdraw")));
+      })() : null,
+      (o.status === "declined" || o.status === "withdrawn") && t.status === "open" ? el("div", { class: "stack" }, el("p", { class: "muted", style: "margin:0" }, o.status === "declined" ? "They said no this time." : "You withdrew this offer."), form(true)) : null));
+  }
+  return el("div", { class: "stack" }, parts.filter(Boolean));
+}
+
 /* ======================= TOURNAMENTS ======================= */
 const SCORING = {
   heaviest: { name: "Heaviest fish", desc: "Biggest single fish by weight", unit: "lb" },
@@ -1603,6 +1841,29 @@ const SCORING = {
   longest: { name: "Longest fish", desc: "Biggest single fish by length", unit: "in" },
   most: { name: "Most fish", desc: "Whoever catches the most fish", unit: "fish" },
 };
+const fmtFee = (n) => "$" + (Math.round(n * 100) % 100 ? Number(n).toFixed(2) : Math.round(n));
+function tourMoneyLine(t) {
+  const fee = +t.fee || 0, prize = t.prize || "";
+  if (!fee && !prize) return null;
+  return el("span", { class: "tour-money-line" }, fee ? el("span", { class: "pill live" }, fmtFee(fee) + " entry") : el("span", { class: "pill soon" }, "Free entry"), prize ? el("span", { class: "pill final" }, "🎁 " + prize) : null);
+}
+function tourMoneyCard(t, joined) {
+  const fee = +t.fee || 0, prize = t.prize || "";
+  if (!fee && !prize) return null;
+  const mineT = t.createdBy === S.user.uid, paid = t.paid || [t.createdBy], members = t.members || [];
+  const setPaid = async (uid, on) => {
+    const next = on ? [...new Set([...paid, uid])] : paid.filter((x) => x !== uid);
+    try { await updateDoc(doc(db, "tournaments", t.id), { paid: next }); } catch (err) { toast(errText(err)); }
+  };
+  return el("section", { class: "stack tour-money", id: "tour-money" }, el("h2", null, "Entry and prize"),
+    el("div", { class: "row", style: "gap:8px" }, fee ? el("span", { class: "pill live" }, fmtFee(fee) + " entry") : el("span", { class: "pill soon" }, "Free entry"), prize ? el("span", { class: "pill final" }, "🎁 " + prize) : null),
+    fee && t.payHow ? el("p", { style: "margin:0" }, `Pay @${t.createdByName || "the organizer"}: ${t.payHow}`) : null,
+    el("p", { class: "hint", style: "margin:0" }, fee ? "Weigh-In doesn't handle money. Pay the organizer yourself, and they tick you off as paid. The organizer also gives out the prize." : "The organizer gives out the prize."),
+    fee && joined && !mineT ? el("p", { id: "tour-paid-me", class: paid.includes(S.user.uid) ? "pb-ok" : "hint", style: "margin:0;font-weight:700" }, paid.includes(S.user.uid) ? "✅ The organizer marked you as paid." : "Not marked as paid yet.") : null,
+    fee && mineT ? el("div", { class: "stack", id: "tour-paid-list" }, el("b", null, "Who has paid"), members.filter((u) => u !== t.createdBy).length
+      ? members.filter((u) => u !== t.createdBy).map((u) => { const row = el("label", { class: "row", style: "gap:10px;flex-wrap:nowrap" }, el("input", { type: "checkbox", "data-paid": u, checked: paid.includes(u) ? "" : null, onchange: (e) => setPaid(u, e.target.checked) }), el("span", null, "…")); getUser(u).then((x) => { row.lastChild.textContent = "@" + (x?.name || "angler"); }); return row; })
+      : el("p", { class: "hint", style: "margin:0" }, "Nobody has joined yet.")) : null);
+}
 function viewTours(p) {
   if (S.creatingTour) return viewCreateTour(p);
   if (S.openTournament) return viewTour(p);
@@ -1614,7 +1875,7 @@ function viewTours(p) {
   p.append(el("div", { class: "list" }, ts.map((t) => {
     const st = tourStatus(t), n = (t.members || []).length;
     return el("button", { class: "item", type: "button", onclick: () => openTour(t.id) },
-      el("div", { class: "stack", style: "gap:2px;min-width:0" }, el("span", { class: "t" }, t.name),
+      el("div", { class: "stack", style: "gap:2px;min-width:0" }, el("span", { class: "t" }, t.name), tourMoneyLine(t),
         el("span", { class: "s" }, `${SCORING[t.scoring]?.name || ""} · ${t.startAt ? fmtWhen(t.startAt) : fmtDay(t.start) + (t.end !== t.start ? " – " + fmtDay(t.end) : "")}${phasesOf(t).length ? " · " + phasesOf(t).length + " phases" : ""} · ${n} angler${n === 1 ? "" : "s"}`)),
       el("span", { class: "pill " + st }, { live: "Live", soon: "Upcoming", final: "Final" }[st]));
   })));
@@ -1628,6 +1889,12 @@ function viewCreateTour(p) {
   const endField = el("label", { class: "field" }, el("span", null, "Ends"), el("input", { id: "t-end", type: "datetime-local", value: dtLocal(start0 + 3 * 3600000) }));
   const phaseWrap = el("div", { class: "stack", hidden: true });
   const startInput = el("input", { id: "t-start", type: "datetime-local", value: dtLocal(start0) });
+  const feeBox = el("input", { type: "checkbox", id: "t-feeon" });
+  const feeIn = el("input", { id: "t-fee", type: "number", inputmode: "decimal", min: 1, max: 500, step: "0.01", placeholder: "5", "aria-label": "Entry fee in dollars" });
+  const payIn = el("input", { id: "t-pay", maxlength: 60, placeholder: "Venmo @name, or cash at the ramp", "aria-label": "How to pay" });
+  const prizeIn = el("input", { id: "t-prize", maxlength: 60, placeholder: "Like $100 cash, or a new rod", "aria-label": "Prize" });
+  const feeWrap = el("div", { class: "stack", hidden: true }, el("label", { class: "field" }, el("span", { class: "hint" }, "Entry fee ($)"), feeIn), el("label", { class: "field" }, el("span", { class: "hint" }, "How do people pay you?"), payIn));
+  feeBox.addEventListener("change", () => { feeWrap.hidden = !feeBox.checked; });
   function paintSummary() {
     const mins = phaseRows.reduce((a, r) => a + (parseInt(r.mins.value) || 0), 0);
     const st = new Date(startInput.value).getTime();
@@ -1661,6 +1928,11 @@ function viewCreateTour(p) {
     endField,
     el("label", { class: "row", style: "gap:10px;flex-wrap:nowrap" }, splitBox, el("span", null, "Split into phases (a different lake or lure for each part)")),
     phaseWrap,
+    el("div", { class: "field", id: "t-money" }, el("span", null, "Entry fee and prize"),
+      el("label", { class: "row", style: "gap:10px;flex-wrap:nowrap" }, feeBox, el("span", null, "Charge an entry fee")),
+      feeWrap,
+      el("label", { class: "field" }, el("span", { class: "hint" }, "Prize (optional)"), prizeIn),
+      el("span", { class: "hint" }, "Weigh-In never takes or sends money. You collect any fee yourself (cash, Venmo and so on), tick people off as paid on the tournament page, and give out the prize yourself. Rules for contests with fees and cash prizes are different in each place, so check yours.")),
     el("button", { class: "btn wide", type: "submit" }, "Create tournament"));
   f.addEventListener("submit", async (e) => {
     e.preventDefault();
@@ -1681,7 +1953,11 @@ function viewCreateTour(p) {
       if (!endAt || endAt <= startAt) { toast("The end has to be after the start."); return; }
     }
     try {
-      const data = { name, scoring: fd.get("scoring"), start: localDate(new Date(startAt)), end: localDate(new Date(endAt)), startAt, endAt,
+      const fee = feeBox.checked ? Math.round(Number(feeIn.value) * 100) / 100 : 0, prize = prizeIn.value.trim(), payHow = payIn.value.trim();
+      if (feeBox.checked && !(fee >= 1 && fee <= 500)) { toast("Entry fee has to be between $1 and $500."); return; }
+      if (feeBox.checked && !payHow) { toast("Tell people how to pay you."); return; }
+      if (isBad(prize, payHow)) { toast(NO_SLURS); return; }
+      const data = { name, fee, prize, payHow: fee ? payHow : "", paid: [S.user.uid], scoring: fd.get("scoring"), start: localDate(new Date(startAt)), end: localDate(new Date(endAt)), startAt, endAt,
         createdBy: S.user.uid, createdByName: S.name, members: [S.user.uid], createdAt: serverTimestamp() };
       if (phases.length) data.phases = phases;
       const ref = await addDoc(collection(db, "tournaments"), data);
@@ -1739,6 +2015,7 @@ function viewTour(p) {
       el("h1", null, t.name),
       el("p", { class: "muted", style: "margin:0" }, `${sc.desc}. Started by @${t.createdByName || "someone"}. Only catches posted to this tournament count.`)));
 
+  p.append(tourMoneyCard(t, joined));
   if (timed) {
     const lab = el("span", { class: "label" }), big = el("b", { class: "big" }), sub = el("span", { class: "hint" });
     p.append(el("div", { class: "timer", role: "timer" }, lab, big, sub));
@@ -1762,7 +2039,8 @@ function viewTour(p) {
           el("span", { class: "s" }, [w.ph.where || null, w.ph.lure ? w.ph.lure + " only" : "Any lure", `${w.ph.mins} min`].filter(Boolean).join(" · "))),
         el("span", { class: "pill " + (w.i === nowIdx ? "live" : Date.now() > w.e ? "final" : "soon") }, w.i === nowIdx ? "Now" : Date.now() > w.e ? "Done" : "Next"))))));
   }
-  if (!joined && st !== "final") p.append(el("button", { class: "btn wide", type: "button", onclick: async () => {
+  if (!joined && st !== "final") p.append(el("button", { class: "btn wide", type: "button", id: "t-join", onclick: async () => {
+    if ((+t.fee || 0) > 0 && !confirm(`This tournament has a ${fmtFee(+t.fee)} entry fee. Weigh-In doesn't take payments. You pay @${t.createdByName || "the organizer"} yourself${t.payHow ? " (" + t.payHow + ")" : ""}. Join?`)) return;
     try { await updateDoc(doc(db, "tournaments", t.id), { members: arrayUnion(S.user.uid) }); toast(`You joined ${t.name}!`); }
     catch (err) { toast(errText(err)); }
   } }, "Join this tournament"));
