@@ -333,3 +333,8 @@ a.btn.small{text-decoration:none;display:inline-flex;align-items:center}
 .sch-result{display:flex;flex-direction:column;align-items:center;gap:6px;padding:20px;border-radius:14px;background:var(--water);border:1px solid var(--line);text-align:center}
 .sch-big{font-size:44px;font-weight:800;line-height:1}
 .sch-rankup{padding:8px 14px;border-radius:99px;background:#E76F3D;color:#fff;font-weight:700}
+
+.kn-step{display:flex;gap:12px;align-items:center;padding:8px;border-radius:12px;background:var(--bg,#fff);border:1px solid var(--line)}
+.kn-pic{flex:0 0 120px;width:120px;height:120px;border-radius:10px;background:var(--water)}
+.kn-pic svg{display:block}
+.sch-vid{display:inline-block;margin:6px 0;color:var(--accent,#1b8fd1);font-weight:600;text-decoration:none}

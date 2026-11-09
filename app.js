@@ -884,9 +884,12 @@ function feedPosts() {
 /* What's new. Newest first. Add a new entry on top each time the app changes. */
 /* Bump APP_VERSION every time you change the app, and add a matching entry on top of UPDATES (with v: the same number).
    Phones check app.js every few minutes and offer the new version on their own. */
-const APP_VERSION = 22;
+const APP_VERSION = 23;
 try { if ((parseInt(localStorage.getItem("weighin-appv"), 10) || 0) < APP_VERSION) localStorage.setItem("weighin-appv", String(APP_VERSION)); } catch { /* private mode */ }
 const UPDATES = [
+  { id: "2026-11-09c", v: 23, date: "Nov 9", title: "Knot pictures and videos", items: [
+    "New Knot book in Fishing school: step by step pictures for the improved clinch, Palomar and uni knots.",
+    "Every lesson now has a Watch a video button that opens a YouTube search for that topic."] },
   { id: "2026-11-09b", v: 22, date: "Nov 9", title: "Little details lessons", items: [
     "Fishing school has 6 new lessons: More knots, Reading the water, Signs on the surface (jumping fish, birds), Sky, wind and moon, Bait details, and Fish facts.",
     "New 6 day course called Little details. You can also find each lesson in the Lesson library or pick it in a regular quiz."] },
@@ -2435,7 +2438,7 @@ function viewSchool(p) {
   const V = S.sch || (S.sch = { v: "home" });
   const go2 = (v, extra) => { Object.assign(V, { v }, extra || {}); renderTab(); };
   p.append(el("button", { class: "link", type: "button", id: "sch-back", style: "align-self:flex-start", onclick: () => { if (V.v === "home") { S.meView = "main"; renderTab(); } else go2(V.back || "home", { back: null }); } }, V.v === "home" ? "‹ Profile" : "‹ Fishing school"));
-  const fn = { home: schHome, guide: schGuide, course: schCourse, play: schPlay, quizpick: schQuizPick, board: schBoard }[V.v] || schHome;
+  const fn = { home: schHome, guide: schGuide, knots: schKnotBook, course: schCourse, play: schPlay, quizpick: schQuizPick, board: schBoard }[V.v] || schHome;
   fn(p, V, go2);
 }
 function schRankCard() {
@@ -2463,11 +2466,57 @@ function schHome(p, V, go2) {
     el("div", { class: "row", style: "gap:8px" },
       el("button", { class: "btn", type: "button", id: "sch-quick", onclick: () => go2("quizpick") }, "🎯 Regular quiz"),
       el("button", { class: "btn ghost", type: "button", id: "sch-guide", onclick: () => go2("guide") }, "📖 Beginner guide")),
+    el("button", { class: "btn ghost wide", type: "button", id: "sch-knots", onclick: () => go2("knots") }, "🪢 Knot book (step by step pictures)"),
     el("details", { class: "sch-lib" }, el("summary", null, "Lesson library"),
       el("div", { class: "stack", style: "gap:6px;margin-top:8px" }, Object.entries(SCH_LESSONS).map(([id, L]) => el("button", { class: "item", type: "button", "data-lesson": id,
         onclick: () => go2("play", { kind: "lesson", lid: id, cid: "", qs: schShuffle(L.q).map(schPrep), back: "home" }) }, el("span", { class: "t" }, `${L.icon} ${L.n}`), el("span", { class: "label" }, s.lessons[id]?.done ? `Best ${s.lessons[id].best}/${L.q.length}` : "›"))))),
     el("button", { class: "btn ghost wide", type: "button", id: "sch-board", onclick: () => go2("board") }, "🏅 Top anglers"),
     el("p", { class: "hint" }, "This is beginner knowledge. Fishing rules are different in every state and country, so always check your local wildlife agency. It isn't legal advice."));
+}
+/* ---- Knot book: simple step drawings + video links ---- */
+const SCH_VID = { gear: "how to choose fishing rod and reel for beginners", knots: "how to tie fishing knots for beginners", where: "how to find fish in a lake for beginners", weather: "best weather and time to go fishing", lures: "fishing lures and bait for beginners", rules: "fishing license and rules explained", care: "how to safely catch and release fish", knots2: "palomar knot uni knot loop knot fishing", water: "how to read the water fishing", signs: "reading fish activity on the water surface", sky: "how weather wind and moon affect fishing", bait: "how to hook live bait worms minnows", species: "bluegill bass trout catfish fish facts" };
+const schVidUrl = (q) => "https://www.youtube.com/results?search_query=" + encodeURIComponent(q);
+const KB = {
+  eye: '<circle cx="60" cy="20" r="8" fill="none" stroke="#7a8a96" stroke-width="3"/>',
+  line: (d) => `<path d="${d}" fill="none" stroke="#1b8fd1" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"/>`,
+  tail: (d) => `<path d="${d}" fill="none" stroke="#e8742a" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"/>`,
+  txt: () => "",
+  coils: (n, y0) => { let d = `M48 ${y0}`; for (let i = 0; i < n; i++) d += ` L72 ${y0 + i * 6 + 3} L48 ${y0 + i * 6 + 6}`; return d; }
+};
+const svg = (inner) => `<svg viewBox="0 0 120 120" width="120" height="120" role="img" aria-hidden="true">${inner}</svg>`;
+const SCH_KNOTS = [
+  { id: "clinch", n: "Improved clinch knot", use: "Hooks, swivels and lures. The best first knot.", vid: "improved clinch knot fishing how to tie", steps: [
+    ["Thread the line", "Push the end of the line through the hook eye and pull about 6 inches through.", () => svg(KB.eye + KB.line("M58 118 V24") + KB.tail("M58 24 Q60 8 64 24 V70") + KB.txt(60, 112, "line goes through the eye"))],
+    ["Wrap the tail", "Wrap the tail around the standing line 5 to 7 times.", () => svg(KB.eye + KB.line("M58 118 V24") + KB.tail("M64 24 V40 L" + KB.coils(6, 40).slice(1)) + KB.txt(60, 112, "wrap 5 to 7 times"))],
+    ["Small loop", "Pass the tail through the small loop right next to the hook eye.", () => svg(KB.eye + KB.line("M58 118 V24") + KB.tail("M48 52 L72 55 L48 58 L72 61 L48 64 L72 67 L48 70") + '<circle cx="76" cy="36" r="6" fill="none" stroke="#1b8fd1" stroke-width="2" stroke-dasharray="3 2"/>' + KB.tail("M60 48 Q80 48 76 36") + KB.txt(60, 112, "tail through the small loop"))],
+    ["Big loop", "Now pass the tail back through the big loop that formed above it.", () => svg(KB.eye + KB.line("M58 118 V24") + KB.tail("M48 52 L72 55 L48 58 L72 61 L48 64 L72 67 L48 70") + '<path d="M74 40 C112 20 112 76 74 66" fill="none" stroke="#1b8fd1" stroke-width="2" stroke-dasharray="3 2"/>' + KB.tail("M60 48 C88 38 96 62 70 68") + KB.txt(60, 112, "tail through the big loop"))],
+    ["Wet and pull tight", "Wet the knot, pull the standing line slowly until snug, then trim the tail short.", () => svg(KB.eye + KB.line("M58 118 V28") + '<rect x="52" y="34" width="14" height="26" rx="4" fill="#e8742a" opacity=".85"/>' + KB.tail("M66 36 l6 -6") + '<path d="M96 40 q-6 10 0 14 q6 -4 0 -14z" fill="#1b8fd1"/>' + KB.txt(60, 112, "wet, tighten, trim"))]] },
+  { id: "palomar", n: "Palomar knot", use: "Very strong. Great with braid.", vid: "palomar knot fishing how to tie", steps: [
+    ["Double the line", "Fold about 6 inches of line into a loop and push the loop through the hook eye.", () => svg(KB.eye + KB.line("M54 118 V22") + KB.tail("M66 118 V22") + '<path d="M54 22 Q60 6 66 22" fill="none" stroke="#1b8fd1" stroke-width="3.2"/>' + KB.txt(60, 112, "two lines through the eye"))],
+    ["Tie a loose overhand knot", "Let the hook hang. Tie a simple overhand knot in the doubled line. Do not tighten it.", () => svg(KB.eye + KB.line("M54 118 V70 C54 40 80 40 74 56 C70 70 56 60 60 46 L60 28") + KB.tail("M66 118 V80 C70 60 74 50 66 44 L60 30") + KB.txt(60, 112, "loose overhand knot"))],
+    ["Loop over the hook", "Pull the loop wide and pass it all the way over the hook.", () => svg('<path d="M60 14 Q96 10 92 54 Q84 100 60 84 Q36 100 28 54 Q24 10 60 14z" fill="none" stroke="#1b8fd1" stroke-width="3"/>' + KB.eye.replace('cy="20"', 'cy="52"') + KB.line("M54 118 V70") + KB.tail("M66 118 V70") + KB.txt(60, 112, "loop goes over the hook"))],
+    ["Wet and pull", "Wet it and pull both ends of the line slowly so the knot slides down snug against the eye.", () => svg(KB.eye + KB.line("M58 118 V30") + '<circle cx="58" cy="38" r="8" fill="#e8742a" opacity=".85"/>' + '<path d="M96 40 q-6 10 0 14 q6 -4 0 -14z" fill="#1b8fd1"/>' + KB.txt(60, 112, "slide down to the eye"))],
+    ["Trim the tail", "Trim the short tail close to the knot. Check the knot looks tidy.", () => svg(KB.eye + KB.line("M58 118 V30") + '<circle cx="58" cy="38" r="8" fill="#e8742a" opacity=".85"/>' + '<path d="M70 30 l22 -12 M70 18 l22 12" stroke="#7a8a96" stroke-width="2.5"/>' + KB.txt(60, 112, "trim the tail"))]] },
+  { id: "uni", n: "Uni knot", use: "Hooks, lures, and joining two lines.", vid: "uni knot fishing how to tie", steps: [
+    ["Thread the line", "Push the line through the hook eye and pull 6 inches through. Fold the tail back along the line.", () => svg(KB.eye + KB.line("M54 118 V24") + KB.tail("M54 24 Q60 6 66 24 V80") + KB.txt(60, 112, "tail parallel to the line"))],
+    ["Make a loop", "Make a loop by laying the tail back over the line to form a circle next to the eye.", () => svg(KB.eye + KB.line("M54 118 V30") + KB.tail("M66 30 V50 C90 40 90 90 62 82 L54 82") + KB.txt(60, 112, "make a loop"))],
+    ["Wrap through the loop", "Wrap the tail around both lines and through the loop 4 to 6 times.", () => svg(KB.eye + KB.line("M58 118 V24") + KB.tail("M46 50 L70 54 L46 58 L70 62 L46 66 L70 70 L46 74") + KB.txt(60, 112, "wrap 4 to 6 times"))],
+    ["Wet and pull", "Wet it. Pull the tail slowly to tighten the coils.", () => svg(KB.eye + KB.line("M58 118 V24") + KB.tail("M48 50 L68 54 L48 58 L68 62 L48 66") + '<path d="M96 40 q-6 10 0 14 q6 -4 0 -14z" fill="#1b8fd1"/>' + KB.txt(60, 112, "wet and tighten"))],
+    ["Slide to the eye and trim", "Pull the standing line so the knot slides down to the hook eye. Trim the tail.", () => svg(KB.eye + KB.line("M58 118 V30") + '<rect x="52" y="34" width="14" height="20" rx="4" fill="#e8742a" opacity=".85"/>' + KB.txt(60, 112, "snug to the eye, trim"))]] }
+];
+function schKnotBook(p) {
+  p.append(el("h1", null, "Knot book"), el("p", { class: "muted" }, "Step by step pictures. These are simple drawings: blue is the line you hold, orange is the tail. Watch a video too, so you can see the real thing."));
+  SCH_KNOTS.forEach((k, i) => {
+    const d = el("details", { class: "sch-lib", id: "knot-" + k.id, open: i === 0 ? "" : null }, el("summary", null, "🪢 " + k.n),
+      el("p", { class: "hint", style: "margin:8px 0" }, k.use),
+      el("div", { class: "stack", style: "gap:10px" }, k.steps.map(([h, t, img], si) => {
+        const pic = el("div", { class: "kn-pic" }); pic.innerHTML = img();
+        return el("div", { class: "kn-step", "data-step": si + 1 }, pic, el("div", { class: "stack", style: "gap:2px;min-width:0" }, el("b", null, `${si + 1}. ${h}`), el("span", null, t)));
+      })),
+      el("a", { class: "btn small", href: schVidUrl(k.vid), target: "_blank", rel: "noopener", style: "margin-top:10px;align-self:flex-start" }, "▶ Watch a video"));
+    p.append(d);
+  });
+  p.append(el("p", { class: "hint" }, "The video button opens a YouTube search for that knot, so you can pick the video you like."));
 }
 function schGuide(p) {
   p.append(el("h1", null, "Beginner guide"), el("p", { class: "muted" }, "Everything you need for your first day on the water."),
@@ -2520,6 +2569,7 @@ function schPlay(p, V, go2) {
     const st = steps[i];
     if (st.t === "card") {
       box.replaceChildren(el("b", { class: "hint" }, title), bar(), el("div", { class: "sch-card", id: "sch-cardbox" }, el("h2", null, st.c[0]), el("p", null, st.c[1])),
+        SCH_VID[V.lid] ? el("a", { class: "sch-vid", id: "sch-vid", href: schVidUrl(SCH_VID[V.lid]), target: "_blank", rel: "noopener" }, "▶ Watch a video about this") : null,
         el("button", { class: "btn wide", type: "button", id: "sch-next", onclick: () => { i++; draw(); } }, i === L.cards.length - 1 ? "Start the quiz" : "Next"));
       return;
     }
