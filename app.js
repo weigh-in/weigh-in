@@ -886,9 +886,12 @@ function feedPosts() {
 /* What's new. Newest first. Add a new entry on top each time the app changes. */
 /* Bump APP_VERSION every time you change the app, and add a matching entry on top of UPDATES (with v: the same number).
    Phones check app.js every few minutes and offer the new version on their own. */
-const APP_VERSION = 26;
+const APP_VERSION = 27;
 try { if ((parseInt(localStorage.getItem("weighin-appv"), 10) || 0) < APP_VERSION) localStorage.setItem("weighin-appv", String(APP_VERSION)); } catch { /* private mode */ }
 const UPDATES = [
+  { id: "2026-11-09g", v: 27, date: "Nov 9", title: "Release notes and beta", items: [
+    "What's new is now called Release notes.",
+    "Version numbers now start with Beta, like Beta v27, because the app is still being built."] },
   { id: "2026-11-09f", v: 26, date: "Nov 9", title: "Personal best celebration", items: [
     "Catch your biggest fish of that kind and the app throws a celebration with confetti.",
     "Everyone gets a banner on the feed when a friend hits a personal best, and the catch gets a gold Personal best badge.",
@@ -978,11 +981,11 @@ function openWhatsNew(after) {
   setPref("seenNew", UPDATES[0].id);
   const close = () => { bg.remove(); after && after(); };
   const bg = el("div", { class: "sheet-bg", onclick: (e) => { if (e.target === bg) close(); } },
-    el("div", { class: "sheet", role: "dialog", "aria-label": "What's new", style: "height:auto;max-height:90%" },
-      el("div", { class: "sheet-h" }, el("h2", null, "What's new"), el("button", { class: "link", type: "button", id: "wn-close", onclick: close }, "Close")),
-      el("p", { class: "hint", id: "wn-ver", style: "margin:0 16px" }, `You have version ${APP_VERSION}`),
+    el("div", { class: "sheet", role: "dialog", "aria-label": "Release notes", style: "height:auto;max-height:90%" },
+      el("div", { class: "sheet-h" }, el("h2", null, "Release notes"), el("button", { class: "link", type: "button", id: "wn-close", onclick: close }, "Close")),
+      el("p", { class: "hint", id: "wn-ver", style: "margin:0 16px" }, `You have beta version ${APP_VERSION}`),
       el("div", { class: "msgs about", style: "overflow:auto" }, UPDATES.map((u, i) => el("div", { class: "stack", style: "gap:6px", "data-update": u.id },
-        el("div", { class: "row spread" }, el("b", null, (u.v ? `v${u.v} · ` : "") + u.title), el("span", { class: i === 0 ? "pill live" : "muted small" }, i === 0 ? "Latest" : u.date)),
+        el("div", { class: "row spread" }, el("b", null, (u.v ? `Beta v${u.v} · ` : "") + u.title), el("span", { class: i === 0 ? "pill live" : "muted small" }, i === 0 ? "Latest" : u.date)),
         el("ul", { style: "margin:0;padding-left:20px;display:flex;flex-direction:column;gap:4px" }, u.items.map((t) => el("li", null, t))))))));
   document.body.append(bg);
 }
@@ -2796,7 +2799,7 @@ async function checkUpdate() {
 }
 function showUpdateBar() {
   if (document.getElementById("update-bar")) return;
-  document.body.append(el("div", { class: "update-bar", id: "update-bar", role: "status" }, el("span", null, `A new version (v${updatePending}) is ready.`),
+  document.body.append(el("div", { class: "update-bar", id: "update-bar", role: "status" }, el("span", null, `A new beta version (v${updatePending}) is ready.`),
     el("button", { class: "btn small", type: "button", id: "update-now", onclick: applyUpdate }, "Update now")));
 }
 async function applyUpdate() {
@@ -2863,7 +2866,7 @@ function viewMe(p) {
       el("span", { class: "sch-badge" }, r.icon), el("span", { class: "stack", style: "gap:2px;text-align:left;flex:1;min-width:0" }, el("b", null, "🎓 Fishing school"), el("span", { class: "hint" }, `${r.title} · ${sch().xp} XP${nx ? " · " + nx.text : ""}`)), el("span", { class: "label" }, "›")); })(),
     el("div", { class: "list" },
       el("button", { class: "item", type: "button", id: "me-new", onclick: () => openWhatsNew(renderTab) },
-        el("span", { class: "row", style: "gap:10px" }, el("span", { class: "t" }, "🔔 What's new"), unseenUpdate() ? el("span", { class: "pill live" }, "New") : null), el("span", { class: "label" }, "›")),
+        el("span", { class: "row", style: "gap:10px" }, el("span", { class: "t" }, "🔔 Release notes"), unseenUpdate() ? el("span", { class: "pill live" }, "New") : null), el("span", { class: "label" }, "›")),
       el("button", { class: "item", type: "button", onclick: open("friends") },
         el("span", { class: "row", style: "gap:10px" }, el("span", { class: "t" }, "Friends and chat"), S.reqIn.length ? el("span", { class: "pill live" }, `${S.reqIn.length} new`) : null), el("span", { class: "label" }, "›")),
       el("button", { class: "item", type: "button", id: "me-water", onclick: open("water") }, el("span", { class: "t" }, "🔍 Gate keep finder"), el("span", { class: "label" }, "›")),
@@ -2908,7 +2911,7 @@ function viewSettings(p) {
     el("section", { class: "stack" },
       el("button", { class: "btn ghost wide", type: "button", id: "s-about", onclick: openPrivacy }, "About and privacy"),
       el("button", { class: "btn wide", type: "button", onclick: () => { if (confirm("Sign out of Weigh-In?")) signOut(auth); } }, "Sign out")),
-    el("p", { class: "hint", id: "s-ver" }, `Weigh-In version ${APP_VERSION}`),
+    el("p", { class: "hint", id: "s-ver" }, `Weigh-In beta version ${APP_VERSION}`),
     el("p", { class: "hint" }, "Weigh-In is free. Don't post personal info like your address or school."));
 }
 
