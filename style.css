@@ -310,3 +310,4 @@ a.btn.small{text-decoration:none;display:inline-flex;align-items:center}
 .adv-obs summary{cursor:pointer;font-weight:600}
 .adv-hot{margin:0;padding:8px 10px;border-radius:10px;background:rgba(231,111,61,.15);font-weight:600}
 .adv-vote{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:2px}.adv-vote .chip{padding:2px 10px;min-height:30px}
+.adv-feature{border:2px solid var(--accent,#1F5C4D);border-radius:12px;padding:10px;background:rgba(31,92,77,.08)}

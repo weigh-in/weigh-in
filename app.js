@@ -667,7 +667,21 @@ function advRankLures(fish, at, waterT, clar, local, obs) {
   // lures that fish near you really took but that the rules did not list for this fish
   const known = new Set(Object.keys(fish.lures));
   for (const k of new Set(local.map((x) => x.cat).filter(Boolean))) { const n = local.filter((x) => x.cat === k).length; if (!known.has(k) && n >= 2) rows.push({ k, L: ADV_LURES[k], sc: 40 + n * 5, why: [`${n} catches near you used one`], n }); }
-  return rows.sort((a, b) => b.sc - a.sc).slice(0, 3);
+  return rows.sort((a, b) => b.sc - a.sc);
+}
+/* Mixes up the good lures so you don't get the same three every time. Better lures come up more often. */
+function advMix(rows, seed) {
+  if (rows.length <= 1) return rows.slice();
+  const top = rows[0].sc, pool = rows.filter((r, i) => i < 5 || r.sc >= top * 0.4).slice(0, 9);
+  let a = seed >>> 0;
+  const rnd = () => { a = (a + 0x6D2B79F5) | 0; let t = Math.imul(a ^ (a >>> 15), 1 | a); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; };
+  const out = [];
+  while (pool.length) {
+    const w = pool.reduce((s, r) => s + Math.pow(r.sc, 3), 0); let x = rnd() * w, i = 0;
+    for (; i < pool.length - 1; i++) { x -= Math.pow(pool[i].sc, 3); if (x <= 0) break; }
+    out.push(pool.splice(i, 1)[0]);
+  }
+  return out;
 }
 function advWindows(w, fish, waterT, local) {
   const now = new Date(w.current.time).getTime(), c = w.current, wins = dayWindows(w).filter((x) => x.b > now && x.a < now + 40 * 3600000);
@@ -721,14 +735,14 @@ function advWhere(fish, at, waterT, kindRiver, w, obs) {
 }
 function advisorCard(w, loc) {
   const st = getPref("advset", ""); let saved = {}; try { saved = JSON.parse(st) || {}; } catch { saved = {}; }
-  const P = { fish: Math.min(ADV_FISH.length - 1, +saved.fish || 0), clar: [0, 1, 2].includes(saved.clar) ? saved.clar : 1, river: !!saved.river, plan: 0, temp: null, obsOpen: false };
+  const P = { fish: Math.min(ADV_FISH.length - 1, +saved.fish || 0), clar: [0, 1, 2].includes(saved.clar) ? saved.clar : 1, river: !!saved.river, plan: 0, temp: null, obsOpen: false, seed: (Math.random() * 2147483647) | 0, feat: "", recent: [] };
   // what you see on the water. Kept for 4 hours, because conditions change.
   P.obs = (() => { try { const o = JSON.parse(getPref("advobs", "null")); if (o && Date.now() - o.ts < 4 * 3600000) return { level: o.level || "", color: o.color || "", feel: o.feel || "", wind: o.wind || "", acts: Array.isArray(o.acts) ? o.acts : [] }; } catch { /* none */ } return { level: "", color: "", feel: "", wind: "", acts: [] }; })();
   if (P.obs.feel) P.temp = (ADV_FEEL.find((f) => f[0] === P.obs.feel) || [])[2] ?? null;
   const saveObs = () => setPref("advobs", JSON.stringify({ ts: Date.now(), ...P.obs }));
   const wrap = el("div", { class: "bite adv", id: "advisor" }), body = el("div", { class: "stack", style: "gap:10px" });
   const save = () => setPref("advset", JSON.stringify({ fish: P.fish, clar: P.clar, river: P.river }));
-  const fishSel = el("select", { "aria-label": "What fish are you after", id: "adv-fish", onchange: (e) => { P.fish = +e.target.value; P.plan = 0; save(); draw(); } }, ADV_FISH.map((f, i) => el("option", { value: String(i), selected: i === P.fish ? "" : null }, f.n)));
+  const fishSel = el("select", { "aria-label": "What fish are you after", id: "adv-fish", onchange: (e) => { P.fish = +e.target.value; P.plan = 0; P.feat = ""; P.recent = []; save(); draw(); } }, ADV_FISH.map((f, i) => el("option", { value: String(i), selected: i === P.fish ? "" : null }, f.n)));
   const tempIn = el("input", { type: "number", id: "adv-temp", inputmode: "numeric", min: 32, max: 95, "aria-label": "Water temperature in degrees", style: "width:80px", onchange: (e) => { const v = +e.target.value; if (v >= 32 && v <= 95) { P.temp = v; P.obs.feel = ""; saveObs(); draw(); } } });
   const draw = () => {
     const O = P.obs, colorRow = ADV_COLOR.find((c) => c[0] === O.color), clarNow = colorRow ? colorRow[2] : P.clar;
@@ -737,7 +751,12 @@ function advisorCard(w, loc) {
     if (P.plan >= plans.length) P.plan = 0;
     const plan = plans[P.plan], at = advAt(w, plan.ms, plan.kind);
     const windRow = ADV_WIND.find((x) => x[0] === O.wind); if (windRow && P.plan === 0) at.wind = windRow[2];      // what you feel beats the forecast, for right now
-    const lures = advRankLures(fish, at, waterT, clarNow, local, P.plan === 0 ? O : { ...O, acts: [] });
+    const all = advRankLures(fish, at, waterT, clarNow, local, P.plan === 0 ? O : { ...O, acts: [] }), mixed = advMix(all, P.seed);
+    const featured = P.feat ? all.find((r) => r.k === P.feat) : null, lures = mixed.filter((r) => !featured || r.k !== featured.k).slice(0, 3);
+    const suggest = () => {      // press for one new idea. It won't repeat the last few.
+      P.seed = (Math.random() * 2147483647) | 0; const order = advMix(all, P.seed), fresh = order.filter((r) => !P.recent.includes(r.k)), pick = (fresh[0] || order[0]);
+      if (!pick) return; P.feat = pick.k; P.recent = [pick.k, ...P.recent].slice(0, Math.max(1, Math.min(4, order.length - 1))); draw();
+    };
     const near = local.slice().sort((a, b) => a.dKm - b.dKm).slice(0, 3);
     const range = (x) => timeOf(new Date(Math.max(x.a, new Date(w.current.time).getTime()))) + " to " + timeOf(new Date(x.b));
     tempIn.value = String(waterT);
@@ -776,8 +795,11 @@ function advisorCard(w, loc) {
       el("div", { class: "stack", style: "gap:6px", id: "adv-when" }, wins.length ? wins.map((x) => el("div", { class: "adv-win" }, el("div", { class: "row spread" }, el("b", null, `${new Date(x.a).getDate() === new Date(w.current.time).getDate() ? "Today" : "Tomorrow"} ${WINDOW_NAMES[x.k].toLowerCase()}`), el("span", { class: "tag " + (x.s >= 75 ? "good" : x.s >= 55 ? "ok" : "bad") }, x.s + "/100")),
         el("span", { class: "s" }, range(x)), x.why.length ? el("span", { class: "muted small" }, x.why.slice(0, 3).join(". ") + ".") : null, vote(fish.n + "|win:" + x.k))) : [el("p", { class: "muted small" }, "No good windows left in this forecast. Check again later.")]),
       el("b", null, "Plan for"),
-      el("div", { class: "chips", role: "group", "aria-label": "Pick a time to plan for" }, plans.map((p, i) => el("button", { class: "chip", type: "button", "data-plan": i, "aria-pressed": String(P.plan === i), onclick: () => { P.plan = i; draw(); } }, p.label))),
-      el("b", null, "Lure"),
+      el("div", { class: "chips", role: "group", "aria-label": "Pick a time to plan for" }, plans.map((p, i) => el("button", { class: "chip", type: "button", "data-plan": i, "aria-pressed": String(P.plan === i), onclick: () => { P.plan = i; P.feat = ""; draw(); } }, p.label))),
+      el("div", { class: "row spread" }, el("b", null, "Lure"), el("button", { class: "btn small", type: "button", id: "adv-suggest", onclick: suggest }, "💡 Suggest a lure")),
+      featured ? el("div", { class: "adv-lure adv-feature", id: "adv-feature" }, el("div", { class: "row spread" }, el("b", null, `Try this: ${featured.L.n}`), featured.n ? el("span", { class: "pill live" }, `${featured.n} nearby`) : null),
+        el("span", { class: "s" }, `Fish it ${featured.L.d}. ${featured.L.how}`), el("span", { class: "muted small" }, "Why: " + featured.why.slice(0, 3).join("; ") + "."), vote(fish.n + "|" + featured.k)) : null,
+      featured ? el("span", { class: "muted small" }, "More ideas") : null,
       el("div", { class: "stack", style: "gap:6px", id: "adv-lures" }, lures.map((r, i) => el("div", { class: "adv-lure" }, el("div", { class: "row spread" }, el("b", null, `${i + 1}. ${r.L.n}`), r.n ? el("span", { class: "pill live" }, `${r.n} nearby`) : null),
         el("span", { class: "s" }, `Fish it ${r.L.d}. ${r.L.how}`), el("span", { class: "muted small" }, "Why: " + r.why.slice(0, 3).join("; ") + "."), vote(fish.n + "|" + r.k)))),
       el("b", null, "Where"),
@@ -862,8 +884,12 @@ function feedPosts() {
 /* What's new. Newest first. Add a new entry on top each time the app changes. */
 /* Bump APP_VERSION every time you change the app, and add a matching entry on top of UPDATES (with v: the same number).
    Phones check app.js every few minutes and offer the new version on their own. */
-const APP_VERSION = 18;
+const APP_VERSION = 19;
 const UPDATES = [
+  { id: "2026-11-08c", v: 19, date: "Nov 8", title: "Different lures every time", items: [
+    "The Fishing advisor now mixes up its lure ideas, so you don't get the same three every time. Better lures still come up more often.",
+    "New 💡 Suggest a lure button. Each press gives you one new lure to try, with how to fish it and why. It won't repeat the last few.",
+    "Your Good suggestion? thumbs still count for the lure it shows."] },
   { id: "2026-11-08b", v: 18, date: "Nov 8", title: "Rate the advisor's suggestions", items: [
     "New: every lure and every time in the Fishing advisor now asks Good suggestion? with a thumbs up or thumbs down.",
     "A thumbs up makes that lure or time show up higher next time for that fish. A thumbs down pushes it lower. Tap again to take your answer back.",
