@@ -915,9 +915,13 @@ function feedPosts() {
 /* What's new. Newest first. Add a new entry on top each time the app changes. */
 /* Bump APP_VERSION every time you change the app, and add a matching entry on top of UPDATES (with v: the same number).
    Phones check app.js every few minutes and offer the new version on their own. */
-const APP_VERSION = 31;
+const APP_VERSION = 32;
 try { if ((parseInt(localStorage.getItem("weighin-appv"), 10) || 0) < APP_VERSION) localStorage.setItem("weighin-appv", String(APP_VERSION)); } catch { /* private mode */ }
 const UPDATES = [
+  { id: "2026-11-09l", v: 32, date: "Nov 9", title: "Fishing game runs smoother", items: [
+    "The fishing game is much faster on older and cheaper phones. The scenery is drawn once instead of every frame.",
+    "The game checks how your phone is doing. If it stutters, it lowers the detail by itself until it runs smooth.",
+    "Text in the game has an outline so it stays easy to read."] },
   { id: "2026-11-09k", v: 31, date: "Nov 9", title: "Harder school, share button, better game", items: [
     "Fishing school quizzes are harder. Lessons are 6 questions and you need 5 right. Final quizzes need 8 out of 10.",
     "Every quiz is a new mix of questions, and you see ones you haven't seen first. There are about 150 questions now.",
@@ -4076,12 +4080,15 @@ function playClash(mode, locId, lureIdIn, onExit, duel) {
   const BITE_WINDOW = 0.95 * (1 + 0.3 * upHook);
   fcMarkPlace(L.id);
   const canvas = el("canvas", { class: "game-canvas", role: "img", "aria-label": "Fishing game. Tap to cast and hook. Hold to reel. Let go when the fish runs." });
-  const ctx = canvas.getContext("2d");
+  let ctx = canvas.getContext("2d", { alpha: false });
   const sndBtn = el("button", { class: "game-x game-snd", type: "button", "aria-label": "Sound on or off", onclick: () => { soundOn = !soundOn; setPref("fcsound", soundOn ? "1" : "0"); sndBtn.textContent = soundOn ? "🔊" : "🔇"; if (!soundOn) whine(false); } });
   const bg = el("div", { class: "game-bg", role: "dialog", "aria-label": "Fishing" }, canvas, sndBtn,
     el("button", { class: "game-x", type: "button", "aria-label": "Leave the game", onclick: () => end() }, "✕"));
   document.body.append(bg);
   let W = 0, H = 0, raf = 0, dpr = 1, last = 0, deco = null;
+  // Quality: 0 = full, 1 = lighter, 2 = lightest. Weak phones start lighter, and any phone that stutters steps down by itself.
+  const lowEnd = (navigator.hardwareConcurrency || 8) <= 6 || (navigator.deviceMemory || 8) <= 4;
+  let Q = Math.max(+getPref("fcq", "0") || 0, lowEnd ? 1 : 0), ema = 16, nfr = 0, outl = false, LAY = null;
   /* ---------- sound (made with the browser, no files) ---------- */
   let soundOn = getPref("fcsound", "1") === "1", actx = null, noise = null, whineNode = null, clickAcc = 0;
   sndBtn.textContent = soundOn ? "🔊" : "🔇";
@@ -4105,7 +4112,7 @@ function playClash(mode, locId, lureIdIn, onExit, duel) {
     if (!whineNode) { const o = a.createOscillator(), f = a.createBiquadFilter(), g = a.createGain(); o.type = "sawtooth"; f.type = "bandpass"; f.frequency.value = 1400; f.Q.value = 2; g.gain.value = 0.0001; o.connect(f); f.connect(g); g.connect(a.destination); o.start(); g.gain.setTargetAtTime(0.025, a.currentTime, 0.05); whineNode = { o, g }; }
     whineNode.o.frequency.setTargetAtTime(pitch, a.currentTime, 0.05);
   };
-  const resize = () => { dpr = Math.min(2, devicePixelRatio || 1); W = bg.clientWidth; H = bg.clientHeight; canvas.width = W * dpr; canvas.height = H * dpr; canvas.style.width = W + "px"; canvas.style.height = H + "px"; ctx.setTransform(dpr, 0, 0, dpr, 0, 0); deco = buildDeco(); };
+  const resize = () => { dpr = Math.min(Q === 0 ? 2 : Q === 1 ? 1.25 : 1, devicePixelRatio || 1); W = bg.clientWidth; H = bg.clientHeight; canvas.width = W * dpr; canvas.height = H * dpr; canvas.style.width = W + "px"; canvas.style.height = H + "px"; ctx.setTransform(dpr, 0, 0, dpr, 0, 0); deco = buildDeco(); LAY = null; };
   const end = () => { evSubmit(); cancelAnimationFrame(raf); whine(false); removeEventListener("resize", resize); removeEventListener("keydown", onKey); removeEventListener("keyup", onKeyUp); try { actx && actx.close(); } catch { /* ignore */ } bg.remove(); onExit && onExit(); };
 
   /* ---------- scenery ---------- */
@@ -4220,7 +4227,7 @@ function playClash(mode, locId, lureIdIn, onExit, duel) {
 
   /* ---------- drawing ---------- */
   const rnd = (i) => { const x = Math.sin(i * 127.1 + 311.7) * 43758.5453; return x - Math.floor(x); };
-  const text = (s, x, y, size, color, align, font) => { ctx.font = `bold ${size}px ${font || "system-ui,sans-serif"}`; ctx.textAlign = align || "center"; ctx.fillStyle = color || "#fff"; ctx.fillText(s, x, y); };
+  const text = (s, x, y, size, color, align, font) => { ctx.font = `bold ${size}px ${font || "system-ui,sans-serif"}`; ctx.textAlign = align || "center"; if (outl) { ctx.lineJoin = "round"; ctx.lineWidth = 3.5; ctx.strokeStyle = "rgba(0,20,30,.5)"; ctx.strokeText(s, x, y); } ctx.fillStyle = color || "#fff"; ctx.fillText(s, x, y); };
   function drawReal(name, x, y, r, dir, rot, open, shadow) {
     const f = FC_FISH[name], h = r * f.asp, SH = shadow ? "rgba(4,24,34,.68)" : null;
     ctx.save(); ctx.translate(x, y); ctx.scale(dir, 1); ctx.rotate(rot || 0);
@@ -4263,8 +4270,11 @@ function playClash(mode, locId, lureIdIn, onExit, duel) {
     F.off += ((Math.sin(F.time * (F.ph === "run" ? 2.2 : 3)) * amp * (F.ph === "run" ? F.runDir : 1)) - F.off) * 0.08;
     return { x: base.x + F.off, y: base.y - (F.ph === "jump" && F.phA < 1 ? Math.sin(F.phA * Math.PI) * (50 + 40 * F.s) : 0) };
   }
-  function scene(now) {
-    const y0 = wy(), D = deco, t = now / 1000;
+  /* ---------- the parts that never move are painted once and kept, so low-end phones only redraw what moves ---------- */
+  const mkLayer = () => { const c = document.createElement("canvas"); c.width = Math.round(W * dpr); c.height = Math.round(H * dpr); const x = c.getContext("2d"); x.setTransform(dpr, 0, 0, dpr, 0, 0); return { c, x }; };
+  function buildLayers() {
+    const y0 = wy(), D = deco, t = 0, main = ctx, la = mkLayer(), lb = mkLayer(), lc = mkLayer(), ld = mkLayer(), lr = mkLayer();
+    ctx = la.x;
     const SKY = TOD === "night" ? ["#060b22", "#2a4270"] : TOD === "dusk" ? ["#ff8f5a", "#ffd6a0"] : TOD === "dawn" ? ["#f4a9c0", "#ffe4c6"] : L.sky;
     let g = ctx.createLinearGradient(0, 0, 0, y0); g.addColorStop(0, SKY[0]); g.addColorStop(1, SKY[1]); ctx.fillStyle = g; ctx.fillRect(0, 0, W, y0);
     if (TOD === "night") {
@@ -4275,12 +4285,9 @@ function playClash(mode, locId, lureIdIn, onExit, duel) {
       const sy = TOD === "dusk" ? y0 * 0.82 : TOD === "dawn" ? y0 * 0.7 : y0 * 0.35, warm = TOD === "dusk" || TOD === "dawn";
       const sg = ctx.createRadialGradient(W * 0.8, sy, 4, W * 0.8, sy, warm ? 95 : 70); sg.addColorStop(0, warm ? "rgba(255,226,170,1)" : "rgba(255,246,200,1)"); sg.addColorStop(0.25, warm ? "rgba(255,170,100,.8)" : "rgba(255,236,170,.8)"); sg.addColorStop(1, "rgba(255,200,120,0)"); ctx.fillStyle = sg; ctx.fillRect(W * 0.8 - 100, sy - 100, 200, 200);
     }
-    ctx.globalAlpha = TOD === "night" ? 0.3 : 1; for (const [col, oy] of [["rgba(175,194,220,.55)", 5], ["rgba(255,255,255,.9)", 0]]) { ctx.fillStyle = col; for (const c of D.clouds) { const cx = ((c.x + t * c.v) % (W + 160)) - 80; for (const [dx, dy, rr] of [[0, 0, 16], [16, -6, 20], [34, 0, 15], [14, 6, 14]]) { ctx.beginPath(); ctx.arc(cx + dx * c.s, c.y + dy * c.s + oy * c.s, rr * c.s, 0, 7); ctx.fill(); } } }
-    ctx.globalAlpha = 1;
+    ctx = lb.x;
     for (const hl of D.hills) { ctx.fillStyle = hl.col; ctx.beginPath(); ctx.moveTo(0, y0); hl.pts.forEach(([x, y], i) => { if (i === 0) ctx.lineTo(x, y); else { const [px, py] = hl.pts[i - 1]; ctx.quadraticCurveTo(px, py, (px + x) / 2, (py + y) / 2); } }); ctx.lineTo(W, y0); ctx.closePath(); ctx.fill(); }
     if (!L.salt) { ctx.fillStyle = "rgba(50,88,72,.55)"; for (const f of D.far) { ctx.beginPath(); ctx.moveTo(f.x - 7, y0); ctx.lineTo(f.x, y0 - f.h); ctx.lineTo(f.x + 7, y0); ctx.fill(); } }
-    if (L.salt || L.big) { const bx = (D.boat.x + t * 3) % (W + 80) - 40, sc = D.boat.s, b0 = y0 - 1 + Math.sin(t * 1.2); ctx.fillStyle = "#f4f1e8"; ctx.beginPath(); ctx.moveTo(bx, b0 - 22 * sc); ctx.lineTo(bx + 12 * sc, b0 - 3 * sc); ctx.lineTo(bx, b0 - 3 * sc); ctx.fill(); ctx.fillStyle = "#e3ddc9"; ctx.beginPath(); ctx.moveTo(bx - 2 * sc, b0 - 18 * sc); ctx.lineTo(bx - 10 * sc, b0 - 3 * sc); ctx.lineTo(bx - 2 * sc, b0 - 3 * sc); ctx.fill(); ctx.fillStyle = "#3b4a5a"; ctx.fillRect(bx - 12 * sc, b0 - 3 * sc, 26 * sc, 4 * sc); }
-    ctx.strokeStyle = "#2a2a2a"; ctx.lineWidth = 1.6; for (const b of D.birds) { const bx = ((b.x + t * b.v) % (W + 60)) - 30, fl = Math.sin(t * 7 + b.ph) * 4; ctx.beginPath(); ctx.moveTo(bx - 8, b.y - fl); ctx.quadraticCurveTo(bx - 3, b.y - 4, bx, b.y); ctx.quadraticCurveTo(bx + 3, b.y - 4, bx + 8, b.y - fl); ctx.stroke(); }
     for (const tr of D.trees) { const base = y0 + 2;
       if (tr.palm) { const tx = tr.x + (tr.k - 0.5) * 30, ty = base - tr.h; ctx.strokeStyle = "#6b4f2c"; ctx.lineWidth = 4; ctx.beginPath(); ctx.moveTo(tr.x, base); ctx.quadraticCurveTo(tr.x + (tr.k - 0.5) * 14, base - tr.h * 0.5, tx, ty); ctx.stroke(); ctx.strokeStyle = "#2f8a46"; ctx.lineWidth = 3; for (let i = 0; i < 7; i++) { const ang = -Math.PI / 2 + (i - 3) * 0.55; ctx.beginPath(); ctx.moveTo(tx, ty); ctx.quadraticCurveTo(tx + Math.cos(ang) * 22, ty + Math.sin(ang) * 22 - 6, tx + Math.cos(ang) * 38, ty + Math.sin(ang) * 38 + 10 + Math.sin(t * 1.5 + i) * 2); ctx.stroke(); } continue; }
       const pal = K === "river" ? ["#2f5a3a", "#427a52", "#24472e"] : K === "lake" ? ["#244b36", "#33694c", "#1b3a2a"] : ["#3d7a42", "#5fa75c", "#2f6334"], dark = tr.k > 0.5 ? pal[0] : pal[2];
@@ -4295,35 +4302,11 @@ function playClash(mode, locId, lureIdIn, onExit, duel) {
         ctx.fillStyle = "#4a3523"; ctx.beginPath(); ctx.moveTo(tr.x - 3, base + 1); ctx.lineTo(tr.x - 1.5, cy); ctx.lineTo(tr.x + 1.5, cy); ctx.lineTo(tr.x + 3, base + 1); ctx.fill(); ctx.fillStyle = "#35261a"; ctx.fillRect(tr.x + 0.5, cy, 2, base - cy);
         ctx.fillStyle = dark; ctx.beginPath(); ctx.arc(tr.x, cy, rr, 0, 7); ctx.arc(tr.x - rr * 0.7, cy + rr * 0.3, rr * 0.7, 0, 7); ctx.arc(tr.x + rr * 0.7, cy + rr * 0.3, rr * 0.7, 0, 7); ctx.fill();
         ctx.fillStyle = pal[1]; ctx.globalAlpha = 0.6; ctx.beginPath(); ctx.arc(tr.x - rr * 0.3, cy - rr * 0.3, rr * 0.6, 0, 7); ctx.fill(); ctx.globalAlpha = 1; } }
+    ctx = lc.x;
     g = ctx.createLinearGradient(0, y0, 0, H); g.addColorStop(0, L.water[0]); g.addColorStop(1, L.water[1]); ctx.fillStyle = g; ctx.fillRect(0, y0, W, H - y0);
     ctx.fillStyle = "rgba(255,255,255,.1)"; ctx.fillRect(0, y0, W, 18);
     const hz = ctx.createLinearGradient(0, y0 - 26, 0, y0 + 40); hz.addColorStop(0, "rgba(255,255,255,0)"); hz.addColorStop(0.45, "rgba(255,255,255,.3)"); hz.addColorStop(1, "rgba(255,255,255,0)"); ctx.fillStyle = hz; ctx.fillRect(0, y0 - 26, W, 66);
-    // mirror image of the shore and sky on the water, bent by tiny waves
-    { const sh = 4, calm = K === "ocean" || L.big ? 2.2 : K === "river" ? 1.6 : 1; ctx.save();
-      for (let a = Math.max(0, y0 - y0 * 0.95); a < y0; a += sh) { const dist = y0 - a, dy = y0 + dist - sh, ox = Math.sin(t * 1.6 + dist / 5) * (1 + dist / y0 * 4) * calm;
-        ctx.globalAlpha = Math.max(0, (TOD === "night" ? 0.16 : 0.26) * (1 - dist / (y0 * 1.1))); ctx.drawImage(canvas, 0, a * dpr, W * dpr, sh * dpr, ox, dy, W, sh); }
-      ctx.restore(); }
-    if (TOD === "dawn" || TOD === "dusk") for (let i = 0; i < 3; i++) { const mx = ((i * W * 0.45 + t * (6 + i * 3)) % (W * 1.5)) - W * 0.25, mg = ctx.createRadialGradient(mx, y0 + 6, 4, mx, y0 + 6, W * 0.4); mg.addColorStop(0, "rgba(255,255,255,.22)"); mg.addColorStop(1, "rgba(255,255,255,0)"); ctx.fillStyle = mg; ctx.fillRect(mx - W * 0.4, y0 - 24, W * 0.8, 60); }
-    // light shafts from the sky and the sun's glitter on the water
-    for (let i = 0; i < 5; i++) { const x = W * (i + 0.3) / 5 + Math.sin(t * 0.25 + i * 1.7) * 24, wd = 26 + 14 * Math.sin(i * 2.3 + t * 0.4), a = (K === "ocean" || L.big ? 0.14 : 0.09) * (0.6 + 0.4 * Math.sin(t * 0.7 + i));
-      const rg = ctx.createLinearGradient(0, y0, 0, H * 0.85); rg.addColorStop(0, `rgba(255,255,255,${a})`); rg.addColorStop(1, "rgba(255,255,255,0)");
-      ctx.fillStyle = rg; ctx.beginPath(); ctx.moveTo(x, y0); ctx.lineTo(x + wd, y0); ctx.lineTo(x + wd * 2.4 - 70, H * 0.85); ctx.lineTo(x - wd * 1.4 - 70, H * 0.85); ctx.closePath(); ctx.fill(); }
-    for (let i = 0; i < 16; i++) { const ww = 30 - i * 1.4 + Math.sin(t * 3 + i * 1.3) * 8; if (ww > 2) { ctx.fillStyle = `rgba(255,248,210,${0.5 - i * 0.025})`; ctx.fillRect(W * 0.8 - ww / 2 + Math.sin(t * 1.5 + i) * 6, y0 + 4 + i * 11, ww, 2); } }
-    for (const s of D.shadows) { const sx = ((s.x + t * s.v) % (W + 80) + W + 80) % (W + 80) - 40; ctx.fillStyle = "rgba(0,20,30,.18)"; ctx.beginPath(); ctx.ellipse(sx, s.y, s.s * 1.5, s.s * 0.55, 0, 0, 7); ctx.fill(); ctx.beginPath(); ctx.moveTo(sx - s.s * 1.4 * Math.sign(s.v), s.y); ctx.lineTo(sx - s.s * 2.2 * Math.sign(s.v), s.y - s.s * 0.5); ctx.lineTo(sx - s.s * 2.2 * Math.sign(s.v), s.y + s.s * 0.5); ctx.fill(); }
-    ctx.strokeStyle = "rgba(255,255,255,.2)"; ctx.lineWidth = 2;
-    for (let i = 0; i < 6; i++) { const y = y0 + 30 + i * (H - y0) / 6.5; ctx.beginPath(); for (let x = 0; x <= W; x += 14) ctx.lineTo(x, y + Math.sin(x / 30 + now / 500 + i) * (K === "ocean" || L.big ? 6 : 3)); ctx.stroke(); }
-    // small bright wavelets: bigger and wider the closer they are to you, drifting with the wind
-    for (let i = 0; i < 46; i++) { const dpt = Math.pow(rnd(i * 5 + 2), 1.5), wy2 = y0 + 8 + dpt * (H * 0.88 - y0), wx = ((rnd(i * 5 + 1) * W + t * (6 + 10 * rnd(i + 9)) * (0.4 + dpt)) % (W + 40)) - 20, len = 5 + dpt * 26 + rnd(i + 4) * 6, al = (0.12 + 0.2 * Math.abs(Math.sin(t * 1.3 + i))) * (0.4 + dpt);
-      ctx.strokeStyle = `rgba(255,255,255,${al})`; ctx.lineWidth = 1 + dpt * 1.5; ctx.beginPath(); ctx.moveTo(wx, wy2); ctx.quadraticCurveTo(wx + len / 2, wy2 - 1.5 - dpt * 2, wx + len, wy2); ctx.stroke(); }
-    // caustics: moving net of light on the bottom of shallow water
-    if (!(K === "ocean" || L.big)) { ctx.strokeStyle = "rgba(255,255,230,.07)"; ctx.lineWidth = 1.5; for (let i = 0; i < 9; i++) { const cy2 = H * 0.62 + i * (H * 0.3 / 9); ctx.beginPath(); for (let x = 0; x <= W; x += 12) ctx.lineTo(x, cy2 + Math.sin(x / 22 + t * 1.2 + i * 1.9) * 5 + Math.cos(x / 41 - t * 0.8 + i) * 4); ctx.stroke(); } }
-    if (K === "river") for (const sk of D.streaks) { const sx = ((sk.x + t * sk.v) % (W + 140)) - 70; ctx.strokeStyle = "rgba(255,255,255,.22)"; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(sx, sk.y); ctx.lineTo(sx + sk.l, sk.y + 1); ctx.stroke(); }
-    for (const p of D.pads) { ctx.fillStyle = "#3e8a45"; ctx.beginPath(); ctx.ellipse(p.x, p.y, p.s, p.s * 0.45, 0, 0.3, Math.PI * 2 - 0.1); ctx.lineTo(p.x, p.y); ctx.fill(); if (p.s > 22) { ctx.fillStyle = "#f6b6cc"; ctx.beginPath(); ctx.arc(p.x + 3, p.y - 3, 4, 0, 7); ctx.fill(); } }
-    for (const rk of D.rocks) { ctx.fillStyle = "#59666b"; ctx.beginPath(); ctx.ellipse(rk.x, rk.y, rk.s, rk.s * 0.55, 0, Math.PI, 0); ctx.fill(); ctx.fillStyle = "rgba(255,255,255,.4)"; ctx.fillRect(rk.x - rk.s, rk.y - 1, rk.s * 2, 2); }
-    for (const s of D.sparkles) { const a = Math.max(0, Math.sin(t * 2 + s.ph)); if (a > 0.6) { ctx.fillStyle = `rgba(255,255,255,${(a - 0.6) * 1.6})`; ctx.fillRect(s.x - 4, s.y, 8, 1.5); } }
-    ctx.lineCap = "round";
-    for (const wd of D.weeds) { const bx = wd.x, b0 = H * 0.9; ctx.strokeStyle = L.salt ? (wd.k < 0.5 ? "rgba(214,98,84,.32)" : "rgba(30,110,70,.32)") : "rgba(20,70,40,.34)"; ctx.lineWidth = 3 + wd.k * 3; ctx.beginPath(); ctx.moveTo(bx, b0); ctx.bezierCurveTo(bx + Math.sin(t * 1.1 + wd.ph) * 10, b0 - wd.h * 0.35, bx - Math.sin(t * 1.3 + wd.ph) * 10, b0 - wd.h * 0.7, bx + Math.sin(t * 1.2 + wd.ph) * 14, b0 - wd.h); ctx.stroke(); }
-    for (const bb of D.bubbles) { const yy = (((bb.y - t * bb.v) % (H - y0)) + (H - y0)) % (H - y0) + y0; ctx.fillStyle = "rgba(255,255,255,.28)"; ctx.beginPath(); ctx.arc(bb.x + Math.sin(t + bb.y) * 4, yy, bb.s, 0, 7); ctx.fill(); }
+    ctx = ld.x;
     const vg = ctx.createRadialGradient(W / 2, H * 0.5, H * 0.25, W / 2, H * 0.5, H * 0.8); vg.addColorStop(0, "rgba(0,0,0,0)"); vg.addColorStop(1, K === "ocean" ? "rgba(0,10,30,.45)" : "rgba(0,15,25,.3)"); ctx.fillStyle = vg; ctx.fillRect(0, y0, W, H - y0);
     // bank
     const by = H * 0.9; g = ctx.createLinearGradient(0, by, 0, H); g.addColorStop(0, L.salt ? "#e5d3a1" : "#7a6440"); g.addColorStop(1, L.salt ? "#c3ac75" : "#5a4a2e"); ctx.fillStyle = g; ctx.fillRect(0, by, W, H - by);
@@ -4332,13 +4315,61 @@ function playClash(mode, locId, lureIdIn, onExit, duel) {
     ctx.strokeStyle = "rgba(255,255,255,.55)"; ctx.lineWidth = 2; ctx.beginPath(); for (let x = 0; x <= W; x += 12) ctx.lineTo(x, by - 3 + Math.sin(x * 0.1 + t * 2) * 1.5); ctx.stroke();
     ctx.fillStyle = "rgba(0,0,0,.28)"; for (let i = 0; i < 6; i++) ctx.fillRect(W * 0.02 + i * W * 0.032, by - 10, 1.5, 7);
     for (const pb of D.pebbles) { const c = pb.c; ctx.fillStyle = L.salt ? `rgba(${(150 + c * 60) | 0},${(135 + c * 50) | 0},${(105 + c * 40) | 0},.85)` : `rgba(${(100 + c * 70) | 0},${(95 + c * 60) | 0},${(85 + c * 40) | 0},.85)`; ctx.beginPath(); ctx.ellipse(pb.x, pb.y, pb.s * 1.4, pb.s, 0, 0, 7); ctx.fill(); }
-    if (!L.salt) { ctx.strokeStyle = "#3d6a2b"; ctx.lineWidth = 1.5; for (let x = 4; x < W; x += 9) { const hh = 6 + ((x * 7) % 9); ctx.beginPath(); ctx.moveTo(x, by + 2); ctx.lineTo(x + Math.sin(t * 2 + x) * 2, by - hh); ctx.stroke(); } }
+    // the mirror image of the shore and sky, flipped and faded once. Fast phones bend it with tiny waves.
+    const rx = lr.x; rx.setTransform(dpr, 0, 0, -dpr, 0, y0 * dpr);
+    rx.drawImage(la.c, 0, 0, la.c.width, y0 * dpr, 0, 0, W, y0); rx.drawImage(lb.c, 0, 0, lb.c.width, y0 * dpr, 0, 0, W, y0);
+    rx.setTransform(dpr, 0, 0, dpr, 0, 0); rx.globalCompositeOperation = "destination-in";
+    const fg = rx.createLinearGradient(0, 0, 0, y0 * 0.95); fg.addColorStop(0, "rgba(0,0,0,1)"); fg.addColorStop(1, "rgba(0,0,0,0)"); rx.fillStyle = fg; rx.fillRect(0, 0, W, y0 * 0.95);
+    ctx = main; LAY = { a: la.c, b: lb.c, c: lc.c, d: ld.c, r: lr.c };
+  }
+  const blit = (c) => ctx.drawImage(c, 0, 0, c.width, c.height, 0, 0, W, H);
+  function scene(now) {
+    if (!LAY) buildLayers();
+    const y0 = wy(), D = deco, t = now / 1000, by = H * 0.9;
+    blit(LAY.a);
+    ctx.globalAlpha = TOD === "night" ? 0.3 : 1; for (const [col, oy] of [["rgba(175,194,220,.55)", 5], ["rgba(255,255,255,.9)", 0]]) { ctx.fillStyle = col; for (const c of D.clouds) { const cx = ((c.x + t * c.v) % (W + 160)) - 80; for (const [dx, dy, rr] of [[0, 0, 16], [16, -6, 20], [34, 0, 15], [14, 6, 14]]) { ctx.beginPath(); ctx.arc(cx + dx * c.s, c.y + dy * c.s + oy * c.s, rr * c.s, 0, 7); ctx.fill(); } } }
+    ctx.globalAlpha = 1;
+    ctx.strokeStyle = "#2a2a2a"; ctx.lineWidth = 1.6; for (const b of D.birds) { const bx = ((b.x + t * b.v) % (W + 60)) - 30, fl = Math.sin(t * 7 + b.ph) * 4; ctx.beginPath(); ctx.moveTo(bx - 8, b.y - fl); ctx.quadraticCurveTo(bx - 3, b.y - 4, bx, b.y); ctx.quadraticCurveTo(bx + 3, b.y - 4, bx + 8, b.y - fl); ctx.stroke(); }
+    blit(LAY.b);
+    if (L.salt || L.big) { const bx = (D.boat.x + t * 3) % (W + 80) - 40, sc = D.boat.s, b0 = y0 - 1 + Math.sin(t * 1.2); ctx.fillStyle = "#f4f1e8"; ctx.beginPath(); ctx.moveTo(bx, b0 - 22 * sc); ctx.lineTo(bx + 12 * sc, b0 - 3 * sc); ctx.lineTo(bx, b0 - 3 * sc); ctx.fill(); ctx.fillStyle = "#e3ddc9"; ctx.beginPath(); ctx.moveTo(bx - 2 * sc, b0 - 18 * sc); ctx.lineTo(bx - 10 * sc, b0 - 3 * sc); ctx.lineTo(bx - 2 * sc, b0 - 3 * sc); ctx.fill(); ctx.fillStyle = "#3b4a5a"; ctx.fillRect(bx - 12 * sc, b0 - 3 * sc, 26 * sc, 4 * sc); }
+    blit(LAY.c);
+    // mirror image of the shore and sky on the water. Fast phones bend it with tiny waves.
+    { const al = TOD === "night" ? 0.16 : 0.26, rh = y0 * 0.95; ctx.globalAlpha = al;
+      if (Q < 1) { const calm = K === "ocean" || L.big ? 2.2 : K === "river" ? 1.6 : 1; for (let r = 0; r < rh; r += 6) ctx.drawImage(LAY.r, 0, r * dpr, W * dpr, 6 * dpr, Math.sin(t * 1.6 + r / 5) * (1 + r / y0 * 4) * calm, y0 + r, W, 6); }
+      else ctx.drawImage(LAY.r, 0, 0, W * dpr, rh * dpr, 0, y0, W, rh);
+      ctx.globalAlpha = 1; }
+    if (Q < 1 && (TOD === "dawn" || TOD === "dusk")) for (let i = 0; i < 3; i++) { const mx = ((i * W * 0.45 + t * (6 + i * 3)) % (W * 1.5)) - W * 0.25, mg = ctx.createRadialGradient(mx, y0 + 6, 4, mx, y0 + 6, W * 0.4); mg.addColorStop(0, "rgba(255,255,255,.22)"); mg.addColorStop(1, "rgba(255,255,255,0)"); ctx.fillStyle = mg; ctx.fillRect(mx - W * 0.4, y0 - 24, W * 0.8, 60); }
+    // light shafts from the sky and the sun's glitter on the water
+    if (Q < 1) for (let i = 0; i < 5; i++) { const x = W * (i + 0.3) / 5 + Math.sin(t * 0.25 + i * 1.7) * 24, wd = 26 + 14 * Math.sin(i * 2.3 + t * 0.4), a = (K === "ocean" || L.big ? 0.14 : 0.09) * (0.6 + 0.4 * Math.sin(t * 0.7 + i));
+      const rg = ctx.createLinearGradient(0, y0, 0, H * 0.85); rg.addColorStop(0, `rgba(255,255,255,${a})`); rg.addColorStop(1, "rgba(255,255,255,0)");
+      ctx.fillStyle = rg; ctx.beginPath(); ctx.moveTo(x, y0); ctx.lineTo(x + wd, y0); ctx.lineTo(x + wd * 2.4 - 70, H * 0.85); ctx.lineTo(x - wd * 1.4 - 70, H * 0.85); ctx.closePath(); ctx.fill(); }
+    if (Q < 2) for (let i = 0; i < 16; i++) { const ww = 30 - i * 1.4 + Math.sin(t * 3 + i * 1.3) * 8; if (ww > 2) { ctx.fillStyle = `rgba(255,248,210,${0.5 - i * 0.025})`; ctx.fillRect(W * 0.8 - ww / 2 + Math.sin(t * 1.5 + i) * 6, y0 + 4 + i * 11, ww, 2); } }
+    for (const s of D.shadows) { const sx = ((s.x + t * s.v) % (W + 80) + W + 80) % (W + 80) - 40; ctx.fillStyle = "rgba(0,20,30,.18)"; ctx.beginPath(); ctx.ellipse(sx, s.y, s.s * 1.5, s.s * 0.55, 0, 0, 7); ctx.fill(); ctx.beginPath(); ctx.moveTo(sx - s.s * 1.4 * Math.sign(s.v), s.y); ctx.lineTo(sx - s.s * 2.2 * Math.sign(s.v), s.y - s.s * 0.5); ctx.lineTo(sx - s.s * 2.2 * Math.sign(s.v), s.y + s.s * 0.5); ctx.fill(); }
+    ctx.strokeStyle = "rgba(255,255,255,.2)"; ctx.lineWidth = 2;
+    for (let i = 0; i < (Q >= 2 ? 3 : 6); i++) { const y = y0 + 30 + i * (H - y0) / 6.5; ctx.beginPath(); for (let x = 0; x <= W; x += 14) ctx.lineTo(x, y + Math.sin(x / 30 + now / 500 + i) * (K === "ocean" || L.big ? 6 : 3)); ctx.stroke(); }
+    // small bright wavelets: bigger and wider the closer they are to you, drifting with the wind
+    for (let i = 0; i < (Q >= 2 ? 10 : Q ? 24 : 46); i++) { const dpt = Math.pow(rnd(i * 5 + 2), 1.5), wy2 = y0 + 8 + dpt * (H * 0.88 - y0), wx = ((rnd(i * 5 + 1) * W + t * (6 + 10 * rnd(i + 9)) * (0.4 + dpt)) % (W + 40)) - 20, len = 5 + dpt * 26 + rnd(i + 4) * 6, al = (0.12 + 0.2 * Math.abs(Math.sin(t * 1.3 + i))) * (0.4 + dpt);
+      ctx.strokeStyle = `rgba(255,255,255,${al})`; ctx.lineWidth = 1 + dpt * 1.5; ctx.beginPath(); ctx.moveTo(wx, wy2); ctx.quadraticCurveTo(wx + len / 2, wy2 - 1.5 - dpt * 2, wx + len, wy2); ctx.stroke(); }
+    // caustics: moving net of light on the bottom of shallow water
+    if (Q < 1 && !(K === "ocean" || L.big)) { ctx.strokeStyle = "rgba(255,255,230,.07)"; ctx.lineWidth = 1.5; for (let i = 0; i < 9; i++) { const cy2 = H * 0.62 + i * (H * 0.3 / 9); ctx.beginPath(); for (let x = 0; x <= W; x += 12) ctx.lineTo(x, cy2 + Math.sin(x / 22 + t * 1.2 + i * 1.9) * 5 + Math.cos(x / 41 - t * 0.8 + i) * 4); ctx.stroke(); } }
+    if (K === "river") for (const sk of D.streaks) { const sx = ((sk.x + t * sk.v) % (W + 140)) - 70; ctx.strokeStyle = "rgba(255,255,255,.22)"; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(sx, sk.y); ctx.lineTo(sx + sk.l, sk.y + 1); ctx.stroke(); }
+    for (const p of D.pads) { ctx.fillStyle = "#3e8a45"; ctx.beginPath(); ctx.ellipse(p.x, p.y, p.s, p.s * 0.45, 0, 0.3, Math.PI * 2 - 0.1); ctx.lineTo(p.x, p.y); ctx.fill(); if (p.s > 22) { ctx.fillStyle = "#f6b6cc"; ctx.beginPath(); ctx.arc(p.x + 3, p.y - 3, 4, 0, 7); ctx.fill(); } }
+    for (const rk of D.rocks) { ctx.fillStyle = "#59666b"; ctx.beginPath(); ctx.ellipse(rk.x, rk.y, rk.s, rk.s * 0.55, 0, Math.PI, 0); ctx.fill(); ctx.fillStyle = "rgba(255,255,255,.4)"; ctx.fillRect(rk.x - rk.s, rk.y - 1, rk.s * 2, 2); }
+    if (Q < 2) for (const s of D.sparkles) { const a = Math.max(0, Math.sin(t * 2 + s.ph)); if (a > 0.6) { ctx.fillStyle = `rgba(255,255,255,${(a - 0.6) * 1.6})`; ctx.fillRect(s.x - 4, s.y, 8, 1.5); } }
+    ctx.lineCap = "round";
+    for (const [wi, wd] of D.weeds.entries()) { if (Q >= 2 && wi % 2) continue; const bx = wd.x, b0 = H * 0.9; ctx.strokeStyle = L.salt ? (wd.k < 0.5 ? "rgba(214,98,84,.32)" : "rgba(30,110,70,.32)") : "rgba(20,70,40,.34)"; ctx.lineWidth = 3 + wd.k * 3; ctx.beginPath(); ctx.moveTo(bx, b0); ctx.bezierCurveTo(bx + Math.sin(t * 1.1 + wd.ph) * 10, b0 - wd.h * 0.35, bx - Math.sin(t * 1.3 + wd.ph) * 10, b0 - wd.h * 0.7, bx + Math.sin(t * 1.2 + wd.ph) * 14, b0 - wd.h); ctx.stroke(); }
+    if (Q < 2) for (const [bi, bb] of D.bubbles.entries()) { if (Q && bi % 2) continue; const yy = (((bb.y - t * bb.v) % (H - y0)) + (H - y0)) % (H - y0) + y0; ctx.fillStyle = "rgba(255,255,255,.28)"; ctx.beginPath(); ctx.arc(bb.x + Math.sin(t + bb.y) * 4, yy, bb.s, 0, 7); ctx.fill(); }
+    blit(LAY.d);
+    if (!L.salt) { ctx.strokeStyle = "#3d6a2b"; ctx.lineWidth = 1.5; for (let x = 4; x < W; x += (Q ? 18 : 9)) { const hh = 6 + ((x * 7) % 9); ctx.beginPath(); ctx.moveTo(x, by + 2); ctx.lineTo(x + Math.sin(t * 2 + x) * 2, by - hh); ctx.stroke(); } }
     for (const r of D.reeds) { const sway = Math.sin(t * 1.4 + r.ph) * 4, rx = r.x, ry = by + 2; ctx.strokeStyle = L.salt ? "#9aa24f" : "#3f6a2c"; ctx.lineWidth = 2.5; ctx.beginPath(); ctx.moveTo(rx, ry); ctx.quadraticCurveTo(rx + sway * 0.5, ry - r.h * 0.5, rx + sway, ry - r.h); ctx.stroke(); if (r.cat && !L.salt) { ctx.fillStyle = "#6a4528"; ctx.beginPath(); ctx.ellipse(rx + sway, ry - r.h - 5, 3, 8, 0, 0, 7); ctx.fill(); } }
     if (TOD !== "day") { ctx.fillStyle = TOD === "night" ? "rgba(6,12,44,.34)" : TOD === "dusk" ? "rgba(255,110,40,.15)" : "rgba(255,170,190,.1)"; ctx.fillRect(0, 0, W, H); }
   }
   function frame(now) {
     raf = requestAnimationFrame(frame);
-    const dt = Math.min(0.05, (now - (last || now)) / 1000); last = now; update(dt);
+    if (Q >= 2 && last && now - last < 28) return;                      // lightest mode draws about 30 times a second
+    const raw = now - (last || now), dt = Math.min(0.05, raw / 1000); last = now; update(dt);
+    if (raw > 0 && ++nfr > 40) { ema += (Math.min(raw, 120) - ema) * 0.08;
+      if (nfr % 30 === 0 && ema > 23 && Q < 2) { Q++; setPref("fcq", String(Q)); ema = 17; nfr = 0; resize(); } }      // stuttering, so go lighter
     ctx.save(); if (shakeT > 0) ctx.translate((Math.random() - 0.5) * 6, (Math.random() - 0.5) * 6);
     scene(now);
     const b = bobber(), tip = tipPos();
@@ -4389,11 +4420,11 @@ function playClash(mode, locId, lureIdIn, onExit, duel) {
       ctx.fillStyle = "#e5352b"; ctx.beginPath(); ctx.arc(tip.x, tip.y, 2.4, 0, 7); ctx.fill(); }
     ctx.fillStyle = "#222"; ctx.beginPath(); ctx.arc(W / 2 + 66, H * 0.93, 11, 0, 7); ctx.fill(); ctx.strokeStyle = "#aaa"; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(W / 2 + 66, H * 0.93, 7, (now / 100) * (F && down ? 1 : 0), (now / 100) * (F && down ? 1 : 0) + 4); ctx.stroke();
     ctx.restore();
-    hud(now, fp);
+    outl = Q > 0; hud(now, fp); outl = false;
     if (st === "result" || st === "over") card(now);
   }
   function hud(now) {
-    ctx.shadowColor = "rgba(0,0,0,.5)"; ctx.shadowBlur = 4;
+    ctx.shadowColor = "rgba(0,0,0,.5)"; ctx.shadowBlur = Q ? 0 : 4;
     if (mode === "duel") {
       const a = mine.reduce((x, y) => x + y, 0), r = rival.slice(0, st === "over" ? CASTS : ci + (st === "result" ? 1 : 0)).reduce((x, y) => x + y, 0);
       text(`Cast ${Math.min(ci + 1, CASTS)} of ${CASTS}`, W / 2, 30, 18);
@@ -4419,7 +4450,7 @@ function playClash(mode, locId, lureIdIn, onExit, duel) {
       const ty = gy + gh * (1 - Math.min(1, F.tn ?? F.t)); ctx.fillStyle = "#fff"; ctx.fillRect(gx - 6, ty - 3, 38, 6); text("LINE", gx + 13, gy - 8, 13);
       ctx.fillStyle = "rgba(0,0,0,.4)"; ctx.fillRect(16, gy, 14, gh); ctx.fillStyle = "#ffd36b"; const dh = gh * (1 - F.d / 100); ctx.fillRect(16, gy + gh - dh, 14, dh);
       const msgs = { rest: ["It's tiring! Reel it in!", "#fff"], pull: ["Reel steadily", "#fff"], run: ["FISH RUNNING! Let go!", "#ffb74d"], thrash: ["It's thrashing! Careful!", "#ffb74d"], jump: ["It jumped! Let go!", "#ff8a80"] }[F.ph];
-      ctx.shadowColor = "rgba(0,0,0,.6)"; ctx.shadowBlur = 5; text(msgs[0], W / 2, H * 0.2, 22, msgs[1]); ctx.shadowBlur = 0;
+      ctx.shadowColor = "rgba(0,0,0,.6)"; ctx.shadowBlur = Q ? 0 : 5; text(msgs[0], W / 2, H * 0.2, 22, msgs[1]); ctx.shadowBlur = 0;
     }
   }
   function rrect(x, y, w, h, r) { ctx.beginPath(); ctx.moveTo(x + r, y); ctx.arcTo(x + w, y, x + w, y + h, r); ctx.arcTo(x + w, y + h, x, y + h, r); ctx.arcTo(x, y + h, x, y, r); ctx.arcTo(x, y, x + w, y, r); ctx.closePath(); }
@@ -4472,8 +4503,8 @@ function playClash(mode, locId, lureIdIn, onExit, duel) {
     if (st === "fight") {
       const out = fcStep(F, down, dt, G, hooks); bg.dataset.tension = F.t.toFixed(2);
       // reel sounds: fast screaming drag while the fish runs, slow clicks while you crank
-      if (F.ph === "run") { whine(true, 800 + 700 * F.s + (F.d < 50 ? 150 : 0)); clickAcc += dt * (26 + 26 * F.s); while (clickAcc >= 1) { clickAcc -= 1; tick(2000 + Math.random() * 1400, 0.14, 0.02, 4); } }
-      else { whine(false); if (down) { clickAcc += dt * 9; while (clickAcc >= 1) { clickAcc -= 1; tick(1300 + Math.random() * 300, 0.07, 0.02, 4); } } }
+      if (F.ph === "run") { whine(true, 800 + 700 * F.s + (F.d < 50 ? 150 : 0)); clickAcc += dt * (26 + 26 * F.s) * (Q ? 0.5 : 1); while (clickAcc >= 1) { clickAcc -= 1; tick(2000 + Math.random() * 1400, 0.14, 0.02, 4); } }
+      else { whine(false); if (down) { clickAcc += dt * 9 * (Q ? 0.6 : 1); while (clickAcc >= 1) { clickAcc -= 1; tick(1300 + Math.random() * 300, 0.07, 0.02, 4); } } }
       if (F.ph === "thrash" && Math.random() < dt * 6) shakeT = 0.12;
       if (out === "snap") { lose("The line snapped!"); shakeT = 0.3; tick(3000, 0.3, 0.08); }
       else if (out === "slack") lose("It shook the hook!");
