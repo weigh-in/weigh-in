@@ -339,6 +339,7 @@ a.btn.small{text-decoration:none;display:inline-flex;align-items:center}
 .kn-pic svg{display:block}
 .sch-vid{display:inline-block;margin:6px 0;color:var(--accent,#1b8fd1);font-weight:600;text-decoration:none}
 
-.vid-prev{width:100%;max-height:300px;border-radius:12px;background:#000;display:block}
+.vid-prev{width:100%;max-height:300px;object-fit:cover;border-radius:12px;background:#000;display:block}
 .vid-play{position:absolute;left:50%;top:42%;transform:translate(-50%,-50%);z-index:3;padding:12px 18px;border-radius:999px;border:0;background:rgba(0,0,0,.65);color:#fff;font-weight:700;font-size:16px}
-.card .vid-feed{position:absolute;inset:0;width:100%;height:100%;object-fit:contain;background:#000;z-index:3}
+.card .vid-feed{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;background:#000}
+.vid-feed~.shade{pointer-events:none}.vid-feed~.info{pointer-events:none}.vid-feed~.info button{pointer-events:auto}

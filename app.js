@@ -884,9 +884,11 @@ function feedPosts() {
 /* What's new. Newest first. Add a new entry on top each time the app changes. */
 /* Bump APP_VERSION every time you change the app, and add a matching entry on top of UPDATES (with v: the same number).
    Phones check app.js every few minutes and offer the new version on their own. */
-const APP_VERSION = 24;
+const APP_VERSION = 25;
 try { if ((parseInt(localStorage.getItem("weighin-appv"), 10) || 0) < APP_VERSION) localStorage.setItem("weighin-appv", String(APP_VERSION)); } catch { /* private mode */ }
 const UPDATES = [
+  { id: "2026-11-09e", v: 25, date: "Nov 9", title: "Videos fill the screen", items: [
+    "Fixed: videos in the feed now fill the whole screen like a photo, with no black bars."] },
   { id: "2026-11-09d", v: 24, date: "Nov 9", title: "Videos in posts", items: [
     "You can add a video of up to 30 seconds to a catch. Tap Record a video, or Choose a video, when you post.",
     "Videos show a Play video button on the feed. Tap it to watch.",
@@ -1166,7 +1168,7 @@ async function vidLoad(p) {
 function vidCardLayer(p) {
   const btn = el("button", { class: "vid-play", type: "button", "aria-label": `Play video, ${vidTime(p.vid.dur || 0)}`, onclick: async (e) => {
     e.stopPropagation(); btn.disabled = true; btn.textContent = "Loading…";
-    try { const url = await vidLoad(p); const v = el("video", { class: "vid-feed", src: url, controls: "", playsinline: "", autoplay: "", loop: "" }); btn.replaceWith(v); v.play().catch(() => {}); }
+    try { const url = await vidLoad(p); const v = el("video", { class: "vid-feed", src: url, playsinline: "", autoplay: "", loop: "", onclick: () => { v.paused ? v.play() : v.pause(); } }); btn.replaceWith(v); v.play().catch(() => {}); }
     catch { btn.disabled = false; btn.textContent = "▶ Play video"; toast("Couldn't load the video. Try again."); }
   } }, `▶ Play video · ${vidTime(p.vid.dur || 0)}`);
   return btn;
