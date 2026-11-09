@@ -143,7 +143,7 @@ function setPref(k, v) { try { localStorage.setItem("weighin-" + k, v); } catch 
 const S = {
   user: null, name: "", tab: "feed",
   posts: [], tournaments: [], log: [],
-  reqIn: [], reqOut: [], friendships: [], offIn: [], offOut: [], tradeAll: [], tradeMine: [],
+  reqIn: [], reqOut: [], friendships: [], offIn: [], offOut: [], tradeAll: [], tradeMine: [], tourReqs: [],
   openTournament: null, tourPosts: [], viewing: null, creatingTour: false,
   meView: "main", mine: [], spots: [], map: null, markers: null, likes: new Map(), mod: null,
 };
@@ -291,7 +291,7 @@ onAuthStateChanged(auth, async (user) => {
 
 /* ======================= main app ======================= */
 function startApp() {
-  stopAll(); S.postsSeen = false; S.trade = null; S.tradeAll = []; S.tradeMine = []; S.offIn = []; S.offOut = []; S.tradeErr = false;
+  stopAll(); S.postsSeen = false; S.cash = ""; getUser(S.user.uid).then((u) => { S.cash = cashTag(u?.cash); if (S.tab === "me") renderTab(); }); S.trade = null; S.tradeAll = []; S.tradeMine = []; S.offIn = []; S.offOut = []; S.tradeErr = false;
   const uid = S.user.uid;
   unsubs.push(onSnapshot(query(collection(db, "posts"), orderBy("createdAt", "desc"), limit(40)), (s) => {
     S.posts = s.docs.map((d) => ({ id: d.id, ...d.data({ serverTimestamps: "estimate" }) }));
@@ -304,6 +304,10 @@ function startApp() {
   }, () => {}));
   unsubs.push(onSnapshot(query(collection(db, "tradeOffers"), where("uid", "==", uid)), (s) => {
     S.offOut = s.docs.map((d) => ({ id: d.id, ...d.data({ serverTimestamps: "estimate" }) })); updateDot(); S.tradePaint?.();
+  }, () => {}));
+  unsubs.push(onSnapshot(S.owner ? collection(db, "tourRequests") : query(collection(db, "tourRequests"), where("uid", "==", uid)), (s) => {
+    S.tourReqs = s.docs.map((d) => ({ id: d.id, ...d.data({ serverTimestamps: "estimate" }) }));
+    if (S.tab === "tours" && !S.creatingTour && !S.openTournament) renderTab();
   }, () => {}));
   unsubs.push(onSnapshot(collection(db, "tournaments"), (s) => {
     S.tournaments = s.docs.map((d) => ({ id: d.id, ...d.data() }));
@@ -356,7 +360,7 @@ function refreshMe(view) { if (S.tab === "me" && (S.meView === view || S.meView 
 let $screen, $nav;
 function buildShell() {
   $screen = el("div", { class: "screen" });
-  const tabs = [["trade", "Trade", ICON.swap], ["feed", "Feed", ICON.feed], ["map", "Map", ICON.map], ["post", "Post", ICON.plus], ["bite", "Bite", ICON.sun], ["tours", "Tourneys", ICON.trophy], ["me", "Me", ICON.me]];
+  const tabs = [["feed", "Feed", ICON.feed], ["trade", "Trade", ICON.swap], ["map", "Map", ICON.map], ["post", "Post", ICON.plus], ["bite", "Bite", ICON.sun], ["tours", "Tourneys", ICON.trophy], ["me", "Me", ICON.me]];
   $nav = el("nav", { class: "tabs", "aria-label": "Sections" }, el("div", { class: "in" }, tabs.map(([k, label, icon]) =>
     el("button", { class: "tab" + (k === "post" ? " post" : ""), type: "button", "data-tab": k, onclick: () => go(k) },
       k === "post" ? el("span", { class: "bob", html: icon }) : el("span", { html: icon }), label,
@@ -911,9 +915,24 @@ function feedPosts() {
 /* What's new. Newest first. Add a new entry on top each time the app changes. */
 /* Bump APP_VERSION every time you change the app, and add a matching entry on top of UPDATES (with v: the same number).
    Phones check app.js every few minutes and offer the new version on their own. */
-const APP_VERSION = 29;
+const APP_VERSION = 31;
 try { if ((parseInt(localStorage.getItem("weighin-appv"), 10) || 0) < APP_VERSION) localStorage.setItem("weighin-appv", String(APP_VERSION)); } catch { /* private mode */ }
 const UPDATES = [
+  { id: "2026-11-09k", v: 31, date: "Nov 9", title: "Harder school, share button, better game", items: [
+    "Fishing school quizzes are harder. Lessons are 6 questions and you need 5 right. Final quizzes need 8 out of 10.",
+    "Every quiz is a new mix of questions, and you see ones you haven't seen first. There are about 150 questions now.",
+    "Once you take a quiz, you can take it again tomorrow. This goes for lessons, final quizzes and regular quizzes.",
+    "4 new lessons and a new Expert school: rigs and setups, fishing by season, boats and kayaks, and pro habits.",
+    "School looks better: lettered answers, question numbers, a Hard tag and brighter cards.",
+    "The fishing game is more real: reflections on the water, wavelets, moving light, the lure flies out and splashes down, the line sags and tightens, and the rod has a grip and guides.",
+    "New Share button in Me to send the app to friends.",
+    "Feed is the first tab on the far left."] },
+  { id: "2026-11-09j", v: 30, date: "Nov 9", title: "Tournament requests and Cash App", items: [
+    "Only the owner can start public tournaments now. Everyone else taps Request one, and the owner can approve or decline it.",
+    "Feed is the first tab on the left again, with Post still in the middle.",
+    "You can add your Cash App $cashtag in Me. People see a Pay on Cash App button on your profile and on your tournament's entry fee.",
+    "Weigh-In can't connect to Cash App itself and never sees your money or login.",
+    "Needs the new Firebase rules for tournament requests."] },
   { id: "2026-11-09i", v: 29, date: "Nov 9", title: "Trade tab, entry fees and prizes", items: [
     "New Trade tab on the left, with Post still in the middle. List a lure, rod, reel, line or other gear, and trade with other anglers.",
     "Make an offer with one or more items, add more items later, and the owner can accept, decline or ask for more. When it's accepted you open each other's profile to set up the swap.",
@@ -1344,7 +1363,7 @@ function openAngler(uid, name) {
         el("button", { class: "link", type: "button", onclick: close }, "Close")),
       body));
   document.body.append(bg);
-  getDocs(query(collection(db, "posts"), where("uid", "==", uid), limit(20))).then((snap) => {
+  Promise.all([getDocs(query(collection(db, "posts"), where("uid", "==", uid), limit(20))), getUser(uid)]).then(([snap, u0]) => {
     const rows = snap.docs.map((d) => ({ id: d.id, ...d.data({ serverTimestamps: "estimate" }) })).sort((a, b) => (b.createdAt?.toMillis?.() || 0) - (a.createdAt?.toMillis?.() || 0));
     const biggest = Math.max(0, ...rows.map((x) => x.lb || 0));
     const likes = rows.reduce((n, x) => n + (S.likes.get(x.id)?.size || 0), 0);
@@ -1357,6 +1376,7 @@ function openAngler(uid, name) {
         el("div", null, el("b", null, String(rows.length)), el("span", null, "Catches")),
         el("div", null, el("b", null, biggest ? fmtLb(biggest) : "–"), el("span", null, "Biggest")),
         el("div", null, el("b", null, String(likes)), el("span", null, "Likes"))),
+      cashTag(u0?.cash) ? cashButton(cashTag(u0.cash), `💵 ${cashTag(u0.cash)} on Cash App`) : null,
       fav ? el("p", { class: "muted small" }, `Most catches on: ${fav[0].charAt(0).toUpperCase() + fav[0].slice(1)} · ${pins} map pin${pins === 1 ? "" : "s"}`) : null,
       can("ban") && uid !== S.user.uid && uid !== OWNER_UID ? el("button", { class: "link danger small", type: "button", style: "align-self:flex-start", onclick: () => banUser(uid, name) }, `Ban @${name}`) : null,
       ...(rows.length ? rows.map((c) => el("div", { class: "comment", style: "flex-direction:row;gap:12px;align-items:center" },
@@ -1613,6 +1633,29 @@ function viewPost(p) {
   p.append(el("h1", null, "Post a catch"), f);
 }
 
+/* ======================= CASH APP ======================= */
+// Cash App has no way for another app to link to your account. Weigh-In only keeps your public $cashtag so people can tap a pay link.
+const cashTag = (v) => { const t = String(v || "").trim().replace(/^\$/, ""); return /^(?=.*[A-Za-z])[A-Za-z0-9_]{1,20}$/.test(t) ? "$" + t : ""; };
+const cashLink = (tag, amt) => "https://cash.app/" + tag + (amt ? "/" + amt : "");
+function cashButton(tag, label, amt) { return el("a", { class: "btn small cash-btn", href: cashLink(tag, amt), target: "_blank", rel: "noopener" }, label || `💵 Pay ${tag} on Cash App`); }
+function openCashSheet(onDone) {
+  const cur = cashTag(S.cash);
+  const inp = el("input", { id: "cash-in", maxlength: 21, placeholder: "$yourcashtag", value: cur, autocapitalize: "off", autocorrect: "off", "aria-label": "Your Cash App cashtag" });
+  const close = () => bg.remove();
+  const save = async (val) => {
+    try { await setDoc(doc(db, "users", S.user.uid), { cash: val }, { merge: true }); userCache.delete(S.user.uid); S.cash = val; toast(val ? "Cash App saved." : "Cash App removed."); close(); onDone?.(); } catch (err) { toast(errText(err)); }
+  };
+  const bg = el("div", { class: "sheet-bg", onclick: (e) => { if (e.target === bg) close(); } },
+    el("div", { class: "sheet", role: "dialog", "aria-label": "Cash App", style: "height:auto" },
+      el("div", { class: "sheet-h" }, el("h2", null, "💵 Cash App"), el("button", { class: "link", type: "button", onclick: close }, "Close")),
+      el("div", { class: "stack", style: "padding:16px" },
+        el("p", { class: "muted", style: "margin:0" }, "Add your $cashtag so friends can pay you, like for a tournament entry fee. Anyone in Weigh-In can see it, so only add one you're happy to share."),
+        inp,
+        el("p", { class: "hint", style: "margin:0" }, "Weigh-In can't connect to your Cash App account and never sees your money, your PIN or your login. It only shows your $cashtag and a pay link that opens in Cash App."),
+        el("div", { class: "row" }, el("button", { class: "btn", type: "button", id: "cash-save", onclick: () => { const v = cashTag(inp.value); if (!v) { toast("That doesn't look like a cashtag. Use letters and numbers, like $fisherman."); return; } save(v); } }, "Save"),
+          cur ? el("button", { class: "link danger", type: "button", id: "cash-remove", onclick: () => save("") }, "Remove") : null))));
+  document.body.append(bg); inp.focus();
+}
 /* ======================= TRADE ======================= */
 // Swap fishing gear with other anglers. The app never handles money or shipping.
 const TRADE_KINDS = [["lure", "Lures"], ["rod", "Rods"], ["reel", "Reels"], ["line", "Line"], ["tackle", "Hooks and tackle"], ["other", "Other gear"]];
@@ -1851,6 +1894,7 @@ function tourMoneyCard(t, joined) {
   const fee = +t.fee || 0, prize = t.prize || "";
   if (!fee && !prize) return null;
   const mineT = t.createdBy === S.user.uid, paid = t.paid || [t.createdBy], members = t.members || [];
+  const payBox = el("div", { id: "tour-cash" }); if (fee) getUser(t.createdBy).then((u) => { const tag = cashTag(u?.cash); if (tag) payBox.replaceChildren(cashButton(tag, `💵 Pay ${fmtFee(fee)} on Cash App (${tag})`, fee)); });
   const setPaid = async (uid, on) => {
     const next = on ? [...new Set([...paid, uid])] : paid.filter((x) => x !== uid);
     try { await updateDoc(doc(db, "tournaments", t.id), { paid: next }); } catch (err) { toast(errText(err)); }
@@ -1859,10 +1903,42 @@ function tourMoneyCard(t, joined) {
     el("div", { class: "row", style: "gap:8px" }, fee ? el("span", { class: "pill live" }, fmtFee(fee) + " entry") : el("span", { class: "pill soon" }, "Free entry"), prize ? el("span", { class: "pill final" }, "🎁 " + prize) : null),
     fee && t.payHow ? el("p", { style: "margin:0" }, `Pay @${t.createdByName || "the organizer"}: ${t.payHow}`) : null,
     el("p", { class: "hint", style: "margin:0" }, fee ? "Weigh-In doesn't handle money. Pay the organizer yourself, and they tick you off as paid. The organizer also gives out the prize." : "The organizer gives out the prize."),
+    fee && !mineT && t.createdBy ? payBox : null,
     fee && joined && !mineT ? el("p", { id: "tour-paid-me", class: paid.includes(S.user.uid) ? "pb-ok" : "hint", style: "margin:0;font-weight:700" }, paid.includes(S.user.uid) ? "✅ The organizer marked you as paid." : "Not marked as paid yet.") : null,
     fee && mineT ? el("div", { class: "stack", id: "tour-paid-list" }, el("b", null, "Who has paid"), members.filter((u) => u !== t.createdBy).length
       ? members.filter((u) => u !== t.createdBy).map((u) => { const row = el("label", { class: "row", style: "gap:10px;flex-wrap:nowrap" }, el("input", { type: "checkbox", "data-paid": u, checked: paid.includes(u) ? "" : null, onchange: (e) => setPaid(u, e.target.checked) }), el("span", null, "…")); getUser(u).then((x) => { row.lastChild.textContent = "@" + (x?.name || "angler"); }); return row; })
       : el("p", { class: "hint", style: "margin:0" }, "Nobody has joined yet.")) : null);
+}
+function tourSched(spec) { return spec.startAt ? fmtWhen(spec.startAt) : fmtDay(spec.start); }
+function tourRequestsPanel() {
+  const rs = [...S.tourReqs].sort((a, b) => (b.createdAt?.seconds || 9e9) - (a.createdAt?.seconds || 9e9));
+  if (S.owner) {
+    const pend = rs.filter((r) => r.status === "pending");
+    if (!pend.length) return null;
+    return el("section", { class: "stack tour-money", id: "tour-reqs" }, el("h2", null, `Requests (${pend.length})`), ...pend.map((r) => {
+      const sp = r.spec || {};
+      return el("div", { class: "trade-offer", "data-req": r.id },
+        el("b", null, sp.name || r.tname), el("span", { class: "hint" }, `From @${r.name} · ${tourSched(sp)} · ${SCORING[sp.scoring]?.name || ""}`), tourMoneyLine(sp),
+        el("div", { class: "row" },
+          el("button", { class: "btn small", type: "button", "data-act": "approve", onclick: () => approveTour(r) }, "Approve"),
+          el("button", { class: "btn ghost small", type: "button", "data-act": "deny", onclick: async () => { try { await updateDoc(doc(db, "tourRequests", r.id), { status: "declined" }); toast("Request declined."); } catch (err) { toast(errText(err)); } } }, "Decline")));
+    }));
+  }
+  if (!rs.length) return null;
+  return el("section", { class: "stack tour-money", id: "tour-reqs" }, el("h2", null, "Your requests"), ...rs.map((r) => el("div", { class: "row spread", "data-req": r.id },
+    el("span", { class: "stack", style: "gap:0;min-width:0" }, el("b", null, r.tname || r.spec?.name), el("span", { class: "hint" }, r.status === "approved" ? "Approved. It's in the list below and you run it." : r.status === "declined" ? "The owner said not this time." : "Waiting for the owner.")),
+    el("span", { class: "row", style: "gap:8px;flex-wrap:nowrap" }, el("span", { class: "pill " + (r.status === "approved" ? "live" : r.status === "declined" ? "final" : "soon") }, { pending: "Waiting", approved: "Approved", declined: "Declined" }[r.status] || r.status),
+      r.status !== "pending" ? el("button", { class: "link small", type: "button", "aria-label": "Remove", onclick: () => deleteDoc(doc(db, "tourRequests", r.id)).catch(() => {}) }, "✕") : null))));
+}
+async function approveTour(r) {
+  const sp = { ...r.spec }; if (!sp.startAt) { toast("That request is missing its dates."); return; }
+  const dur = sp.endAt - sp.startAt, now = Math.floor(Date.now() / 60000) * 60000;
+  if (sp.startAt < now) { sp.startAt = now; sp.endAt = now + dur; sp.start = localDate(new Date(sp.startAt)); sp.end = localDate(new Date(sp.endAt)); }   // its start time already passed, so it starts now
+  try {
+    await addDoc(collection(db, "tournaments"), { ...sp, createdBy: r.uid, createdByName: r.name, members: [r.uid], paid: [r.uid], createdAt: serverTimestamp() });
+    await updateDoc(doc(db, "tourRequests", r.id), { status: "approved" });
+    toast(`Approved. @${r.name} runs it now.`);
+  } catch (err) { toast(errText(err)); }
 }
 function viewTours(p) {
   if (S.creatingTour) return viewCreateTour(p);
@@ -1870,8 +1946,9 @@ function viewTours(p) {
   const order = { live: 0, soon: 1, final: 2 };
   const ts = [...S.tournaments].sort((a, b) => order[tourStatus(a)] - order[tourStatus(b)] || String(b.start).localeCompare(String(a.start)));
   p.append(el("div", { class: "row spread" }, el("h1", null, "Tourneys"),
-    el("button", { class: "btn small", type: "button", onclick: () => { S.creatingTour = true; renderTab(); } }, "New")));
-  if (!ts.length) { p.append(el("p", { class: "empty" }, "No tournaments yet. Tap New to start one and invite your friends.")); return; }
+    el("button", { class: "btn small", type: "button", id: "t-new", onclick: () => { S.creatingTour = true; renderTab(); } }, S.owner ? "New" : "Request one")));
+  const reqPanel = tourRequestsPanel(); if (reqPanel) p.append(reqPanel);
+  if (!ts.length) { p.append(el("p", { class: "empty" }, S.owner ? "No tournaments yet. Tap New to start one." : "No tournaments yet. Tap Request one to ask the owner to start one.")); return; }
   p.append(el("div", { class: "list" }, ts.map((t) => {
     const st = tourStatus(t), n = (t.members || []).length;
     return el("button", { class: "item", type: "button", onclick: () => openTour(t.id) },
@@ -1891,7 +1968,7 @@ function viewCreateTour(p) {
   const startInput = el("input", { id: "t-start", type: "datetime-local", value: dtLocal(start0) });
   const feeBox = el("input", { type: "checkbox", id: "t-feeon" });
   const feeIn = el("input", { id: "t-fee", type: "number", inputmode: "decimal", min: 1, max: 500, step: "0.01", placeholder: "5", "aria-label": "Entry fee in dollars" });
-  const payIn = el("input", { id: "t-pay", maxlength: 60, placeholder: "Venmo @name, or cash at the ramp", "aria-label": "How to pay" });
+  const payIn = el("input", { id: "t-pay", maxlength: 60, placeholder: "Cash App $name, Venmo @name, or cash at the ramp", value: cashTag(S.cash) ? "Cash App " + cashTag(S.cash) : "", "aria-label": "How to pay" });
   const prizeIn = el("input", { id: "t-prize", maxlength: 60, placeholder: "Like $100 cash, or a new rod", "aria-label": "Prize" });
   const feeWrap = el("div", { class: "stack", hidden: true }, el("label", { class: "field" }, el("span", { class: "hint" }, "Entry fee ($)"), feeIn), el("label", { class: "field" }, el("span", { class: "hint" }, "How do people pay you?"), payIn));
   feeBox.addEventListener("change", () => { feeWrap.hidden = !feeBox.checked; });
@@ -1933,7 +2010,7 @@ function viewCreateTour(p) {
       feeWrap,
       el("label", { class: "field" }, el("span", { class: "hint" }, "Prize (optional)"), prizeIn),
       el("span", { class: "hint" }, "Weigh-In never takes or sends money. You collect any fee yourself (cash, Venmo and so on), tick people off as paid on the tournament page, and give out the prize yourself. Rules for contests with fees and cash prizes are different in each place, so check yours.")),
-    el("button", { class: "btn wide", type: "submit" }, "Create tournament"));
+    el("button", { class: "btn wide", type: "submit" }, S.owner ? "Create tournament" : "Send request to the owner"));
   f.addEventListener("submit", async (e) => {
     e.preventDefault();
     const fd = new FormData(f);
@@ -1960,12 +2037,17 @@ function viewCreateTour(p) {
       const data = { name, fee, prize, payHow: fee ? payHow : "", paid: [S.user.uid], scoring: fd.get("scoring"), start: localDate(new Date(startAt)), end: localDate(new Date(endAt)), startAt, endAt,
         createdBy: S.user.uid, createdByName: S.name, members: [S.user.uid], createdAt: serverTimestamp() };
       if (phases.length) data.phases = phases;
+      if (!S.owner) {   // only the owner makes public tournaments, so everyone else asks first
+        const { createdBy, createdByName, members, createdAt, paid, ...spec } = data;
+        await addDoc(collection(db, "tourRequests"), { uid: S.user.uid, name: S.name, tname: name, spec, status: "pending", createdAt: serverTimestamp() });
+        S.creatingTour = false; toast("Request sent. The owner will take a look."); renderTab(); return;
+      }
       const ref = await addDoc(collection(db, "tournaments"), data);
       S.creatingTour = false; toast("Tournament created. You're in!"); openTour(ref.id);
     } catch (err) { toast(errText(err)); }
   });
   p.append(el("button", { class: "link", type: "button", style: "align-self:flex-start", onclick: () => { S.creatingTour = false; renderTab(); } }, "‹ Back"),
-    el("h1", null, "New tournament"), f);
+    el("h1", null, S.owner ? "New tournament" : "Request a tournament"), S.owner ? null : el("p", { class: "muted", style: "margin:0" }, "Public tournaments are set up by the owner. Fill this in and send it. If the owner says yes, it goes live and you run it."), f);
 }
 let phaseFilter = null;
 function openTour(id) {
@@ -2838,12 +2920,156 @@ const SCH_LESSONS = {
       Q("When do catfish feed the most?", "At night, by smell", ["Only at noon", "Only in winter", "Never"], "Smelly bait works best."),
       Q("What should you watch out for on a catfish?", "Sharp spines on the fins", ["Wings", "Teeth like a shark", "Electric shock"], "Hold them behind the head carefully.")] }
 };
+/* ---- harder questions, plus four more lessons. Every quiz draws a fresh mix and avoids questions you just saw. ---- */
+const H = (q, right, wrong, why) => ({ q, right, wrong, why, hard: true });
+const SCH_HARD = {
+  gear: [
+    H("Your line keeps snapping on big fish even though your knots are good. What is the most likely cause?", "The drag is set too tight", ["The bobber is too small", "The hook is too sharp", "The reel is too clean"], "The drag should slip before the line reaches its breaking strength."),
+    H("A line marked 6 lb test is rated to break at about...", "6 pounds of pull", ["60 pounds of pull", "6 ounces of pull", "Twice the weight of the fish"], "Test strength is the pull it can take before it breaks. Knots and wear lower it."),
+    H("Which outfit is the best all-round choice for bluegill, small bass and trout?", "A 6 to 7 foot light spinning rod with 6 to 8 lb line", ["A 9 foot heavy surf rod with 50 lb line", "A 3 foot ice rod with 2 lb line", "A heavy rod with 30 lb braid"], "Light gear feels the bites and casts small baits."),
+    H("What does a swivel do?", "Stops line twist from spinning lures", ["Makes the hook sharper", "Makes the line float", "Adds scent to the bait"], "Spinners and some lures twist line. A swivel lets them turn freely.")
+  ],
+  knots: [
+    H("Why does a knot make your line weaker?", "The line is bent and pinched, so it breaks at the knot first", ["Knots add weight to the line", "Knots dry out the line forever", "Only braided line is weakened"], "A good knot keeps most of the line's strength. A bad one loses a lot."),
+    H("Your knot slides apart when you pull. What is the most likely mistake?", "It was not wetted or had too few wraps", ["The line was brand new", "The hook was too sharp", "The bobber was too big"], "Dry line gets hot from friction and weakens. Too few wraps slip."),
+    H("Which is the right order for the improved clinch knot?", "Thread the eye, wrap 5 to 7 times, small loop, big loop, wet and tighten", ["Wrap, thread the eye, big loop, tighten dry", "Big loop, wrap, small loop, trim", "Tighten dry, wrap, thread the eye, wet"], "The order matters. Wetting comes before the final tightening."),
+    H("You lose lures to a snag. What is a smart habit?", "Retie after snags, because the knot may be damaged", ["Keep fishing since the knot looks fine", "Add a second hook", "Use a heavier bobber"], "Snags weaken the last foot of line. A fresh knot is cheap.")
+  ],
+  where: [
+    H("A windy point of land has a drop-off next to it. Why can it be a great spot?", "Wind pushes food there and fish ambush from the deeper edge", ["Fish dislike wind so they hide there", "The point is always warm", "It is the quietest part of the lake"], "Food, cover and depth change in one place."),
+    H("A shallow clear pond at noon in summer. Where should you cast?", "Near shade, docks or weed edges", ["Into the sunny open middle", "Onto the bank", "Straight down at your feet in the sun"], "Fish avoid bright, open shallow water."),
+    H("What is the best sign that a pond holds fish?", "Fish jumping, birds working and other people catching", ["Trash on the shore", "Very still hot water", "A closed gate"], "Real activity beats guessing."),
+    H("Why is it smart to ask local anglers or the bait shop?", "They know what is biting, where, and the local rules", ["They will hand you free fish", "They know the lake bottom is flat", "They can legally fish for you"], "Local knowledge saves hours.")
+  ],
+  weather: [
+    H("A cold front just passed with bright sky. What is the best plan?", "Fish slow with small baits near cover or deeper water", ["Fish fast with big lures in open sun", "Give up, fish never bite", "Use your heaviest line"], "Fish are cautious after a front."),
+    H("Why are dawn and dusk good in summer?", "Cooler water and low light make fish feel safe to hunt shallow", ["Fish are asleep so they bite easy", "The water is clearer", "Wind is always stronger"], "Low light is when many predators feed."),
+    H("The river is high and muddy after heavy rain. What is the smartest choice?", "Fish calm edges out of the current with bright or smelly bait, and stay off flooded banks", ["Wade into the middle with light line", "Cast into the fastest water", "Use clear tiny lures"], "Fish rest out of the fast flow. Flood banks are dangerous."),
+    H("You hear thunder. What should you do?", "Leave the water and go to a car or building", ["Keep fishing but hold the rod low", "Stand under a tall tree", "Get in the water to stay low"], "Lightning is deadly. Rods and water make it worse.")
+  ],
+  lures: [
+    H("Which lure flashes and spins to look like small baitfish?", "An inline spinner", ["A plastic worm on a bottom rig", "A bobber", "A jig with no hook"], "The blade throws flash and vibration."),
+    H("Fish follow your lure but won't bite. What should you try?", "Change the speed, color or size", ["Reel faster and louder every time", "Use heavier line", "Cast the same spot 50 times"], "Small changes often turn followers into bites."),
+    H("When does a topwater lure shine?", "When fish feed on the surface in low light", ["When the water is freezing", "When fish are 30 feet deep", "In a storm"], "Topwater is for surface action, often at dawn and dusk."),
+    H("Why use a jig head with a soft plastic?", "It sinks, bounces along the bottom and looks like food", ["It floats on top", "It makes noise like a boat", "It cannot snag"], "The weight and the soft tail make it versatile.")
+  ],
+  rules: [
+    H("You catch a fish one inch under the minimum size. What do you do?", "Release it right away, carefully", ["Keep it, it is close enough", "Keep it and say nothing", "Ask a friend to hold it"], "The rule is the rule, and it protects young fish."),
+    H("You have your daily limit and then catch a legal fish. What now?", "Release it", ["Keep it and hide it", "Keep it if it is bigger", "Give it to a friend as yours"], "Over the limit is against the rules."),
+    H("A sign says private property, no fishing. What do you do?", "Stay out and ask the owner for permission first", ["Fish quietly anyway", "Climb the fence if nobody is looking", "Fish from the edge for a minute"], "Respect private land."),
+    H("Why do some waters need extra stamps or permits?", "The fees help pay for stocking and protecting fish", ["To make fishing harder", "To limit the number of rods", "Only for tourists"], "License money funds conservation.")
+  ],
+  care: [
+    H("A legal fish is bleeding a lot from the gills. If the rules allow, what is the better choice?", "Keep it if you plan to eat it", ["Release it right away", "Put it on dry grass", "Wrap it in a dry towel for 10 minutes"], "Badly hurt fish rarely survive."),
+    H("Why is a rubber net kinder to fish than a knotted one?", "It protects the slime and scales", ["It holds more fish", "It floats", "It never gets wet"], "Knotted nets scrape slime off."),
+    H("Summer water is very warm. How do you release a fish?", "Keep it in the water as much as you can and let it go fast", ["Take a long photo first", "Lay it in the sun to dry", "Hold it by the gills"], "Warm water holds less oxygen, so fish tire more."),
+    H("You find old fishing line on the bank. What should you do?", "Pick it up and throw it away or recycle it", ["Leave it, it will rot", "Tie it to a tree", "Throw it into the water"], "Line traps birds and turtles for years.")
+  ],
+  knots2: [
+    H("Why do some knots need extra wraps with braid?", "Braid is slick and slips", ["Braid is too thick", "Braid is too sticky", "Braid melts"], "Slick line needs more grip."),
+    H("Which knot lets a jerkbait swing freely?", "A loop knot", ["A tight clinch knot", "Two overhand knots", "A square knot"], "A loop keeps the action alive."),
+    H("Your Palomar fails. What is a common mistake?", "The loop did not fully pass over the hook, or it was dry", ["The line was too clean", "The hook was too small", "The bobber was red"], "Both steps matter."),
+    H("Joining thin braid to a mono leader, which is a good choice?", "A uni knot, tied as a double uni", ["A single overhand knot", "A granny knot", "A bowline"], "The double uni is strong and common.")
+  ],
+  water: [
+    H("A creek bends and a fallen tree lies on the deep outside of the bend. Where are fish?", "Near the tree on the deep side", ["On the shallow inside of the bend", "In the fastest middle", "On the dry bank"], "Deep water plus cover is a fish home."),
+    H("It is midday in summer. Which spot is most likely to hold bass?", "Shaded weed edges next to deeper water", ["A bare sunny shallow flat", "The middle of the parking lot", "The top of a sand bar in full sun"], "Shade and depth keep them comfortable."),
+    H("Which way do river fish usually face?", "Upstream, into the current", ["Downstream", "Toward the bank", "Straight down"], "They wait for food to float to them."),
+    H("Why cast past a log and bring the lure by it?", "The lure goes through the hiding spot without landing on the fish", ["Logs eat lures", "It makes the lure float", "It scares fish toward you"], "A splash on top can spook them.")
+  ],
+  signs: [
+    H("Many tiny fish skip across the surface with swirls below. What is happening?", "Bigger fish are chasing baitfish up", ["It is raining", "The fish are sleeping", "A boat is passing"], "Predators push bait to the top."),
+    H("Birds are diving over open water. What is the best approach?", "Cast a lure that matches the baitfish, just beside the action", ["Drive the boat through the middle", "Wait until the birds leave", "Use the heaviest weight"], "Match the food and stay out of the school."),
+    H("Why not cast right into the middle of a feeding school?", "It can spook them, so cast past and bring it through", ["Fish dislike lures", "The school disappears at once", "It tangles the line"], "Land on the edge, then retrieve through."),
+    H("A bug hatch is on and fish are rising. What works best?", "A small fly or lure that looks like the bug", ["A huge crankbait", "A bare hook", "A heavy sinker on the bottom"], "Match the hatch.")
+  ],
+  sky: [
+    H("The barometer is slowly falling before a storm. What do fish often do?", "Feed more actively", ["Stop eating for a week", "Leave the lake", "Always sleep"], "Many anglers see good bites before weather."),
+    H("It is midday with a clear sky. What is a good plan?", "Fish deeper or in shade, and slow down", ["Fish fast in the open sun", "Use the brightest line", "Cast far into the open middle"], "Bright light pushes fish down."),
+    H("Strong gusty wind is blowing and a small boat is on the lake. What is the right choice?", "Stay off the water until it calms", ["Go farther out where it is calmer", "Stand up to keep balance", "Take off the life jacket"], "Wind makes small boats unsafe."),
+    H("Water temperature drops fast in autumn. How do fish react?", "They slow down and feed less, so use smaller baits slowly", ["They feed all day without stopping", "They move to the bank", "They no longer sleep"], "Cold slows their metabolism.")
+  ],
+  bait: [
+    H("Live minnows keep dying on your hook. What should you change?", "Hook them lightly and keep the bucket cool", ["Hook them deeper", "Keep them in the sun", "Add salt to the bucket"], "A healthy minnow is the best bait."),
+    H("Why is it risky to move live bait from one lake to another?", "It can spread invasive species and disease", ["Bait is expensive", "It can attract birds", "It melts in new water"], "Never dump bait."),
+    H("A fish keeps stealing your bait without being hooked. What is a good fix?", "Use a smaller hook or bait and set the hook sooner", ["Use a bigger bait", "Wait longer", "Cast farther away"], "Small mouths nibble big baits."),
+    H("Why keep dough bait balls small?", "Fish with small mouths can take them easily", ["They float better", "They look nicer", "They smell less"], "Match the mouth.")
+  ],
+  species: [
+    H("Which fish has whiskers and feeds mostly by smell near the bottom at night?", "Catfish", ["Trout", "Bluegill", "Pike"], "Whiskers are taste organs."),
+    H("How do you fish a trout stream?", "Cast upstream so the bait drifts down naturally", ["Cast downstream and reel fast", "Cast onto the bank", "Stand in the middle and splash"], "Trout face upstream and wait."),
+    H("Why are bluegill a good first fish?", "They bite often on small baits near cover", ["They are very rare", "They need no bait", "They only bite at night"], "Easy fish build confidence."),
+    H("Bass guard nests in spring. What is a good habit?", "Handle and release them gently, and do not keep spawning fish", ["Grab the biggest one", "Net the whole nest", "Keep every fish"], "Protecting spawning fish protects the lake.")
+  ]
+};
+Object.entries(SCH_HARD).forEach(([id, qs]) => { SCH_LESSONS[id].q.push(...qs); });
+
+Object.assign(SCH_LESSONS, {
+  rigs: { n: "Rigs and setups", icon: "🧰", sum: "How to rig the line so the bait looks natural.", cards: [
+    ["Slip bobber rig", "A slip bobber lets you fish deep water. A small bead and a stopper knot on the line set the depth. The bobber slides up the line when you cast and stops at the knot when the bait sinks. Use it for crappie, walleye and bluegill over drop-offs."],
+    ["Texas rig", "A bullet weight slides on the line, then a worm hook is buried in a soft plastic so it doesn't snag. It crawls through weeds and wood. Great for bass in cover. Set the hook hard because the plastic is soft."],
+    ["Drop shot rig", "The weight is at the bottom of the line and the hook is tied above it on a short tag. The bait hangs just off the bottom, right in a fish's face. It works when fish are picky or the water is clear and cold."],
+    ["Carolina rig", "A sliding weight, a bead, a swivel and a leader of 2 to 3 feet. The weight drags on the bottom while the bait floats up behind. It covers lots of water. Use it on flats and points."]],
+    q: [Q("What does a slip bobber help you do?", "Fish at a set depth in deep water", ["Cast farther with no weight", "Fish on top only", "Avoid using hooks"], "The stopper knot sets the depth."),
+      Q("Why bury the hook in a Texas rig?", "So it doesn't snag in weeds and wood", ["To make it heavier", "To hide it from you", "To make the worm float"], "The point rests inside the plastic."),
+      Q("Where is the weight on a drop shot rig?", "At the bottom, below the hook", ["Above the bobber", "At the rod tip", "Nowhere"], "The bait hangs above the weight."),
+      Q("What is a Carolina rig good for?", "Covering lots of bottom on flats and points", ["Fishing straight up and down", "Surface fishing", "Night fishing only"], "It drags along the bottom."),
+      Q("Why use a swivel on a Carolina rig?", "To keep the weight separate from the leader and reduce twist", ["To add color", "To make it float", "To sharpen the hook"], "The swivel stops the weight from sliding onto the leader.")],
+    hq: [H("You fish a slip bobber but the bait is always off the bottom. What do you change?", "Move the stopper knot farther up the line", ["Use a smaller bobber", "Add a second hook", "Shorten the leader"], "A deeper setting needs more line between bobber and hook."),
+      H("Clear, cold water and picky fish. Which rig is a good first try?", "Drop shot rig", ["Heavy Carolina rig", "Large topwater", "Bare treble hook"], "It keeps the bait steady at eye level."),
+      H("Your Texas rig keeps snagging. What is a common cause?", "The hook point is out of the plastic", ["The weight is too small", "The worm is too fresh", "The line is too thin"], "A weedless rig hides the point."),
+      H("Why a long leader on a Carolina rig?", "The bait floats up and moves naturally behind the weight", ["It makes the line stronger", "It prevents bites", "It avoids all snags"], "Bait trails the weight.")] },
+  seasons: { n: "Fishing by season", icon: "🍂", sum: "Where fish go and what they eat all year.", cards: [
+    ["Spring", "As water warms, fish move shallow to feed and spawn. Look for sunny banks and coves where water is warmest. Fish are protective of nests, so release spawning fish gently. Small jigs and live bait work well."],
+    ["Summer", "Hot water pushes fish to shade, deep water and moving water. Fish early and late, and at night. Look for weed edges, docks and deeper holes. Drink water and watch for storms."],
+    ["Fall", "Water cools and baitfish move into creeks and coves. Predators follow and feed hard to build up fat. Fish moving baits like spinners and crankbaits. This is often the best bite of the year."],
+    ["Winter", "Fish slow down and hold in deeper, steadier water. Use small baits and fish them very slowly. If you fish on ice, check local ice reports. No ice is ever completely safe. Go with a buddy and carry ice picks."]],
+    q: [Q("Where do fish go in spring?", "Shallow, warm areas", ["Always the deepest hole", "Out of the lake", "Under bridges only"], "Sun warms shallow water first."),
+      Q("When should you fish hot summer days?", "Early, late or at night", ["At noon only", "Never", "Only in the rain"], "Heat pushes fish down and away."),
+      Q("Why is fall often great fishing?", "Fish feed hard before winter", ["Fish sleep all day", "Water is warmest", "Bugs are everywhere"], "They fatten up."),
+      Q("What bait size suits cold winter water?", "Small baits fished slowly", ["Huge baits fished fast", "Bare hooks", "Only topwater"], "Fish are slow and not hungry."),
+      Q("What should you carry on ice?", "Ice picks and a buddy", ["Nothing special", "A heavy bag", "Only snacks"], "Safety first.")],
+    hq: [H("Baitfish are moving into creeks in autumn. Where do you fish?", "The creek mouths and coves, where predators follow bait", ["The middle of a deep basin", "The dam wall only", "The parking area"], "Predators follow food."),
+      H("A warm sunny afternoon in early spring. Where do fish gather?", "On the sunny shallow banks that warm first", ["On the shaded north bank in deep water", "Under the fastest current", "At the very bottom of the deepest hole"], "Warmth draws baitfish and bass."),
+      H("It is midsummer, noon and still. What is a good plan?", "Go deeper or into shade, or wait until evening", ["Cast shallow in the full sun", "Use the heaviest line", "Fish only with topwater at noon"], "Cooler, shaded water holds fish."),
+      H("Why handle fish gently in spring?", "Many are spawning and need to finish nesting", ["They are heavier", "They are slippery only then", "They bite more"], "Releasing spawners protects the next generation.")] },
+  boat: { n: "Boats, kayaks and wading", icon: "🛶", sum: "Get on the water safely.", cards: [
+    ["Life jacket first", "Wear a life jacket that fits, every time, even if you swim well. Cold water can take your breath and strength in seconds. Many places require them in a small boat."],
+    ["Fishing from a kayak", "Sit-on-top kayaks are stable and easy to get back on. Tie the rod to the boat with a leash, bring a whistle and tell someone your plan. Stay close to shore until you are comfortable. Never stand until you are experienced."],
+    ["Wading", "Wear shoes with grip and use a wading belt. Test each step with your foot. Stay out of fast or deep water. Move slowly, and don't wade alone in cold water."],
+    ["Clean, drain, dry", "Before you leave a lake, check your boat and gear for plants and mud and remove them. Drain the water and let it dry. This stops invasive species from spreading to the next lake."]],
+    q: [Q("When should you wear a life jacket?", "Every time you are on the water in a boat", ["Only if you can't swim", "Only in winter", "Never in a kayak"], "Accidents happen fast."),
+      Q("Why leash your rod to a kayak?", "So you don't lose it if you tip", ["To catch more fish", "To keep it dry", "To make it float"], "Rods sink."),
+      Q("What helps when wading?", "A wading belt and shoes with grip", ["Flip flops", "Heavy boots with no tread", "Bare feet"], "Slips are the common danger."),
+      Q("What does Clean, Drain, Dry protect against?", "Spreading invasive species", ["Sunburn", "Hooks", "Tangled line"], "Plants and mud carry hitchhikers."),
+      Q("Who should know your plans?", "Someone on shore", ["Nobody", "Only fish", "Only the boat"], "If something goes wrong they can help.")],
+    hq: [H("Your kayak tips in cold water. What is the best first move?", "Stay calm, hold the boat, and get to shore or back on", ["Swim away from the boat", "Take off your life jacket", "Dive for the rod"], "The kayak floats and helps you."),
+      H("You wade in a river and the current is getting stronger. What do you do?", "Go back to the bank before it gets deeper", ["Walk faster across", "Take your belt off", "Lean upstream and keep going"], "Strong current knocks people over."),
+      H("You pulled weeds off your boat at the ramp. What now?", "Put them in the trash, not the water", ["Throw them in the lake", "Hang them on the dock", "Wash them into the next lake"], "Plant bits can start new colonies."),
+      H("Why is it safer to sit than stand in a small boat or kayak?", "A lower center keeps you from tipping", ["It feels cooler", "It's quieter", "It saves energy"], "Standing makes boats unstable.")] },
+  pro: { n: "Pro habits", icon: "📓", sum: "How good anglers get better.", cards: [
+    ["Keep a log", "Write down date, weather, water, what you used and what you caught. After a few trips you will see patterns, like which lure works at which time. Your Fishing log in Weigh-In is made for this."],
+    ["Change one thing at a time", "If you aren't getting bites, change only one thing, like the color, then the speed, then the depth. If you change everything at once you won't know what worked."],
+    ["Watch and listen", "Look at the water, the birds, other anglers, even the bugs. Pay attention to the bite times and what the fish do. The best anglers notice small things."],
+    ["Protect the fish", "Release big breeders, keep only what you will eat, and leave the water clean. Healthy lakes are good for everyone. Teach someone new."]],
+    q: [Q("Why keep a fishing log?", "To find patterns over time", ["To impress fish", "To save line", "To avoid licenses"], "Patterns show what works."),
+      Q("If you aren't getting bites, you should...", "Change one thing at a time", ["Change everything at once", "Go home", "Stand still"], "That way you know which change worked."),
+      Q("Which is a good habit?", "Watching birds, bugs and the water", ["Ignoring the surface", "Fishing blind", "Making noise"], "Clues are everywhere."),
+      Q("Which fish should you consider releasing?", "Big breeders", ["All fish", "No fish ever", "Only tiny fish"], "Large fish produce the most young."),
+      Q("What helps new anglers most?", "A friend who teaches them", ["A silent partner", "A broken rod", "A rule book only"], "Share what you learn.")],
+    hq: [H("You change lure, color, speed and depth all at once and catch a fish. What did you learn?", "Nothing clear, because too many things changed", ["The new color is magic", "The speed was wrong", "Depth does not matter"], "Change one thing at a time."),
+      H("After 10 trips your log shows most bites at dawn near weed edges. What is your best plan?", "Fish weed edges at dawn", ["Fish the open middle at noon", "Fish only at night", "Stop logging"], "Use your own data."),
+      H("A giant bass is your biggest ever and you will not eat it. What is the best choice?", "Take a quick photo and release it carefully", ["Keep it for the wall", "Keep it on the grass for an hour", "Sell it"], "Big breeders make more fish."),
+      H("Fish are not biting and the water is clear. What is a smart single change?", "Switch to a smaller, more natural lure", ["Use brighter, louder lures", "Use thicker line", "Cast into the sun"], "Clear water calls for natural looks.")] }
+});
+Object.values(SCH_LESSONS).forEach((L) => { if (L.hq) { L.q.push(...L.hq); delete L.hq; } });
 const SCH_COURSES = [
   { id: "rules1", n: "Permits and rules", days: ["rules"], icon: "📋", d: "1 day. What you need to fish legally." },
   { id: "start2", n: "Weekend start", days: ["gear", "rules"], icon: "🌅", d: "2 days. Get gear and rules sorted so you can go fishing." },
   { id: "begin5", n: "Beginner in 5 days", days: ["gear", "knots", "where", "lures", "rules"], icon: "🎓", d: "5 days. Everything you need for your first trips." },
   { id: "details6", n: "Little details", days: ["knots2", "water", "signs", "sky", "bait", "species"], icon: "🔍", d: "6 days. Knots, reading water, jumping fish, weather, bait and fish facts." },
-  { id: "week7", n: "Full week", days: ["gear", "knots", "where", "weather", "lures", "rules", "care"], icon: "🏆", d: "7 days. The full beginner school." }
+  { id: "week7", n: "Full week", days: ["gear", "knots", "where", "weather", "lures", "rules", "care"], icon: "🏆", d: "7 days. The full beginner school." },
+  { id: "expert4", n: "Expert school", days: ["rigs", "seasons", "boat", "pro"], icon: "🎖️", d: "4 days. Rigs, seasons, boats and pro habits. Harder questions." }
 ];
 const SCH_RANKS = [[0, "Minnow", "🐟"], [60, "Bluegill", "🐠"], [150, "Perch", "🐡"], [300, "Crappie", "🎣"], [500, "Bass", "🏅"], [800, "Walleye", "🥈"], [1200, "Pike", "🥇"], [1800, "Musky", "🏆"], [2600, "Master angler", "👑"], [3600, "Lake legend", "🌟"]];
 function schRank(xp) {
@@ -2867,7 +3093,7 @@ function sch() {
   const uid = S.user?.uid || "";
   if (SCH && SCH.__uid === uid) return SCH;
   let s = {}; try { s = JSON.parse(getPref("sch-" + uid, "{}")) || {}; } catch { s = {}; }
-  s.xp = +s.xp || 0; s.lessons ||= {}; s.courses ||= {}; s.free ||= { day: 0, xp: 0 }; s.streak ||= { last: 0, n: 0 }; s.__uid = uid;
+  s.xp = +s.xp || 0; s.lessons ||= {}; s.courses ||= {}; s.free ||= { day: 0, xp: 0 }; s.streak ||= { last: 0, n: 0 }; s.seen ||= {}; s.freeLast ||= {}; s.__uid = uid;
   SCH = s; return s;
 }
 function schSave() {
@@ -2882,7 +3108,18 @@ function schTouch() {      // keeps your day streak
 }
 function schAward(n) { const s = sch(), before = schRank(s.xp).i; schTouch(); s.xp += Math.max(0, Math.round(n)); schSave(); const after = schRank(s.xp); return after.i > before ? after : null; }
 const schShuffle = (a) => { const r = a.slice(); for (let i = r.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [r[i], r[j]] = [r[j], r[i]]; } return r; };
-const schPrep = (q) => { const o = schShuffle([q.right, ...q.wrong]); return { q: q.q, opts: o, c: o.indexOf(q.right), why: q.why }; };
+const schPrep = (q) => { const o = schShuffle([q.right, ...q.wrong]); return { q: q.q, opts: o, c: o.indexOf(q.right), why: q.why, hard: !!q.hard }; };
+/* Draws n questions. Ones you haven't seen come first, and harder ones are favored, so every quiz is a new mix. */
+function schDraw(pool, n, key) {
+  const s = sch(), seen = new Set(s.seen[key] || []);
+  const pick = pool.map((q) => ({ q, k: Math.random() + (seen.has(q.q) ? 0 : 2) + (q.hard ? 0.8 : 0) })).sort((a, b) => b.k - a.k).slice(0, Math.min(n, pool.length)).map((x) => x.q);
+  let ns = [...seen, ...pick.map((q) => q.q)]; if (pool.every((q) => ns.includes(q.q))) ns = pick.map((q) => q.q);      // once you've seen them all, start the cycle again
+  s.seen[key] = ns.slice(-80); schSave();
+  return schShuffle(pick).map(schPrep);
+}
+const SCH_LQ = 6;                                              // questions in a lesson quiz
+const schWait = (rec) => !!rec && rec.last === schDayNum();    // you took this quiz today, so it opens again tomorrow
+const schLockMsg = () => toast("You already took this one today. It opens again tomorrow with new questions.");
 const schAllQs = (lids) => lids.flatMap((id) => SCH_LESSONS[id].q);
 function schCourseState(c) {      // what is open in a course today
   const st = sch().courses[c.id]; if (!st) return null;
@@ -2936,12 +3173,12 @@ function schHome(p, V, go2) {
     el("button", { class: "btn ghost wide", type: "button", id: "sch-knots", onclick: () => go2("knots") }, "🪢 Knot book (step by step pictures)"),
     el("details", { class: "sch-lib" }, el("summary", null, "Lesson library"),
       el("div", { class: "stack", style: "gap:6px;margin-top:8px" }, Object.entries(SCH_LESSONS).map(([id, L]) => el("button", { class: "item", type: "button", "data-lesson": id,
-        onclick: () => go2("play", { kind: "lesson", lid: id, cid: "", qs: schShuffle(L.q).map(schPrep), back: "home" }) }, el("span", { class: "t" }, `${L.icon} ${L.n}`), el("span", { class: "label" }, s.lessons[id]?.done ? `Best ${s.lessons[id].best}/${L.q.length}` : "›"))))),
+        onclick: () => { if (schWait(s.lessons[id])) return schLockMsg(); go2("play", { kind: "lesson", lid: id, cid: "", qs: schDraw(L.q, SCH_LQ, "l:" + id), back: "home" }); } }, el("span", { class: "t" }, `${L.icon} ${L.n}`), el("span", { class: "label" }, schWait(s.lessons[id]) ? "Tomorrow" : s.lessons[id]?.done ? `Best ${s.lessons[id].best}/${SCH_LQ}` : "›"))))),
     el("button", { class: "btn ghost wide", type: "button", id: "sch-board", onclick: () => go2("board") }, "🏅 Top anglers"),
     el("p", { class: "hint" }, "This is beginner knowledge. Fishing rules are different in every state and country, so always check your local wildlife agency. It isn't legal advice."));
 }
 /* ---- Knot book: simple step drawings + video links ---- */
-const SCH_VID = { gear: "how to choose fishing rod and reel for beginners", knots: "how to tie fishing knots for beginners", where: "how to find fish in a lake for beginners", weather: "best weather and time to go fishing", lures: "fishing lures and bait for beginners", rules: "fishing license and rules explained", care: "how to safely catch and release fish", knots2: "palomar knot uni knot loop knot fishing", water: "how to read the water fishing", signs: "reading fish activity on the water surface", sky: "how weather wind and moon affect fishing", bait: "how to hook live bait worms minnows", species: "bluegill bass trout catfish fish facts" };
+const SCH_VID = { gear: "how to choose fishing rod and reel for beginners", knots: "how to tie fishing knots for beginners", where: "how to find fish in a lake for beginners", weather: "best weather and time to go fishing", lures: "fishing lures and bait for beginners", rules: "fishing license and rules explained", care: "how to safely catch and release fish", knots2: "palomar knot uni knot loop knot fishing", water: "how to read the water fishing", signs: "reading fish activity on the water surface", sky: "how weather wind and moon affect fishing", bait: "how to hook live bait worms minnows", species: "bluegill bass trout catfish fish facts", rigs: "slip bobber texas rig drop shot carolina rig explained", seasons: "how to fish each season spring summer fall winter", boat: "kayak fishing safety for beginners life jacket", pro: "how to keep a fishing log and find patterns" };
 const schVidUrl = (q) => "https://www.youtube.com/results?search_query=" + encodeURIComponent(q);
 const KB = {
   eye: '<circle cx="60" cy="20" r="8" fill="none" stroke="#7a8a96" stroke-width="3"/>',
@@ -2997,22 +3234,22 @@ function schCourse(p, V, go2) {
   if (!cs) { p.append(el("button", { class: "btn wide", type: "button", id: "sch-start", onclick: () => { sch().courses[c.id] = { start: schDayNum(), done: [], skip: [], fbest: 0, fin: false }; schSave(); renderTab(); } }, "Start this course today"),
     el("div", { class: "stack" }, c.days.map((lid, i) => el("div", { class: "item", style: "cursor:default" }, el("span", { class: "t" }, `Day ${i + 1}: ${SCH_LESSONS[lid].icon} ${SCH_LESSONS[lid].n}`), el("span", { class: "s" }, SCH_LESSONS[lid].sum)))));
     return; }
-  const { st, items, allDone, finUnlocked } = cs;
+  const { st, items, allDone, finUnlocked } = cs, st0 = sch();
   p.append(el("div", { class: "stack", id: "sch-days" }, items.map((x) => {
-    const L = SCH_LESSONS[x.lid], play = () => go2("play", { kind: "lesson", lid: x.lid, cid: c.id, qs: schShuffle(L.q).map(schPrep), back: "course" });
+    const L = SCH_LESSONS[x.lid], wait = schWait(st0.lessons[x.lid]), play = () => { if (wait) return schLockMsg(); go2("play", { kind: "lesson", lid: x.lid, cid: c.id, qs: schDraw(L.q, SCH_LQ, "l:" + x.lid), back: "course" }); };
     return el("div", { class: "sch-day" + (x.done ? " done" : x.unlocked ? " open" : ""), "data-day": x.i + 1 },
       el("span", { class: "sch-dot" }, x.done ? "✅" : x.unlocked ? "▶" : "🔒"),
       el("div", { class: "stack", style: "gap:2px;flex:1;min-width:0" }, el("b", null, `Day ${x.i + 1}: ${L.n}`), el("span", { class: "hint" }, L.sum),
         !x.open ? el("span", { class: "hint" }, "Finish the day before first.") : !x.unlocked ? el("span", { class: "hint" }, "Opens tomorrow.") : null),
-      x.unlocked ? el("button", { class: "btn small" + (x.done ? " ghost" : ""), type: "button", "data-play": x.i + 1, onclick: play }, x.done ? "Again" : "Start")
+      x.unlocked ? el("button", { class: "btn small" + (x.done || wait ? " ghost" : ""), type: "button", "data-play": x.i + 1, disabled: wait ? "" : null, onclick: play }, wait ? "Tomorrow" : x.done ? "Again" : "Start")
         : x.open ? el("button", { class: "btn small ghost", type: "button", "data-skip": x.i + 1, onclick: () => { st.skip.push(x.i); schSave(); renderTab(); } }, "Do it now") : null);
   })));
-  const ids = c.days, finQs = () => schShuffle(schAllQs(ids)).slice(0, 10).map(schPrep);
+  const ids = c.days, finQs = () => schDraw(schAllQs(ids), 10, "f:" + c.id), finWait = st.flast === schDayNum();
   p.append(el("div", { class: "sch-day" + (st.fin ? " done" : finUnlocked ? " open" : ""), id: "sch-final" },
     el("span", { class: "sch-dot" }, st.fin ? "🏆" : finUnlocked ? "▶" : "🔒"),
-    el("div", { class: "stack", style: "gap:2px;flex:1" }, el("b", null, "Final quiz"), el("span", { class: "hint" }, st.fbest ? `Best ${st.fbest}/10. Get 7 or more to finish the course.` : "10 questions from every lesson. Get 7 or more to finish the course."),
+    el("div", { class: "stack", style: "gap:2px;flex:1" }, el("b", null, "Final quiz"), el("span", { class: "hint" }, st.fbest ? `Best ${st.fbest}/10. Get 8 or more to finish the course.` : "10 hard questions from every lesson. Get 8 or more to finish the course."),
       !allDone ? el("span", { class: "hint" }, "Finish all the days first.") : !finUnlocked ? el("span", { class: "hint" }, "Opens the day after your last lesson.") : null),
-    finUnlocked ? el("button", { class: "btn small", type: "button", id: "sch-final-go", onclick: () => go2("play", { kind: "final", cid: c.id, qs: finQs(), back: "course" }) }, st.fin ? "Again" : "Start")
+    finUnlocked ? el("button", { class: "btn small" + (finWait ? " ghost" : ""), type: "button", id: "sch-final-go", disabled: finWait ? "" : null, onclick: () => go2("play", { kind: "final", cid: c.id, qs: finQs(), back: "course" }) }, finWait ? "Tomorrow" : st.fin ? "Again" : "Start")
       : allDone ? el("button", { class: "btn small ghost", type: "button", id: "sch-final-skip", onclick: () => { st.skip.push("final"); schSave(); renderTab(); } }, "Take it now") : null));
   p.append(el("button", { class: "link danger small", type: "button", style: "align-self:flex-start", onclick: () => { if (confirm("Start this course over? Your XP stays.")) { delete sch().courses[c.id]; schSave(); renderTab(); } } }, "Start over"));
 }
@@ -3022,7 +3259,8 @@ function schQuizPick(p, V, go2) {
   p.append(el("h1", null, "Regular quiz"), el("p", { class: "muted" }, "Pick a topic and how many questions. Your best scores earn rank points, up to 100 XP a day."),
     el("b", null, "Topic"), el("div", { class: "chips", id: "sch-topics" }, [["all", "Everything"], ...Object.entries(SCH_LESSONS).map(([id, L]) => [id, L.n])].map(([id, n]) => el("button", { class: "chip", type: "button", "data-topic": id, "aria-pressed": String(q.topic === id), onclick: () => { q.topic = id; paint(); } }, n))),
     el("b", null, "Questions"), el("div", { class: "chips", id: "sch-count" }, [5, 10, 15].map((n) => el("button", { class: "chip", type: "button", "data-n": n, "aria-pressed": String(q.n === n), onclick: () => { q.n = n; paint(); } }, String(n)))),
-    el("button", { class: "btn wide", type: "button", id: "sch-quiz-go", onclick: () => { const pool = q.topic === "all" ? schAllQs(Object.keys(SCH_LESSONS)) : SCH_LESSONS[q.topic].q; go2("play", { kind: "free", cid: "", qs: schShuffle(pool).slice(0, q.n).map(schPrep), back: "quizpick" }); } }, "Start quiz"));
+    el("button", { class: "btn wide", type: "button", id: "sch-quiz-go", onclick: () => { if (sch().freeLast[q.topic] === schDayNum()) return schLockMsg(); const pool = q.topic === "all" ? schAllQs(Object.keys(SCH_LESSONS)) : SCH_LESSONS[q.topic].q; go2("play", { kind: "free", cid: "", topic: q.topic, qs: schDraw(pool, q.n, "q:" + q.topic), back: "quizpick" }); } }, "Start quiz"),
+    el("p", { class: "hint" }, "Each quiz is a new mix of questions. Once you take a quiz, you can take it again tomorrow."));
 }
 function schPlay(p, V, go2) {
   const L = V.kind === "lesson" ? SCH_LESSONS[V.lid] : null, qs = V.qs;
@@ -3047,23 +3285,24 @@ function schPlay(p, V, go2) {
       const ok = k === q.c; if (ok) right++;
       opts.forEach((b, j) => { b.disabled = true; if (j === q.c) b.classList.add("right"); else if (j === k) b.classList.add("wrong"); });
       note.hidden = false; note.replaceChildren(el("b", null, ok ? "Correct! " : "Not quite. "), q.why); note.className = "sch-why " + (ok ? "ok" : "bad"); next.hidden = false; next.focus?.();
-    } }, o));
-    box.replaceChildren(el("b", { class: "hint" }, title), bar(), el("h2", { id: "sch-q" }, q.q), el("div", { class: "stack", style: "gap:8px" }, opts), note, next);
+    } }, el("b", { class: "sch-let" }, "ABCD"[k]), el("span", null, o)));
+    const qn = steps.slice(0, i + 1).filter((x) => x.t === "q").length;
+    box.replaceChildren(el("div", { class: "row spread", style: "align-items:center" }, el("b", { class: "hint" }, title), el("span", { class: "sch-qn", id: "sch-qn" }, `Question ${qn} of ${qs.length}`, q.hard ? el("span", { class: "sch-hard" }, "Hard") : null)), bar(), el("h2", { id: "sch-q" }, q.q), el("div", { class: "stack", style: "gap:8px" }, opts), note, next);
   };
   const finish = () => {
-    const s = sch(), total = qs.length, pass = right / total >= (V.kind === "final" ? 0.7 : 0.6);
+    const s = sch(), total = qs.length, pass = right / total >= (V.kind === "final" ? 0.8 : V.kind === "lesson" ? 0.7 : 0.6), today0 = schDayNum();
     let gain = 0, extra = "", rankUp = null;
     if (V.kind === "lesson") {
       const rec = s.lessons[V.lid] || (s.lessons[V.lid] = { done: false, best: 0 });
-      if (pass && !rec.done) { rec.done = true; gain += 20; }
+      rec.last = today0; if (pass && !rec.done) { rec.done = true; gain += 30; }
       gain += 8 * Math.max(0, right - rec.best); rec.best = Math.max(rec.best, right);
       if (V.cid && pass) { const st = s.courses[V.cid]; if (st && !st.done.includes(V.lid)) st.done.push(V.lid); }
-      extra = pass ? "Lesson complete!" : "You need at least 60% to finish the lesson. Try again.";
+      extra = pass ? "Lesson complete!" : `You need ${Math.ceil(total * 0.7)} out of ${total} to finish the lesson. Read the cards again and try tomorrow.`;
     } else if (V.kind === "final") {
-      const st = s.courses[V.cid]; gain += 10 * Math.max(0, right - st.fbest); st.fbest = Math.max(st.fbest, right);
-      if (pass && !st.fin) { st.fin = true; gain += 50; extra = "Course finished! 🏆"; } else extra = pass ? "You passed again." : "You need 7 out of 10 to finish. Review the lessons and try again.";
+      const st = s.courses[V.cid]; st.flast = today0; gain += 10 * Math.max(0, right - st.fbest); st.fbest = Math.max(st.fbest, right);
+      if (pass && !st.fin) { st.fin = true; gain += 50; extra = "Course finished! 🏆"; } else extra = pass ? "You passed again." : "You need 8 out of 10 to finish. Review the lessons and try again tomorrow.";
     } else {
-      const today = schDayNum(); if (s.free.day !== today) s.free = { day: today, xp: 0 };
+      const today = schDayNum(); s.freeLast[V.topic || "all"] = today; if (s.free.day !== today) s.free = { day: today, xp: 0 };
       gain = Math.min(5 * right, Math.max(0, 100 - s.free.xp)); s.free.xp += gain;
       extra = gain < 5 * right ? "You hit today's 100 XP limit for regular quizzes. Come back tomorrow." : "";
     }
@@ -3073,7 +3312,7 @@ function schPlay(p, V, go2) {
       extra ? el("span", null, extra) : null, el("b", { id: "sch-gain" }, `+${gain} XP`),
       rankUp ? el("div", { class: "sch-rankup", id: "sch-rankup" }, `New rank: ${rankUp.icon} ${rankUp.title}!`) : el("span", { class: "hint" }, `${r.icon} ${r.title} · ${s.xp} XP`)),
       el("button", { class: "btn wide", type: "button", id: "sch-done", onclick: () => go2(V.back || "home", { back: null }) }, V.cid ? "Back to the course" : "Done"),
-      el("button", { class: "btn ghost wide", type: "button", id: "sch-again", onclick: () => { const fresh = V.kind === "lesson" ? schShuffle(SCH_LESSONS[V.lid].q).map(schPrep) : V.kind === "final" ? schShuffle(schAllQs(SCH_COURSES.find((c) => c.id === V.cid).days)).slice(0, 10).map(schPrep) : schShuffle(V.qs.map((x) => ({ q: x.q, right: x.opts[x.c], wrong: x.opts.filter((_, j) => j !== x.c), why: x.why }))).map(schPrep); go2("play", { qs: fresh }); } }, "Try again"));
+      el("p", { class: "hint", id: "sch-tomorrow" }, "You can take this quiz again tomorrow. It will have new questions."));
   };
   draw();
 }
@@ -3157,6 +3396,13 @@ async function clearMyPhoto() {
 const photoInput = (id, label) => el("input", { type: "file", accept: "image/*", id, "aria-label": label, onchange: (e) => { const f = e.target.files?.[0]; e.target.value = ""; setMyPhoto(f); } });
 const backBtn = (text) => el("button", { class: "link", type: "button", style: "align-self:flex-start", onclick: () => { S.meView = "main"; renderTab(); } }, text);
 
+/* Share the app: the phone's own share sheet when there is one, otherwise the link is copied. */
+async function shareApp() {
+  const url = location.origin + location.pathname.replace(/index\.html$/, ""), data = { title: "Weigh-In", text: "Come fish with me on Weigh-In. It's a free fishing app: post catches, learn, trade gear and join tournaments.", url };
+  try { if (navigator.share) { await navigator.share(data); return; } } catch (e) { if (e && e.name === "AbortError") return; }
+  try { await navigator.clipboard.writeText(url); toast("Link copied. Paste it in a text or chat."); }
+  catch { const t = el("input", { type: "text", value: url, readonly: "", style: "position:fixed;left:-999px" }); document.body.append(t); t.select(); try { document.execCommand("copy"); toast("Link copied. Paste it in a text or chat."); } catch { toast("Share this link: " + url); } t.remove(); }
+}
 function viewMe(p) {
   if (S.meView === "log") { p.append(backBtn("‹ Profile")); return viewLog(p); }
   if (S.meView === "friends") { p.append(backBtn("‹ Profile")); return viewFriends(p); }
@@ -3180,11 +3426,13 @@ function viewMe(p) {
       el("div", null, el("b", null, String(pins)), el("span", null, "Map pins"))),
     (() => { const r = schRank(sch().xp), nx = schNext(); return el("button", { class: "sch-me", type: "button", id: "me-school", onclick: () => { S.sch = { v: "home" }; S.meView = "school"; renderTab(); } },
       el("span", { class: "sch-badge" }, r.icon), el("span", { class: "stack", style: "gap:2px;text-align:left;flex:1;min-width:0" }, el("b", null, "🎓 Fishing school"), el("span", { class: "hint" }, `${r.title} · ${sch().xp} XP${nx ? " · " + nx.text : ""}`)), el("span", { class: "label" }, "›")); })(),
+    el("button", { class: "btn wide share-btn", type: "button", id: "me-share", onclick: shareApp }, "📤 Share Weigh-In with friends"),
     el("div", { class: "list" },
       el("button", { class: "item", type: "button", id: "me-new", onclick: () => openWhatsNew(renderTab) },
         el("span", { class: "row", style: "gap:10px" }, el("span", { class: "t" }, "🔔 Release notes"), unseenUpdate() ? el("span", { class: "pill live" }, "New") : null), el("span", { class: "label" }, "›")),
       el("button", { class: "item", type: "button", onclick: open("friends") },
         el("span", { class: "row", style: "gap:10px" }, el("span", { class: "t" }, "Friends and chat"), S.reqIn.length ? el("span", { class: "pill live" }, `${S.reqIn.length} new`) : null), el("span", { class: "label" }, "›")),
+      el("button", { class: "item", type: "button", id: "me-cash", onclick: () => openCashSheet(renderTab) }, el("span", { class: "t" }, "💵 Cash App"), el("span", { class: "label" }, cashTag(S.cash) || "Add")),
       el("button", { class: "item", type: "button", id: "me-water", onclick: open("water") }, el("span", { class: "t" }, "🔍 Gate keep finder"), el("span", { class: "label" }, "›")),
       el("button", { class: "item", type: "button", onclick: open("log") }, el("span", { class: "t" }, "My fishing log"), el("span", { class: "label" }, "›")),
       el("button", { class: "item", type: "button", id: "me-game", onclick: openFishGame }, el("span", { class: "t" }, "Fishing game"), el("span", { class: "label" }, "🎣")),
@@ -3888,7 +4136,7 @@ function playClash(mode, locId, lureIdIn, onExit, duel) {
 
   /* ---------- game state ---------- */
   const CASTS = 3, rivalName = ["Lakeside Lou", "Big Mike", "Sunny", "Cody", "Captain Pete"][Math.floor(Math.random() * 5)];
-  let achNew = [], target = null, inBag = true, netSave = false, st = "cast", ci = 0, mine = [], rival = [], down = false, powerT = 0, power = 0, great = false, timer = 0, biteAt = 0, msg = "", fish = null, weight = 0, F = null, rec = false, resText = "", earned = { xp: 0, coins: 0 }, btn = null, shakeT = 0, drops = [], rip = [], lastTier = null;
+  let castAt = -9999, landed = true, achNew = [], target = null, inBag = true, netSave = false, st = "cast", ci = 0, mine = [], rival = [], down = false, powerT = 0, power = 0, great = false, timer = 0, biteAt = 0, msg = "", fish = null, weight = 0, F = null, rec = false, resText = "", earned = { xp: 0, coins: 0 }, btn = null, shakeT = 0, drops = [], rip = [], lastTier = null;
   const setSt = (s) => { st = s; bg.dataset.state = s; };
   setSt("cast");
   const pickFish = (rand = Math.random) => {
@@ -3909,7 +4157,7 @@ function playClash(mode, locId, lureIdIn, onExit, duel) {
     // the fish is chosen now but you can't see what it is. Bigger fish take longer to bite.
     const sr = mode === "friend" || mode === "event" ? seeded(ci) : Math.random, n = pickFish(sr), w = rollWeight(n, great, lureLv, sr), q = fcTier(n, w)[2];
     target = { n, w, q: Math.max(0, Math.min(1, q)) };
-    fcStat("casts", 1);
+    fcStat("casts", 1); castAt = performance.now(); landed = false;
     timer = (2.6 + Math.random() * 3.4 + target.q * 6 * (1 - 0.1 * lureLv)) * Math.max(0.2, 1 - 0.18 * upBait); setSt("wait"); tick(700, 0.2, 0.25, 1); rip.push({ ...bobber(), a: 1 }); }
   function hook() {
     fish = target.n; weight = target.w; const f = FC_FISH[fish];
@@ -4050,6 +4298,12 @@ function playClash(mode, locId, lureIdIn, onExit, duel) {
     g = ctx.createLinearGradient(0, y0, 0, H); g.addColorStop(0, L.water[0]); g.addColorStop(1, L.water[1]); ctx.fillStyle = g; ctx.fillRect(0, y0, W, H - y0);
     ctx.fillStyle = "rgba(255,255,255,.1)"; ctx.fillRect(0, y0, W, 18);
     const hz = ctx.createLinearGradient(0, y0 - 26, 0, y0 + 40); hz.addColorStop(0, "rgba(255,255,255,0)"); hz.addColorStop(0.45, "rgba(255,255,255,.3)"); hz.addColorStop(1, "rgba(255,255,255,0)"); ctx.fillStyle = hz; ctx.fillRect(0, y0 - 26, W, 66);
+    // mirror image of the shore and sky on the water, bent by tiny waves
+    { const sh = 4, calm = K === "ocean" || L.big ? 2.2 : K === "river" ? 1.6 : 1; ctx.save();
+      for (let a = Math.max(0, y0 - y0 * 0.95); a < y0; a += sh) { const dist = y0 - a, dy = y0 + dist - sh, ox = Math.sin(t * 1.6 + dist / 5) * (1 + dist / y0 * 4) * calm;
+        ctx.globalAlpha = Math.max(0, (TOD === "night" ? 0.16 : 0.26) * (1 - dist / (y0 * 1.1))); ctx.drawImage(canvas, 0, a * dpr, W * dpr, sh * dpr, ox, dy, W, sh); }
+      ctx.restore(); }
+    if (TOD === "dawn" || TOD === "dusk") for (let i = 0; i < 3; i++) { const mx = ((i * W * 0.45 + t * (6 + i * 3)) % (W * 1.5)) - W * 0.25, mg = ctx.createRadialGradient(mx, y0 + 6, 4, mx, y0 + 6, W * 0.4); mg.addColorStop(0, "rgba(255,255,255,.22)"); mg.addColorStop(1, "rgba(255,255,255,0)"); ctx.fillStyle = mg; ctx.fillRect(mx - W * 0.4, y0 - 24, W * 0.8, 60); }
     // light shafts from the sky and the sun's glitter on the water
     for (let i = 0; i < 5; i++) { const x = W * (i + 0.3) / 5 + Math.sin(t * 0.25 + i * 1.7) * 24, wd = 26 + 14 * Math.sin(i * 2.3 + t * 0.4), a = (K === "ocean" || L.big ? 0.14 : 0.09) * (0.6 + 0.4 * Math.sin(t * 0.7 + i));
       const rg = ctx.createLinearGradient(0, y0, 0, H * 0.85); rg.addColorStop(0, `rgba(255,255,255,${a})`); rg.addColorStop(1, "rgba(255,255,255,0)");
@@ -4058,6 +4312,11 @@ function playClash(mode, locId, lureIdIn, onExit, duel) {
     for (const s of D.shadows) { const sx = ((s.x + t * s.v) % (W + 80) + W + 80) % (W + 80) - 40; ctx.fillStyle = "rgba(0,20,30,.18)"; ctx.beginPath(); ctx.ellipse(sx, s.y, s.s * 1.5, s.s * 0.55, 0, 0, 7); ctx.fill(); ctx.beginPath(); ctx.moveTo(sx - s.s * 1.4 * Math.sign(s.v), s.y); ctx.lineTo(sx - s.s * 2.2 * Math.sign(s.v), s.y - s.s * 0.5); ctx.lineTo(sx - s.s * 2.2 * Math.sign(s.v), s.y + s.s * 0.5); ctx.fill(); }
     ctx.strokeStyle = "rgba(255,255,255,.2)"; ctx.lineWidth = 2;
     for (let i = 0; i < 6; i++) { const y = y0 + 30 + i * (H - y0) / 6.5; ctx.beginPath(); for (let x = 0; x <= W; x += 14) ctx.lineTo(x, y + Math.sin(x / 30 + now / 500 + i) * (K === "ocean" || L.big ? 6 : 3)); ctx.stroke(); }
+    // small bright wavelets: bigger and wider the closer they are to you, drifting with the wind
+    for (let i = 0; i < 46; i++) { const dpt = Math.pow(rnd(i * 5 + 2), 1.5), wy2 = y0 + 8 + dpt * (H * 0.88 - y0), wx = ((rnd(i * 5 + 1) * W + t * (6 + 10 * rnd(i + 9)) * (0.4 + dpt)) % (W + 40)) - 20, len = 5 + dpt * 26 + rnd(i + 4) * 6, al = (0.12 + 0.2 * Math.abs(Math.sin(t * 1.3 + i))) * (0.4 + dpt);
+      ctx.strokeStyle = `rgba(255,255,255,${al})`; ctx.lineWidth = 1 + dpt * 1.5; ctx.beginPath(); ctx.moveTo(wx, wy2); ctx.quadraticCurveTo(wx + len / 2, wy2 - 1.5 - dpt * 2, wx + len, wy2); ctx.stroke(); }
+    // caustics: moving net of light on the bottom of shallow water
+    if (!(K === "ocean" || L.big)) { ctx.strokeStyle = "rgba(255,255,230,.07)"; ctx.lineWidth = 1.5; for (let i = 0; i < 9; i++) { const cy2 = H * 0.62 + i * (H * 0.3 / 9); ctx.beginPath(); for (let x = 0; x <= W; x += 12) ctx.lineTo(x, cy2 + Math.sin(x / 22 + t * 1.2 + i * 1.9) * 5 + Math.cos(x / 41 - t * 0.8 + i) * 4); ctx.stroke(); } }
     if (K === "river") for (const sk of D.streaks) { const sx = ((sk.x + t * sk.v) % (W + 140)) - 70; ctx.strokeStyle = "rgba(255,255,255,.22)"; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(sx, sk.y); ctx.lineTo(sx + sk.l, sk.y + 1); ctx.stroke(); }
     for (const p of D.pads) { ctx.fillStyle = "#3e8a45"; ctx.beginPath(); ctx.ellipse(p.x, p.y, p.s, p.s * 0.45, 0, 0.3, Math.PI * 2 - 0.1); ctx.lineTo(p.x, p.y); ctx.fill(); if (p.s > 22) { ctx.fillStyle = "#f6b6cc"; ctx.beginPath(); ctx.arc(p.x + 3, p.y - 3, 4, 0, 7); ctx.fill(); } }
     for (const rk of D.rocks) { ctx.fillStyle = "#59666b"; ctx.beginPath(); ctx.ellipse(rk.x, rk.y, rk.s, rk.s * 0.55, 0, Math.PI, 0); ctx.fill(); ctx.fillStyle = "rgba(255,255,255,.4)"; ctx.fillRect(rk.x - rk.s, rk.y - 1, rk.s * 2, 2); }
@@ -4086,9 +4345,16 @@ function playClash(mode, locId, lureIdIn, onExit, duel) {
     // ripples + drops
     for (const r of rip) { r.a -= dt * 0.9; } for (let i = rip.length - 1; i >= 0; i--) if (rip[i].a <= 0) rip.splice(i, 1);
     ctx.lineWidth = 1.5; for (const r of rip) { ctx.strokeStyle = `rgba(255,255,255,${r.a * 0.6})`; ctx.beginPath(); ctx.ellipse(r.x, r.y + 4, (1 - r.a) * 50 + 6, (1 - r.a) * 18 + 2, 0, 0, 7); ctx.stroke(); }
-    if (st === "wait" || st === "bite") {
-      const dip = st === "bite" ? 7 + Math.sin(now / 40) * 3 : Math.sin(now / 500) * 2;
-      ctx.strokeStyle = "rgba(255,255,255,.85)"; ctx.lineWidth = 1.3; ctx.beginPath(); ctx.moveTo(tip.x, tip.y); ctx.quadraticCurveTo((tip.x + b.x) / 2, (tip.y + b.y) / 2 + 30, b.x, b.y + dip); ctx.stroke();
+    const flying = (st === "wait" || st === "bite") && now - castAt < 650;
+    if (flying) {      // the lure flies out in an arc, then lands with a splash
+      const k = (now - castAt) / 650, px = tip.x + (b.x - tip.x) * k, py = tip.y + (b.y - tip.y) * k - Math.sin(k * Math.PI) * H * 0.22;
+      ctx.strokeStyle = "rgba(255,255,255,.7)"; ctx.lineWidth = 1.1; ctx.beginPath(); ctx.moveTo(tip.x, tip.y); ctx.quadraticCurveTo((tip.x + px) / 2, (tip.y + py) / 2 + 12 * (1 - k), px, py); ctx.stroke();
+      ctx.fillStyle = "#e5352b"; ctx.beginPath(); ctx.arc(px, py, 5, 0, 7); ctx.fill(); landed = false;
+    } else if ((st === "wait" || st === "bite") && !landed) { landed = true; for (let i = 0; i < 10; i++) drops.push({ x: b.x, y: b.y, vx: (Math.random() - 0.5) * 90, vy: -60 - Math.random() * 90, a: 1 }); rip.push({ x: b.x, y: b.y, a: 1 }); rip.push({ x: b.x, y: b.y, a: 0.7 }); tick(500, 0.2, 0.18, 1); }
+    if ((st === "wait" || st === "bite") && !flying) {
+      const dip = st === "bite" ? 7 + Math.sin(now / 40) * 3 : Math.sin(now / 500) * 2 + Math.sin(now / 170 + 1) * 0.8;
+      ctx.strokeStyle = "rgba(255,255,255,.8)"; ctx.lineWidth = 1.2; ctx.beginPath(); ctx.moveTo(tip.x, tip.y); ctx.quadraticCurveTo((tip.x + b.x) / 2, Math.max(tip.y, b.y) + 26 + Math.sin(now / 900) * 3, b.x, b.y + dip); ctx.stroke();
+      ctx.fillStyle = "rgba(0,0,0,.18)"; ctx.beginPath(); ctx.ellipse(b.x + 3, b.y + dip + 9, 10, 3, 0, 0, 7); ctx.fill();
       ctx.fillStyle = "#e5352b"; ctx.beginPath(); ctx.arc(b.x, b.y + dip, 9, Math.PI, 0); ctx.fill(); ctx.fillStyle = "#fff"; ctx.beginPath(); ctx.arc(b.x, b.y + dip, 9, 0, Math.PI); ctx.fill();
       ctx.strokeStyle = "rgba(255,255,255,.5)"; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.ellipse(b.x, b.y + 10, 16 + Math.sin(now / 400) * 3, 5, 0, 0, 7); ctx.stroke();
       if (st === "bite") { ctx.strokeStyle = "rgba(255,255,255,.7)"; ctx.beginPath(); ctx.ellipse(b.x, b.y + 4, 18 + (biteAt / BITE_WINDOW * 38), 7 + biteAt / BITE_WINDOW * 13, 0, 0, 7); ctx.stroke();
@@ -4100,11 +4366,15 @@ function playClash(mode, locId, lureIdIn, onExit, duel) {
     let fp = null;
     if (st === "fight") {
       fp = fightPos(); const ph = F.ph, tn = F.tn ?? F.t, col = tn > 0.72 ? "#ff6b5e" : tn < 0.3 ? "#cfd8dc" : "#fff";
-      ctx.strokeStyle = col; ctx.lineWidth = 1.5 + tn * 2.5; ctx.beginPath(); ctx.moveTo(tip.x, tip.y); ctx.lineTo(fp.x, fp.y); ctx.stroke();
+      const sag = (1 - Math.min(1, tn * 1.4)) * 46;      // slack line hangs, tight line goes straight
+      ctx.strokeStyle = col; ctx.lineWidth = 1.2 + tn * 2.3; ctx.beginPath(); ctx.moveTo(tip.x, tip.y); ctx.quadraticCurveTo((tip.x + fp.x) / 2, (tip.y + fp.y) / 2 + sag, fp.x, fp.y); ctx.stroke();
+      if (tn > 0.72) { ctx.strokeStyle = "rgba(255,255,255,.35)"; ctx.lineWidth = 1; for (let i = 0; i < 4; i++) { const k = 0.2 + i * 0.2; ctx.beginPath(); ctx.arc(tip.x + (fp.x - tip.x) * k + Math.sin(now / 30 + i) * 2, tip.y + (fp.y - tip.y) * k, 1.5, 0, 7); ctx.stroke(); } }
       const r = fishR(fish, weight), dir = fp.x < tip.x ? 1 : -1, airborne = ph === "jump" && F.phA < 1;
       const wob = Math.sin(F.time * (ph === "thrash" ? 28 : ph === "run" ? 16 : 7)) * (ph === "thrash" ? 0.35 : ph === "run" ? 0.18 : 0.1) + (airborne ? -0.5 + F.phA * 1.0 : 0);
       if (!airborne) { ctx.fillStyle = "rgba(0,0,0,.18)"; ctx.beginPath(); ctx.ellipse(fp.x, fp.y + r * 0.5, r * 1.1, r * 0.3, 0, 0, 7); ctx.fill(); }
       drawReal(fish, fp.x, fp.y, r, dir, wob, ph === "thrash" || airborne, true);
+      if (!airborne) { const hg = ctx.createRadialGradient(fp.x, fp.y, r * 0.2, fp.x, fp.y, r * 1.5); hg.addColorStop(0, "rgba(120,170,190,.0)"); hg.addColorStop(1, "rgba(120,170,190,.22)"); ctx.fillStyle = hg; ctx.beginPath(); ctx.ellipse(fp.x, fp.y, r * 1.5, r * 0.8, 0, 0, 7); ctx.fill();
+        ctx.strokeStyle = "rgba(255,255,255,.18)"; ctx.lineWidth = 1; for (let i = -1; i <= 1; i++) { ctx.beginPath(); ctx.moveTo(fp.x - r * 1.2, fp.y + i * r * 0.3); for (let x = -r * 1.2; x <= r * 1.2; x += 8) ctx.lineTo(fp.x + x, fp.y + i * r * 0.3 + Math.sin(x / 9 + now / 160) * 1.5); ctx.stroke(); } }
       if (ph === "run" || ph === "thrash") { ctx.strokeStyle = "rgba(255,255,255,.55)"; ctx.lineWidth = 2; for (let i = 0; i < 2; i++) { ctx.beginPath(); ctx.ellipse(fp.x, fp.y + 4, 30 + ((now / 8 + i * 60) % 120), 10 + ((now / 20 + i * 20) % 36), 0, 0, 7); ctx.globalAlpha = 0.5; ctx.stroke(); ctx.globalAlpha = 1; } }
     }
     for (const d of drops) { d.x += d.vx * dt; d.y += d.vy * dt; d.vy += 420 * dt; d.a -= dt * 1.4; ctx.fillStyle = `rgba(255,255,255,${Math.max(0, d.a)})`; ctx.beginPath(); ctx.arc(d.x, d.y, 2.2, 0, 7); ctx.fill(); } for (let i = drops.length - 1; i >= 0; i--) if (drops[i].a <= 0) drops.splice(i, 1);
@@ -4112,6 +4382,11 @@ function playClash(mode, locId, lureIdIn, onExit, duel) {
     const bend = F ? (F.tn ?? F.t) * 26 : 4;
     ctx.strokeStyle = "#2f2217"; ctx.lineCap = "round"; ctx.lineWidth = 7; ctx.beginPath(); ctx.moveTo(W / 2 + 74, H + 12); ctx.quadraticCurveTo(W / 2 + 56 - bend * 0.3, H * 0.9, tip.x, tip.y); ctx.stroke();
     ctx.strokeStyle = "#7d6a55"; ctx.lineWidth = 3; ctx.beginPath(); ctx.moveTo(W / 2 + 74, H + 12); ctx.quadraticCurveTo(W / 2 + 56 - bend * 0.3, H * 0.9, tip.x, tip.y); ctx.stroke();
+    { const P0 = [W / 2 + 74, H + 12], P1 = [W / 2 + 56 - bend * 0.3, H * 0.9], at = (k) => [(1 - k) * (1 - k) * P0[0] + 2 * k * (1 - k) * P1[0] + k * k * tip.x, (1 - k) * (1 - k) * P0[1] + 2 * k * (1 - k) * P1[1] + k * k * tip.y];
+      ctx.strokeStyle = "#b08a5a"; ctx.lineWidth = 12; ctx.beginPath(); ctx.moveTo(P0[0], P0[1]); const g1 = at(0.13); ctx.lineTo(g1[0], g1[1]); ctx.stroke();      // cork grip
+      ctx.strokeStyle = "#8a6a3e"; ctx.lineWidth = 1; for (let k = 0.02; k < 0.13; k += 0.025) { const a = at(k); ctx.beginPath(); ctx.moveTo(a[0] - 6, a[1]); ctx.lineTo(a[0] + 6, a[1]); ctx.stroke(); }
+      ctx.strokeStyle = "#c9ccd1"; ctx.lineWidth = 1.6; for (const k of [0.3, 0.5, 0.68, 0.84, 0.95]) { const a = at(k); ctx.beginPath(); ctx.arc(a[0] + 3, a[1] - 1, 3.2 - k * 1.6, 0, 7); ctx.stroke(); }      // line guides
+      ctx.fillStyle = "#e5352b"; ctx.beginPath(); ctx.arc(tip.x, tip.y, 2.4, 0, 7); ctx.fill(); }
     ctx.fillStyle = "#222"; ctx.beginPath(); ctx.arc(W / 2 + 66, H * 0.93, 11, 0, 7); ctx.fill(); ctx.strokeStyle = "#aaa"; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(W / 2 + 66, H * 0.93, 7, (now / 100) * (F && down ? 1 : 0), (now / 100) * (F && down ? 1 : 0) + 4); ctx.stroke();
     ctx.restore();
     hud(now, fp);
