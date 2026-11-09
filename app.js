@@ -288,10 +288,12 @@ onAuthStateChanged(auth, async (user) => {
 
 /* ======================= main app ======================= */
 function startApp() {
-  stopAll();
+  stopAll(); S.postsSeen = false;
   const uid = S.user.uid;
   unsubs.push(onSnapshot(query(collection(db, "posts"), orderBy("createdAt", "desc"), limit(40)), (s) => {
     S.posts = s.docs.map((d) => ({ id: d.id, ...d.data({ serverTimestamps: "estimate" }) }));
+    if (S.postsSeen) s.docChanges().forEach((ch) => { if (ch.type !== "added") return; const p = { id: ch.doc.id, ...ch.doc.data({ serverTimestamps: "estimate" }) }; if (p.pb && p.uid !== uid) pbAlert(p); });
+    S.postsSeen = true;
     if (S.tab === "feed") renderFeedCards();
   }, () => {}));
   unsubs.push(onSnapshot(collection(db, "tournaments"), (s) => {
@@ -884,9 +886,13 @@ function feedPosts() {
 /* What's new. Newest first. Add a new entry on top each time the app changes. */
 /* Bump APP_VERSION every time you change the app, and add a matching entry on top of UPDATES (with v: the same number).
    Phones check app.js every few minutes and offer the new version on their own. */
-const APP_VERSION = 25;
+const APP_VERSION = 26;
 try { if ((parseInt(localStorage.getItem("weighin-appv"), 10) || 0) < APP_VERSION) localStorage.setItem("weighin-appv", String(APP_VERSION)); } catch { /* private mode */ }
 const UPDATES = [
+  { id: "2026-11-09f", v: 26, date: "Nov 9", title: "Personal best celebration", items: [
+    "Catch your biggest fish of that kind and the app throws a celebration with confetti.",
+    "Everyone gets a banner on the feed when a friend hits a personal best, and the catch gets a gold Personal best badge.",
+    "The play button on videos got a new look."] },
   { id: "2026-11-09e", v: 25, date: "Nov 9", title: "Videos fill the screen", items: [
     "Fixed: videos in the feed now fill the whole screen like a photo, with no black bars."] },
   { id: "2026-11-09d", v: 24, date: "Nov 9", title: "Videos in posts", items: [
@@ -1035,6 +1041,7 @@ function makeCard(p) {
     el("div", { class: "shade" }),
     el("div", { class: "info" },
       el("button", { class: "who", type: "button", "aria-label": `See ${p.name}'s catches`, onclick: () => openAngler(p.uid, p.name) }, avatar(p.uid, p.name, 30), el("span", null, "@" + p.name + "  ·  " + catchLabel(p))),
+      p.pb ? el("div", { class: "pb-badge" }, "🏆 Personal best") : null,
       el("div", { class: "species" }, p.species),
       el("div", { class: "size" }, sizeText(p)),
       el("div", { class: "meta" }, [p.lure ? "Caught on " + p.lure : null, p.spot || null, placeLabel(p) || null, p.tournamentName ? "🏆 " + p.tournamentName : null].filter(Boolean).join("  ·  "))),
@@ -1166,12 +1173,31 @@ async function vidLoad(p) {
   const url = URL.createObjectURL(new Blob([u8], { type: p.vid?.mime || "video/mp4" })); vidUrls.set(p.id, url); return url;
 }
 function vidCardLayer(p) {
+  const tri = '<svg viewBox="0 0 24 24" width="34" height="34" aria-hidden="true"><path d="M8 5.5v13a1 1 0 0 0 1.5.86l10.4-6.5a1 1 0 0 0 0-1.72L9.5 4.64A1 1 0 0 0 8 5.5z" fill="#fff"/></svg>';
+  const ring = el("span", { class: "vid-ring" }); ring.innerHTML = tri;
+  const dur = el("span", { class: "vid-dur" }, vidTime(p.vid.dur || 0));
   const btn = el("button", { class: "vid-play", type: "button", "aria-label": `Play video, ${vidTime(p.vid.dur || 0)}`, onclick: async (e) => {
-    e.stopPropagation(); btn.disabled = true; btn.textContent = "Loading…";
+    e.stopPropagation(); btn.disabled = true; ring.classList.add("spin"); ring.textContent = ""; dur.textContent = "Loading…";
     try { const url = await vidLoad(p); const v = el("video", { class: "vid-feed", src: url, playsinline: "", autoplay: "", loop: "", onclick: () => { v.paused ? v.play() : v.pause(); } }); btn.replaceWith(v); v.play().catch(() => {}); }
-    catch { btn.disabled = false; btn.textContent = "▶ Play video"; toast("Couldn't load the video. Try again."); }
-  } }, `▶ Play video · ${vidTime(p.vid.dur || 0)}`);
+    catch { btn.disabled = false; ring.classList.remove("spin"); ring.innerHTML = tri; dur.textContent = "Try again"; toast("Couldn't load the video. Try again."); }
+  } }, ring, dur);
   return btn;
+}
+/* ---- personal best celebration ---- */
+function celebrate(title, sub) {
+  document.querySelector(".pb-pop")?.remove();
+  const pop = el("div", { class: "pb-pop", id: "pb-pop", role: "dialog", "aria-label": "Personal best" });
+  const colors = ["#f5c542", "#e8742a", "#1b8fd1", "#3cc47c", "#ff5d73", "#ffffff"];
+  for (let i = 0; i < 46; i++) pop.append(el("i", { class: "pb-bit", style: `left:${Math.random() * 100}%;background:${colors[i % colors.length]};animation-delay:${(Math.random() * 0.8).toFixed(2)}s;animation-duration:${(2.2 + Math.random() * 1.6).toFixed(2)}s;transform:rotate(${Math.round(Math.random() * 360)}deg)` }));
+  pop.append(el("div", { class: "pb-card" }, el("div", { class: "pb-trophy" }, "🏆"), el("h2", null, "NEW PERSONAL BEST!"), el("b", null, title), el("span", null, sub),
+    el("button", { class: "btn", type: "button", id: "pb-ok", onclick: () => pop.remove() }, "Nice!")));
+  document.body.append(pop); setTimeout(() => pop.remove(), 6000);
+}
+function pbAlert(p) {
+  document.querySelector(".pb-alert")?.remove();
+  const a = el("button", { class: "pb-alert", type: "button", id: "pb-alert", onclick: () => { a.remove(); const c = document.querySelector(`.card[data-id="${p.id}"]`); c?.scrollIntoView({ block: "start" }); } },
+    el("span", null, "🏆"), el("span", { class: "stack", style: "gap:0;text-align:left" }, el("b", null, `@${p.name} just hit a personal best!`), el("span", null, `${p.species} · ${sizeText(p)}. Tap to see.`)));
+  document.body.append(a); setTimeout(() => a.remove(), 8000);
 }
 async function vidDelete(pid, n) { for (let i = 0; i < (n || 12); i++) await deleteDoc(doc(db, "vids", `${pid}_${i}`)).catch(() => {}); }
 async function deletePost(p) {
@@ -1506,6 +1532,14 @@ function viewPost(p) {
     }
     try {
       const lure = String(fd.get("lure") || "").trim();
+      let pb = "";
+      try {   // is this their biggest of this fish so far?
+        const mine = (await getDocs(query(collection(db, "posts"), where("uid", "==", S.user.uid)))).docs.map((d) => d.data()).filter((x) => String(x.species || "").toLowerCase() === species.toLowerCase());
+        if (mine.length) {
+          if (lb > 0 && lb > Math.max(0, ...mine.map((x) => +x.lb || 0))) pb = "weight";
+          else if (!(lb > 0) && inches > 0 && inches > Math.max(0, ...mine.map((x) => +x.inches || 0))) pb = "length";
+        }
+      } catch { /* no celebration if we can't tell */ }
       const ref = doc(collection(db, "posts")); let vinfo = null;
       if (draftVid) {
         btn.textContent = "Saving video…";
@@ -1514,7 +1548,7 @@ function viewPost(p) {
         btn.textContent = "Posting…";
       }
       await setDoc(ref, {
-        uid: S.user.uid, name: S.name, species, lb, inches, ...(vinfo ? { vid: vinfo } : {}),
+        uid: S.user.uid, name: S.name, species, lb, inches, ...(vinfo ? { vid: vinfo } : {}), ...(pb ? { pb: true, pbKind: pb } : {}),
         lure, spot: spotText, city: cityText, state: stateCode,
         catchDate: dateStr, photo: draftPhoto || "", tournamentId: t ? t.id : "", tournamentName: t ? t.name : "",
         phase: phaseIdx, createdAt: serverTimestamp(),
@@ -1529,7 +1563,8 @@ function viewPost(p) {
         } catch { pinFailed = true; }
       }
       draftPhoto = ""; draftVid = null; draftLoc = null; draftSrc = ""; draftWhere = "";
-      toast(pinFailed ? `Posted your ${species}, but the map pin didn't save.` : pin ? `Posted your ${species} and put it on the map!` : `Posted your ${species}!`); go("feed");
+      if (pb) celebrate(species, sizeText({ lb, inches })); else toast(pinFailed ? `Posted your ${species}, but the map pin didn't save.` : pin ? `Posted your ${species} and put it on the map!` : `Posted your ${species}!`);
+      go("feed");
     } catch (err) { toast(errText(err)); btn.disabled = false; btn.textContent = "Post catch"; }
   });
   p.append(el("h1", null, "Post a catch"), f);
