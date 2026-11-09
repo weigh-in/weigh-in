@@ -361,3 +361,53 @@ a.btn.small{text-decoration:none;display:inline-flex;align-items:center}
 .pb-alert>span:first-child{font-size:26px}
 @keyframes pbdrop{from{transform:translateY(-120%)}to{transform:none}}
 @media (prefers-reduced-motion:reduce){.pb-bit{display:none}.pb-card,.pb-alert{animation:none}}
+
+/* ---------- polish (v28) ---------- */
+:root{--shadow:0 1px 2px rgba(16,48,42,.06),0 6px 18px rgba(16,48,42,.07);--shadow-s:0 1px 2px rgba(16,48,42,.08);--r:16px}
+@media (prefers-color-scheme: dark){:root{--shadow:0 1px 2px rgba(0,0,0,.3),0 6px 18px rgba(0,0,0,.28);--shadow-s:0 1px 2px rgba(0,0,0,.35)}}
+body{-webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility}
+h1{letter-spacing:.005em}
+.pad{animation:padin .28s ease both}
+@keyframes padin{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+.btn{box-shadow:0 2px 0 rgba(0,0,0,.14),0 6px 14px rgba(210,69,42,.22);transition:transform .12s,box-shadow .12s,filter .12s}
+.btn:active{transform:translateY(1px) scale(.985);box-shadow:0 1px 0 rgba(0,0,0,.14)}
+.btn.ghost{border-width:1.5px;box-shadow:none;background:transparent}
+.btn.ghost:active{background:var(--lake-soft)}
+.btn.small{box-shadow:var(--shadow-s)}
+.chip{border-width:1.5px;transition:background .15s,color .15s}
+.field input,.field select,.field textarea{border-width:1.5px;border-radius:12px;background:var(--surface);box-shadow:inset 0 1px 2px rgba(16,48,42,.05)}
+.field input:focus,.field select:focus,.field textarea:focus{box-shadow:0 0 0 3px var(--lake-soft);border-color:var(--lake)}
+.list{border-top:0;background:var(--surface);border:1px solid var(--line);border-radius:var(--r);box-shadow:var(--shadow);padding:0 14px;overflow:hidden}
+.list>.item,.list>div>.item{padding:14px 0}
+.list>.item:last-child{border-bottom:0}
+.item .t{letter-spacing:.005em}
+.stats div{border:1px solid var(--line);border-radius:var(--r);box-shadow:var(--shadow);padding:12px 6px}
+.stats b{color:var(--lake)}
+.bite{border:1px solid var(--line);border-radius:var(--r);box-shadow:var(--shadow);padding:14px}
+.meter{height:12px;border-radius:999px;overflow:hidden}.meter i{border-radius:999px}
+.bar-track i{border-radius:999px;height:14px}
+.pill{letter-spacing:.07em}
+.sch-me,.sch-rank,.sch-course,.sch-card,.sch-lib{box-shadow:var(--shadow);border-radius:var(--r)}
+.sch-day{border-radius:var(--r);box-shadow:var(--shadow-s)}
+.kn-step{box-shadow:var(--shadow-s)}
+nav.tabs{border-top:1px solid var(--line);box-shadow:0 -6px 20px rgba(16,48,42,.08);background:color-mix(in srgb,var(--surface) 94%,transparent);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px)}
+.tab{transition:color .15s}
+.tab[aria-current="page"]::before{content:"";position:absolute;top:0;left:30%;right:30%;height:3px;border-radius:0 0 3px 3px;background:var(--lake)}
+.tab[aria-current="page"] svg{transform:translateY(-1px)}
+.tab.post .bob{border:3px solid var(--surface);box-shadow:0 0 0 1.5px var(--ink),0 8px 18px rgba(210,69,42,.35)}
+.tab.post[aria-current="page"]::before{display:none}
+.sheet{border-radius:22px 22px 0 0;box-shadow:0 -10px 40px rgba(0,0,0,.25)}
+.update-bar{box-shadow:0 8px 24px rgba(0,0,0,.3);border-radius:14px}
+.toast{box-shadow:0 8px 24px rgba(0,0,0,.3)}
+.card .info .species{text-shadow:0 2px 10px rgba(0,0,0,.45)}
+.card .side button{backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px)}
+/* play button: triangle dead center */
+.vid-ring{padding-left:0}
+.vid-ring svg{display:block;margin-left:3px}
+/* Bite tab sections */
+.seg{display:grid;grid-template-columns:repeat(3,1fr);gap:4px;padding:4px;border-radius:14px;background:var(--lake-soft);position:sticky;top:0;z-index:5}
+.seg button{border:0;border-radius:10px;padding:10px 4px;font-weight:700;font-size:.92rem;background:transparent;color:var(--lake);cursor:pointer;transition:background .15s,box-shadow .15s}
+.seg button[aria-selected="true"]{background:var(--surface);box-shadow:var(--shadow-s);color:var(--ink)}
+.bite-place{padding:2px 2px}
+@media (prefers-reduced-motion:reduce){.pad{animation:none}.btn{transition:none}}
+#adv-temp{border:1.5px solid var(--line);border-radius:10px;padding:8px 10px;background:var(--surface);min-height:40px}

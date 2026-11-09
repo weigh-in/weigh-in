@@ -13,6 +13,8 @@ import {
 const $app = document.getElementById("app");
 
 /* ======================= tiny helpers ======================= */
+// The browser turns a null child into the word "null". Skip empty children instead.
+for (const m of ["append", "prepend", "replaceChildren"]) { const orig = Element.prototype[m]; Element.prototype[m] = function (...k) { return orig.apply(this, k.flat().filter((c) => c != null && c !== false)); }; }
 function el(tag, attrs, ...kids) {
   const n = document.createElement(tag);
   if (attrs) for (const k in attrs) {
@@ -479,13 +481,13 @@ function viewBite(p) {
   p.append(box);
   const saved = (() => { try { return JSON.parse(getPref("wx", "null")); } catch { return null; } })();
   const loadWx = async (loc) => {
-    setPref("wx", JSON.stringify(loc));
+    setPref("wx", JSON.stringify(loc)); if (S.biteChart) S.biteChart.hidden = false;
     box.replaceChildren(el("p", { class: "muted" }, "Loading weather for " + loc.name + "…"));
     try { drawWx(box, await fetchWeather(loc), loc, loadWx); }
     catch (e) { box.replaceChildren(wxPicker(loadWx, "Couldn't load the weather. Check your internet and try again."), el("p", { class: "muted small" }, String(e.message || e))); }
   };
   if (saved && typeof saved.lat === "number") loadWx(saved); else box.append(wxPicker(loadWx));
-  p.append(lureChart());
+  S.biteChart = lureChart(); p.append(S.biteChart);
 }
 function wxPicker(onPick, note) {
   const q = el("input", { type: "search", placeholder: "Search a town or lake, like Austin", "aria-label": "Search for a place", maxlength: 60 });
@@ -519,8 +521,8 @@ function drawWx(box, w, loc, onPick) {
   const inHg = (c.pressure_msl * 0.02953).toFixed(2);
   const trend = b.dP <= -1 ? "falling" : b.dP >= 1 ? "rising" : "steady";
   const next = h.time.slice(i + 1, i + 13).map((t, k) => ({ t, temp: h.temperature_2m[i + 1 + k], rain: h.precipitation_probability[i + 1 + k], code: h.weather_code[i + 1 + k] }));
-  box.replaceChildren(
-    el("div", { class: "row spread" }, el("strong", null, loc.name), el("button", { class: "link", type: "button", onclick: () => box.replaceChildren(wxPicker(onPick)) }, "Change")),
+  const [_place, _now, _stats, _bite, _best, _adv, _hours, _foot] = [
+    el("div", { class: "row spread bite-place" }, el("strong", null, "📍 " + loc.name), el("button", { class: "link", type: "button", onclick: () => { if (S.biteChart) S.biteChart.hidden = false; box.replaceChildren(wxPicker(onPick)); } }, "Change")),
     el("div", { class: "wx-now" },
       el("div", { class: "wx-temp" }, Math.round(c.temperature_2m) + "°"),
       el("div", { class: "stack", style: "gap:2px" }, el("b", null, wxName(c.weather_code)), el("span", { class: "muted" }, `Wind ${Math.round(c.wind_speed_10m)} mph ${compass(c.wind_direction_10m)}`))),
@@ -539,7 +541,18 @@ function drawWx(box, w, loc, onPick) {
     advisorCard(w, loc),
     el("div", { class: "hours", "aria-label": "Next 12 hours" }, next.map((x) => el("div", { class: "hr" },
       el("small", null, new Date(x.t).toLocaleTimeString([], { hour: "numeric" })), el("b", null, Math.round(x.temp) + "°"), el("small", null, (x.rain ?? 0) + "% rain")))),
-    el("p", { class: "muted small" }, "Weather from Open-Meteo. Your location is only used to ask for the forecast and is not saved to your account."));
+    el("p", { class: "muted small" }, "Weather from Open-Meteo. Your location is only used to ask for the forecast and is not saved to your account.")];
+  const tabs = [["fore", "Forecast"], ["adv", "Advisor"], ["chart", "What's biting"]];
+  const fore = el("div", { class: "stack", id: "bite-p-fore" }, _now, _stats, _bite, _best, _hours, _foot);
+  const adv = el("div", { class: "stack", id: "bite-p-adv" }, _adv);
+  const seg = el("div", { class: "seg", id: "bite-seg", role: "tablist" });
+  const show = (k) => {
+    setPref("biteTab", k); fore.hidden = k !== "fore"; adv.hidden = k !== "adv"; if (S.biteChart) S.biteChart.hidden = k !== "chart";
+    [...seg.children].forEach((x) => x.setAttribute("aria-selected", String(x.dataset.k === k)));
+  };
+  tabs.forEach(([k, n]) => seg.append(el("button", { type: "button", role: "tab", id: "bite-seg-" + k, "data-k": k, onclick: () => show(k) }, n)));
+  box.replaceChildren(_place, seg, fore, adv);
+  const want = getPref("biteTab", "fore"); show(tabs.some((t) => t[0] === want) ? want : "fore");
 }
 
 /* ======================= FISHING ADVISOR: lure + where + when ======================= */
@@ -886,9 +899,16 @@ function feedPosts() {
 /* What's new. Newest first. Add a new entry on top each time the app changes. */
 /* Bump APP_VERSION every time you change the app, and add a matching entry on top of UPDATES (with v: the same number).
    Phones check app.js every few minutes and offer the new version on their own. */
-const APP_VERSION = 27;
+const APP_VERSION = 28;
 try { if ((parseInt(localStorage.getItem("weighin-appv"), 10) || 0) < APP_VERSION) localStorage.setItem("weighin-appv", String(APP_VERSION)); } catch { /* private mode */ }
 const UPDATES = [
+  { id: "2026-11-09h", v: 28, date: "Nov 9", title: "Polish and easier updates", items: [
+    "The Bite tab is sorted into three parts: Forecast, Advisor and What's biting.",
+    "The video play button is centered, and a video pauses when you scroll away from it.",
+    "A fresh look across the app: softer cards, buttons and a nicer tab bar.",
+    "Fixed: the word null was showing up in the Advisor.",
+    "One tap on Update now installs the newest version, even if you are several versions behind.",
+    "When you close the app, it gets ready to open on the newest version next time."] },
   { id: "2026-11-09g", v: 27, date: "Nov 9", title: "Release notes and beta", items: [
     "What's new is now called Release notes.",
     "Version numbers now start with Beta, like Beta v27, because the app is still being built."] },
@@ -1181,7 +1201,7 @@ function vidCardLayer(p) {
   const dur = el("span", { class: "vid-dur" }, vidTime(p.vid.dur || 0));
   const btn = el("button", { class: "vid-play", type: "button", "aria-label": `Play video, ${vidTime(p.vid.dur || 0)}`, onclick: async (e) => {
     e.stopPropagation(); btn.disabled = true; ring.classList.add("spin"); ring.textContent = ""; dur.textContent = "Loading…";
-    try { const url = await vidLoad(p); const v = el("video", { class: "vid-feed", src: url, playsinline: "", autoplay: "", loop: "", onclick: () => { v.paused ? v.play() : v.pause(); } }); btn.replaceWith(v); v.play().catch(() => {}); }
+    try { const url = await vidLoad(p); const v = el("video", { class: "vid-feed", src: url, playsinline: "", autoplay: "", loop: "", onclick: () => { v.paused ? v.play() : v.pause(); } }); btn.replaceWith(v); v.play().catch(() => {}); vidWatch(v); }
     catch { btn.disabled = false; ring.classList.remove("spin"); ring.innerHTML = tri; dur.textContent = "Try again"; toast("Couldn't load the video. Try again."); }
   } }, ring, dur);
   return btn;
@@ -1202,6 +1222,9 @@ function pbAlert(p) {
     el("span", null, "🏆"), el("span", { class: "stack", style: "gap:0;text-align:left" }, el("b", null, `@${p.name} just hit a personal best!`), el("span", null, `${p.species} · ${sizeText(p)}. Tap to see.`)));
   document.body.append(a); setTimeout(() => a.remove(), 8000);
 }
+const vidObs = ("IntersectionObserver" in window) ? new IntersectionObserver((es) => es.forEach((e) => { if (e.intersectionRatio < 0.5) e.target.pause?.(); }), { threshold: [0, 0.5, 1] }) : null;
+function vidWatch(v) { vidObs?.observe(v); }
+document.addEventListener("visibilitychange", () => { if (document.hidden) document.querySelectorAll("video.vid-feed").forEach((v) => v.pause()); });
 async function vidDelete(pid, n) { for (let i = 0; i < (n || 12); i++) await deleteDoc(doc(db, "vids", `${pid}_${i}`)).catch(() => {}); }
 async function deletePost(p) {
   if (!confirm("Delete this catch? This can't be undone.")) return;
@@ -2790,13 +2813,17 @@ function schBoard(p) {
 
 /* ======================= AUTO UPDATE ======================= */
 let updatePending = 0;
+async function latestVersion() {
+  const r = await fetch("app.js?cb=" + Date.now(), { cache: "no-store" }); if (!r.ok) return 0;
+  const m = /const APP_VERSION = (\d+)/.exec(await r.text()); return m ? +m[1] : 0;
+}
 async function checkUpdate() {
   try {
-    const r = await fetch("app.js?cb=" + Date.now(), { cache: "no-store" }); if (!r.ok) return;
-    const m = /const APP_VERSION = (\d+)/.exec(await r.text()); const v = m ? +m[1] : 0;
-    if (v > APP_VERSION && v !== updatePending) { updatePending = v; showUpdateBar(); }
+    const v = await latestVersion();
+    if (v > APP_VERSION && v !== updatePending) { updatePending = v; if (document.visibilityState === "hidden") rememberUpdate(); else showUpdateBar(); }
   } catch { /* offline: try again later */ }
 }
+function rememberUpdate() { try { if (updatePending) localStorage.setItem("weighin-appv", String(updatePending)); } catch { /* private mode */ } }   // the next time the app opens, it loads the new version
 function showUpdateBar() {
   if (document.getElementById("update-bar")) return;
   document.body.append(el("div", { class: "update-bar", id: "update-bar", role: "status" }, el("span", null, `A new beta version (v${updatePending}) is ready.`),
@@ -2804,17 +2831,28 @@ function showUpdateBar() {
 }
 async function applyUpdate() {
   const b = document.getElementById("update-now"); if (b) { b.disabled = true; b.textContent = "Updating…"; }
-  try { localStorage.setItem("weighin-appv", String(updatePending)); } catch { /* private mode */ }     // the page loads app.js?v=<this>, a copy the phone has never saved
+  try {
+    const newest = await latestVersion();                       // jump straight to the newest, even if you are several versions behind
+    if (newest > updatePending) updatePending = newest;
+    for (let k = 0; k < 3; k++) {                               // make sure the new files are really there before reloading
+      const rs = await Promise.all([`app.js?v=${updatePending}`, `style.css?v=${updatePending}`].map((u) => fetch(u, { cache: "reload" })));
+      const m = /const APP_VERSION = (\d+)/.exec(await rs[0].text());
+      if (m && +m[1] >= updatePending) { if (+m[1] > updatePending) updatePending = +m[1]; break; }
+      await new Promise((ok) => setTimeout(ok, 1500));
+    }
+  } catch { /* reload anyway */ }
+  rememberUpdate();
   try { await Promise.all(["index.html", "./"].map((u) => fetch(u, { cache: "reload" }).catch(() => {}))); } catch { /* reload anyway */ }
   location.reload();
 }
 setTimeout(checkUpdate, 4000);
 setInterval(checkUpdate, 5 * 60 * 1000);
 document.addEventListener("visibilitychange", () => {
-  if (document.visibilityState !== "visible") return;
-  if (updatePending) { const a = document.activeElement; if (!(a && /^(INPUT|TEXTAREA|SELECT)$/.test(a.tagName))) applyUpdate(); }   // update when you come back, unless you're typing
+  if (document.visibilityState === "hidden") { if (updatePending) rememberUpdate(); else checkUpdate(); return; }   // closing the app: the next open is the new version
+  if (updatePending) { const a = document.activeElement; if (!(a && /^(INPUT|TEXTAREA|SELECT)$/.test(a.tagName)) && S.tab !== "post") applyUpdate(); }   // coming back: update unless you're typing or posting
   else checkUpdate();
 });
+addEventListener("pagehide", () => { if (updatePending) rememberUpdate(); });
 
 /* ======================= ME (profile, log, friends, settings) ======================= */
 function watchMine() {
