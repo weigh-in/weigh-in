@@ -884,9 +884,12 @@ function feedPosts() {
 /* What's new. Newest first. Add a new entry on top each time the app changes. */
 /* Bump APP_VERSION every time you change the app, and add a matching entry on top of UPDATES (with v: the same number).
    Phones check app.js every few minutes and offer the new version on their own. */
-const APP_VERSION = 21;
+const APP_VERSION = 22;
 try { if ((parseInt(localStorage.getItem("weighin-appv"), 10) || 0) < APP_VERSION) localStorage.setItem("weighin-appv", String(APP_VERSION)); } catch { /* private mode */ }
 const UPDATES = [
+  { id: "2026-11-09b", v: 22, date: "Nov 9", title: "Little details lessons", items: [
+    "Fishing school has 6 new lessons: More knots, Reading the water, Signs on the surface (jumping fish, birds), Sky, wind and moon, Bait details, and Fish facts.",
+    "New 6 day course called Little details. You can also find each lesson in the Lesson library or pick it in a regular quiz."] },
   { id: "2026-11-09", v: 21, date: "Nov 9", title: "Fishing school", items: [
     "New in Profile: Fishing school. Learn to fish with short daily lessons, like Duolingo.",
     "Pick a course: Permits and rules (1 day), Weekend start (2 days), Beginner in 5 days, or the Full week (7 days). Each day opens one lesson, and a final quiz comes after.",
@@ -2303,12 +2306,73 @@ const SCH_LESSONS = {
       Q("A fish swallowed the hook deep. What should you do?", "Cut the line close to the hook and release it", ["Pull the hook out hard", "Keep pulling until it comes out", "Throw the fish back with the line attached"], "Ripping out a deep hook usually kills the fish."),
       Q("What should you wear in a small boat?", "A life jacket", ["Heavy boots", "A raincoat only", "Nothing special"], "Life jackets save lives."),
       Q("What should you do with old fishing line?", "Put it in the trash or a line recycling bin", ["Leave it on the bank", "Throw it in the water", "Hang it in a tree"], "Loose line traps birds and turtles."),
-      Q("How do you revive a tired fish?", "Hold it upright in the water facing the current and move it gently forward", ["Shake it", "Squeeze its belly", "Lay it on dry grass"], "It needs water flowing over its gills.")] }
+      Q("How do you revive a tired fish?", "Hold it upright in the water facing the current and move it gently forward", ["Shake it", "Squeeze its belly", "Lay it on dry grass"], "It needs water flowing over its gills.")] },
+  knots2: { n: "More knots", icon: "🧵", sum: "Three more knots that solve real problems.", cards: [
+    ["Palomar knot", "Very strong and easy. Double the line, pass the loop through the hook eye, tie a loose overhand knot, pass the loop over the whole hook, then wet and pull tight. Great for braid."],
+    ["Uni knot", "A flexible knot that works for hooks, lures and joining line to line. Wrap the tail around the line 4 to 6 times through a loop, wet it and slide it snug."],
+    ["Loop knot for lures", "A loop knot lets a lure wiggle freely, so it looks more alive in the water. Use it for crankbaits and jigs."],
+    ["Check your knot", "After a snag or a big fish, check the last foot of line. If it feels rough or curly, cut it off and retie. Retie often. A fresh knot is cheap and a lost fish isn't."]],
+    q: [Q("Which knot is very strong and works well with braid?", "Palomar knot", ["Shoelace knot", "Granny knot", "Square knot"], "The Palomar is simple and strong, and braid holds it well."),
+      Q("Why use a loop knot on a lure?", "It lets the lure move freely and look alive", ["It makes the line thicker", "It stops fish from biting", "It makes the line float"], "A tight knot stiffens the lure's action."),
+      Q("What should you do if the end of your line feels rough?", "Cut it off and retie", ["Keep fishing", "Add more weight", "Tie a second knot on top"], "Damaged line breaks at the worst time."),
+      Q("The uni knot can be used for...", "Hooks, lures and joining two lines", ["Only hooks", "Only bobbers", "Nothing but braid"], "It is a very flexible knot."),
+      Q("Before tightening a knot you should...", "Wet it", ["Dry it in the sun", "Pull as hard as you can", "Leave a long tail"], "Wet line stays cool and keeps its strength.")] },
+  water: { n: "Reading the water", icon: "🌊", sum: "Find where the fish are hiding.", cards: [
+    ["Fish like cover", "Fish hide near things: logs, rocks, docks, weeds and fallen trees. Cover gives them shade and a place to ambush food. Cast near it, not on the open middle."],
+    ["Edges and drop-offs", "Where shallow water drops to deep water, fish move up and down. Weed lines, rocky points and creek channels are all edges. Fish often line up along them."],
+    ["Current and seams", "In a river, fish rest where the current is slow and wait for food to float by. Look behind rocks, along banks and where fast water meets slow water. That line is called a seam."],
+    ["Water color and clarity", "Clear water means fish see well, so use natural colors and light line. Muddy water means bright or noisy lures and slow retrieves. After heavy rain, fish near calm edges."]],
+    q: [Q("Where do fish often hide?", "Near logs, rocks, docks and weeds", ["In the middle of open water only", "On the dry bank", "Only in the shade of clouds"], "Cover gives shade and a place to ambush food."),
+      Q("What is a seam in a river?", "The line where fast and slow water meet", ["A type of knot", "A kind of lure", "A fish disease"], "Fish rest on the slow side and watch the fast side for food."),
+      Q("In muddy water, what lure works best?", "Bright or noisy lures", ["Clear see-through lures", "No lure at all", "The smallest one you have"], "Fish find lures by feel and sound when they can't see."),
+      Q("Which spot is an edge?", "Where shallow water drops to deep water", ["The middle of a flat shallow area", "The parking lot", "The center of a deep hole"], "Fish use edges to move between depths."),
+      Q("In clear water you should use...", "Natural colors and light line", ["Thick bright line", "Very loud lures only", "Big heavy weights"], "Fish can see a lot in clear water.")] },
+  signs: { n: "Signs on the surface", icon: "💦", sum: "What jumping, swirls and birds are telling you.", cards: [
+    ["Fish jumping", "Fish that jump or splash on the surface are often feeding on bugs or small fish. Look at the size of the splash. Small rings usually mean small fish. Big swirls mean bigger fish."],
+    ["Birds", "Diving birds like gulls, terns and herons often point to schools of baitfish. If birds are working one spot, fish are probably under them."],
+    ["Bugs and baitfish", "A cloud of bugs over the water or tiny fish skipping on the surface means food is there. Match what you see. If fish are eating small minnows, use a small lure that looks the same."],
+    ["Slicks and bubbles", "A smooth patch on rough water, called a slick, can show where fish are feeding. Lines of foam or bubbles also gather food. Cast along them."]],
+    q: [Q("Fish splashing on the surface are often...", "Feeding on bugs or small fish", ["Sleeping", "Leaving the lake", "Sick"], "Surface action means food is up there."),
+      Q("What do diving birds often show you?", "A school of baitfish", ["The deepest spot", "A hidden log", "That fish aren't there"], "Birds follow baitfish, and bigger fish follow them too."),
+      Q("If fish eat tiny minnows, you should use...", "A small lure that looks like a minnow", ["A giant lure", "A bright red bobber", "No bait"], "Match what the fish are eating."),
+      Q("A smooth slick on rough water can show...", "Where fish are feeding", ["A rock to avoid", "That it's about to rain", "A hidden boat ramp"], "Oils and food make the surface smooth."),
+      Q("Big swirls on the surface usually mean...", "A bigger fish", ["A tiny fish", "A frog", "A leaf"], "Size of the splash hints at size of the fish.")] },
+  sky: { n: "Sky, wind and moon", icon: "🌙", sum: "What the outside world says about the bite.", cards: [
+    ["Wind", "A little wind helps. It pushes food toward the bank and hides you from the fish. Fish the windy side of a lake. Too much wind makes casting hard and can be unsafe in a boat."],
+    ["Clouds and sun", "Bright sun pushes fish to shade and deeper water. Cloudy days keep them active and shallow. The best times are usually early morning and evening."],
+    ["Air pressure", "Fish often feed best when pressure is steady or slowly falling before a storm. Right after a cold front, fishing can slow down. Go slow and use small baits."],
+    ["Moon", "Some anglers say fish feed best around the new and full moon. It's not guaranteed, but many use it as one more clue. Night fishing is great in summer heat."]],
+    q: [Q("Why fish the windy side of a lake?", "Wind pushes food toward that bank", ["Fish hate the calm side", "It keeps fish from seeing you at all", "It makes fish bigger"], "Wind moves bugs and baitfish."),
+      Q("On a bright sunny day, fish often...", "Hide in shade or go deeper", ["Swim in the open on top", "Stop breathing", "All go to shore"], "Bright light makes fish cautious."),
+      Q("After a cold front, fishing often...", "Slows down", ["Gets perfect", "Stops forever", "Turns on right away"], "Use small baits and fish slow."),
+      Q("When are the best times to fish for many species?", "Early morning and evening", ["Noon", "Midnight only", "Never at sunrise"], "Low light is when many fish feed."),
+      Q("Is the moon a sure thing for bites?", "No, it's just one clue", ["Yes, always", "Yes, only on Fridays", "It has no effect on anything at all, ever"], "Use it with weather and water clues.")] },
+  bait: { n: "Bait details", icon: "🪝", sum: "Small bait tricks that make a big difference.", cards: [
+    ["Worms", "Hook a worm once through the middle, or thread it on the hook so it wiggles. Fresh, lively worms catch the most fish. Keep them cool and in damp dirt."],
+    ["Minnows", "Hook a live minnow lightly under the dorsal fin or through the lips so it stays alive. Check local rules on moving live bait from one lake to another. Never dump leftover bait in the water."],
+    ["Dough, corn and cut bait", "Dough bait and corn work for carp and panfish. Cut bait, small chunks of fresh fish, is great for catfish. Smelly baits attract fish from far away."],
+    ["Match the size", "Use bait that fits the mouth of the fish you want. Small bait for small fish. Big bait for big fish. If you only get nibbles, go smaller."]],
+    q: [Q("How do you keep worms fresh?", "Cool, in damp dirt", ["In a hot car", "In direct sun", "In dry paper"], "Heat kills worms."),
+      Q("Why hook a minnow lightly?", "So it stays alive and swims", ["So it falls off", "So it floats", "So it hides"], "A lively minnow attracts fish."),
+      Q("You have live bait left at the end of the day. What now?", "Throw it in the trash, never in the water", ["Dump it in the lake", "Give it to a fish", "Bury it in the bank"], "Dumped bait can spread invasive species."),
+      Q("Which bait is good for catfish?", "Cut bait", ["Dry bread only", "Plastic spoons", "Tiny flies"], "Smelly fresh chunks attract catfish."),
+      Q("If you only get nibbles, you should...", "Try a smaller bait or hook", ["Use a bigger hook", "Go home", "Throw harder"], "Small mouths need small bait.")] },
+  species: { n: "Fish facts", icon: "🐟", sum: "What common fish eat and where they live.", cards: [
+    ["Bluegill and sunfish", "Small, round and very common. They love worms, bugs and tiny jigs near docks and weeds. Great first fish for kids."],
+    ["Largemouth bass", "A top predator that hides in weeds, wood and docks. Eats minnows, frogs and worms. Fishes best at dawn and dusk with plastic worms, spinnerbaits and topwater lures."],
+    ["Trout", "Prefer cold, clear water. In streams they face the current and eat bugs and small fish. Use small spinners, flies or worms. Handle gently."],
+    ["Catfish", "Feed mostly at night and by smell. Use cut bait, chicken liver or worms on the bottom. They have sharp spines on their fins, so hold them carefully."]],
+    q: [Q("What do bluegill love to eat?", "Worms and small bugs", ["Large frogs", "Golf balls", "Leaves"], "They are small and eat small food."),
+      Q("Where does a largemouth bass like to hide?", "In weeds, wood and docks", ["In the open sand middle", "On the bank", "On top of a rock in the sun"], "Cover helps it ambush food."),
+      Q("What water do trout prefer?", "Cold and clear", ["Warm and muddy", "Stagnant swamp", "Hot spring"], "Trout need cool, oxygen-rich water."),
+      Q("When do catfish feed the most?", "At night, by smell", ["Only at noon", "Only in winter", "Never"], "Smelly bait works best."),
+      Q("What should you watch out for on a catfish?", "Sharp spines on the fins", ["Wings", "Teeth like a shark", "Electric shock"], "Hold them behind the head carefully.")] }
 };
 const SCH_COURSES = [
   { id: "rules1", n: "Permits and rules", days: ["rules"], icon: "📋", d: "1 day. What you need to fish legally." },
   { id: "start2", n: "Weekend start", days: ["gear", "rules"], icon: "🌅", d: "2 days. Get gear and rules sorted so you can go fishing." },
   { id: "begin5", n: "Beginner in 5 days", days: ["gear", "knots", "where", "lures", "rules"], icon: "🎓", d: "5 days. Everything you need for your first trips." },
+  { id: "details6", n: "Little details", days: ["knots2", "water", "signs", "sky", "bait", "species"], icon: "🔍", d: "6 days. Knots, reading water, jumping fish, weather, bait and fish facts." },
   { id: "week7", n: "Full week", days: ["gear", "knots", "where", "weather", "lures", "rules", "care"], icon: "🏆", d: "7 days. The full beginner school." }
 ];
 const SCH_RANKS = [[0, "Minnow", "🐟"], [60, "Bluegill", "🐠"], [150, "Perch", "🐡"], [300, "Crappie", "🎣"], [500, "Bass", "🏅"], [800, "Walleye", "🥈"], [1200, "Pike", "🥇"], [1800, "Musky", "🏆"], [2600, "Master angler", "👑"], [3600, "Lake legend", "🌟"]];
