@@ -143,7 +143,7 @@ function setPref(k, v) { try { localStorage.setItem("weighin-" + k, v); } catch 
 const S = {
   user: null, name: "", tab: "feed",
   posts: [], tournaments: [], log: [],
-  reqIn: [], reqOut: [], friendships: [], offIn: [], offOut: [], tradeAll: [], tradeMine: [], tourReqs: [],
+  reqIn: [], reqOut: [], friendships: [], offIn: [], offOut: [], tradeAll: [], tradeMine: [], tourReqs: [], joinIn: [], joinOut: [],
   openTournament: null, tourPosts: [], viewing: null, creatingTour: false,
   meView: "main", mine: [], spots: [], map: null, markers: null, likes: new Map(), mod: null,
 };
@@ -308,6 +308,14 @@ function startApp() {
   unsubs.push(onSnapshot(S.owner ? collection(db, "tourRequests") : query(collection(db, "tourRequests"), where("uid", "==", uid)), (s) => {
     S.tourReqs = s.docs.map((d) => ({ id: d.id, ...d.data({ serverTimestamps: "estimate" }) }));
     if (S.tab === "tours" && !S.creatingTour && !S.openTournament) renderTab();
+  }, () => {}));
+  unsubs.push(onSnapshot(query(collection(db, "tourJoins"), where("org", "==", uid)), (s) => {
+    S.joinIn = s.docs.map((d) => ({ id: d.id, ...d.data() }));
+    if (S.tab === "tours" && !S.creatingTour) renderTab();
+  }, () => {}));
+  unsubs.push(onSnapshot(query(collection(db, "tourJoins"), where("uid", "==", uid)), (s) => {
+    S.joinOut = s.docs.map((d) => ({ id: d.id, ...d.data() }));
+    if (S.tab === "tours" && !S.creatingTour) renderTab();
   }, () => {}));
   unsubs.push(onSnapshot(collection(db, "tournaments"), (s) => {
     S.tournaments = s.docs.map((d) => ({ id: d.id, ...d.data() }));
@@ -915,9 +923,15 @@ function feedPosts() {
 /* What's new. Newest first. Add a new entry on top each time the app changes. */
 /* Bump APP_VERSION every time you change the app, and add a matching entry on top of UPDATES (with v: the same number).
    Phones check app.js every few minutes and offer the new version on their own. */
-const APP_VERSION = 36;
+const APP_VERSION = 37;
 try { if ((parseInt(localStorage.getItem("weighin-appv"), 10) || 0) < APP_VERSION) localStorage.setItem("weighin-appv", String(APP_VERSION)); } catch { /* private mode */ }
 const UPDATES = [
+  { id: "2026-11-09q", v: 37, date: "Nov 9", title: "Private tournaments", items: [
+    "New Private button in Tourneys. Anyone can make an invite-only tournament, no waiting for the owner.",
+    "Everyone can see a private tournament in the list with a lock on it. Tap it and press Ask to join. The person who made it says yes or no.",
+    "If you made a private tournament, join requests show up at the top of Tourneys with Approve and Decline.",
+    "Public tournaments still come from the owner only.",
+    "Needs the new Firebase rules for private tournaments."] },
   { id: "2026-11-09p", v: 36, date: "Nov 9", title: "Fish eat the lure, rough water, new line bar", items: [
     "When a fish bites it rushes the lure and eats it. The lure disappears and the water swirls where it was. The bobber gets pulled under.",
     "The water moves a lot more while you fight a fish: bigger waves, rings around the fish, a wake behind it and splashes.",
@@ -1947,6 +1961,24 @@ function tourRequestsPanel() {
     el("span", { class: "row", style: "gap:8px;flex-wrap:nowrap" }, el("span", { class: "pill " + (r.status === "approved" ? "live" : r.status === "declined" ? "final" : "soon") }, { pending: "Waiting", approved: "Approved", declined: "Declined" }[r.status] || r.status),
       r.status !== "pending" ? el("button", { class: "link small", type: "button", "aria-label": "Remove", onclick: () => deleteDoc(doc(db, "tourRequests", r.id)).catch(() => {}) }, "✕") : null))));
 }
+function tourJoinPanel() {
+  const pend = S.joinIn.filter((r) => r.status === "pending");
+  if (!pend.length) return null;
+  return el("section", { class: "stack tour-money", id: "tour-joins" }, el("h2", null, `Join requests (${pend.length})`), ...pend.map((r) =>
+    el("div", { class: "trade-offer", "data-join": r.id },
+      el("b", null, "@" + r.name), el("span", { class: "hint" }, "wants to join " + (r.tname || "your tournament")),
+      el("div", { class: "row" },
+        el("button", { class: "btn small", type: "button", "data-act": "join-yes", onclick: async () => {
+          const t = S.tournaments.find((x) => x.id === r.tid);
+          try {
+            if (t && !(t.members || []).includes(r.uid)) await updateDoc(doc(db, "tournaments", r.tid), { members: arrayUnion(r.uid) });
+            await updateDoc(doc(db, "tourJoins", r.id), { status: "approved" }); toast(`@${r.name} is in.`);
+          } catch (err) { toast(errText(err)); }
+        } }, "Approve"),
+        el("button", { class: "btn ghost small", type: "button", "data-act": "join-no", onclick: async () => {
+          try { await updateDoc(doc(db, "tourJoins", r.id), { status: "declined" }); toast("Declined."); } catch (err) { toast(errText(err)); }
+        } }, "Decline")))));
+}
 async function approveTour(r) {
   const sp = { ...r.spec }; if (!sp.startAt) { toast("That request is missing its dates."); return; }
   const dur = sp.endAt - sp.startAt, now = Math.floor(Date.now() / 60000) * 60000;
@@ -1963,18 +1995,22 @@ function viewTours(p) {
   const order = { live: 0, soon: 1, final: 2 };
   const ts = [...S.tournaments].sort((a, b) => order[tourStatus(a)] - order[tourStatus(b)] || String(b.start).localeCompare(String(a.start)));
   p.append(el("div", { class: "row spread" }, el("h1", null, "Tourneys"),
-    el("button", { class: "btn small", type: "button", id: "t-new", onclick: () => { S.creatingTour = true; renderTab(); } }, S.owner ? "New" : "Request one")));
+    el("div", { class: "row", style: "gap:8px;flex-wrap:nowrap" },
+      el("button", { class: "btn ghost small", type: "button", id: "t-new-priv", onclick: () => { S.creatingTour = "private"; renderTab(); } }, "🔒 Private"),
+      el("button", { class: "btn small", type: "button", id: "t-new", onclick: () => { S.creatingTour = "public"; renderTab(); } }, S.owner ? "New" : "Request one"))));
+  const joinPanel = tourJoinPanel(); if (joinPanel) p.append(joinPanel);
   const reqPanel = tourRequestsPanel(); if (reqPanel) p.append(reqPanel);
   if (!ts.length) { p.append(el("p", { class: "empty" }, S.owner ? "No tournaments yet. Tap New to start one." : "No tournaments yet. Tap Request one to ask the owner to start one.")); return; }
   p.append(el("div", { class: "list" }, ts.map((t) => {
     const st = tourStatus(t), n = (t.members || []).length;
     return el("button", { class: "item", type: "button", onclick: () => openTour(t.id) },
-      el("div", { class: "stack", style: "gap:2px;min-width:0" }, el("span", { class: "t" }, t.name), tourMoneyLine(t),
+      el("div", { class: "stack", style: "gap:2px;min-width:0" }, el("span", { class: "t" }, t.name), t.private ? el("span", { class: "pill soon", style: "align-self:flex-start" }, "🔒 Invite only") : null, tourMoneyLine(t),
         el("span", { class: "s" }, `${SCORING[t.scoring]?.name || ""} · ${t.startAt ? fmtWhen(t.startAt) : fmtDay(t.start) + (t.end !== t.start ? " – " + fmtDay(t.end) : "")}${phasesOf(t).length ? " · " + phasesOf(t).length + " phases" : ""} · ${n} angler${n === 1 ? "" : "s"}`)),
       el("span", { class: "pill " + st }, { live: "Live", soon: "Upcoming", final: "Final" }[st]));
   })));
 }
 function viewCreateTour(p) {
+  const priv = S.creatingTour === "private";
   const start0 = Math.floor(Date.now() / 60000) * 60000; // starts right now unless you change it
   const phaseRows = [];
   const phasesBox = el("div", { class: "stack" });
@@ -2027,7 +2063,7 @@ function viewCreateTour(p) {
       feeWrap,
       el("label", { class: "field" }, el("span", { class: "hint" }, "Prize (optional)"), prizeIn),
       el("span", { class: "hint" }, "Weigh-In never takes or sends money. You collect any fee yourself (cash, Venmo and so on), tick people off as paid on the tournament page, and give out the prize yourself. Rules for contests with fees and cash prizes are different in each place, so check yours.")),
-    el("button", { class: "btn wide", type: "submit" }, S.owner ? "Create tournament" : "Send request to the owner"));
+    el("button", { class: "btn wide", type: "submit" }, priv || S.owner ? "Create tournament" : "Send request to the owner"));
   f.addEventListener("submit", async (e) => {
     e.preventDefault();
     const fd = new FormData(f);
@@ -2054,17 +2090,19 @@ function viewCreateTour(p) {
       const data = { name, fee, prize, payHow: fee ? payHow : "", paid: [S.user.uid], scoring: fd.get("scoring"), start: localDate(new Date(startAt)), end: localDate(new Date(endAt)), startAt, endAt,
         createdBy: S.user.uid, createdByName: S.name, members: [S.user.uid], createdAt: serverTimestamp() };
       if (phases.length) data.phases = phases;
-      if (!S.owner) {   // only the owner makes public tournaments, so everyone else asks first
+      if (priv) data.private = true;
+      if (!S.owner && !priv) {   // only the owner makes public tournaments, so everyone else asks first
         const { createdBy, createdByName, members, createdAt, paid, ...spec } = data;
         await addDoc(collection(db, "tourRequests"), { uid: S.user.uid, name: S.name, tname: name, spec, status: "pending", createdAt: serverTimestamp() });
         S.creatingTour = false; toast("Request sent. The owner will take a look."); renderTab(); return;
       }
       const ref = await addDoc(collection(db, "tournaments"), data);
-      S.creatingTour = false; toast("Tournament created. You're in!"); openTour(ref.id);
+      S.creatingTour = false; toast(priv ? "Private tournament created. People ask to join and you say yes." : "Tournament created. You're in!"); openTour(ref.id);
     } catch (err) { toast(errText(err)); }
   });
   p.append(el("button", { class: "link", type: "button", style: "align-self:flex-start", onclick: () => { S.creatingTour = false; renderTab(); } }, "‹ Back"),
-    el("h1", null, S.owner ? "New tournament" : "Request a tournament"), S.owner ? null : el("p", { class: "muted", style: "margin:0" }, "Public tournaments are set up by the owner. Fill this in and send it. If the owner says yes, it goes live and you run it."), f);
+    el("h1", null, priv ? "New private tournament" : S.owner ? "New tournament" : "Request a tournament"),
+    priv ? el("p", { class: "muted", style: "margin:0" }, "Invite only. Everyone can see it in the list, but people have to ask to join and you say yes or no. You run it.") : S.owner ? null : el("p", { class: "muted", style: "margin:0" }, "Public tournaments are set up by the owner. Fill this in and send it. If the owner says yes, it goes live and you run it."), f);
 }
 let phaseFilter = null;
 function openTour(id) {
@@ -2112,8 +2150,26 @@ function viewTour(p) {
       el("div", { class: "row" }, el("span", { class: "pill " + st }, { live: "Live", soon: "Upcoming", final: "Final" }[st]),
         el("span", { class: "label" }, timed ? `${fmtWhen(range.s)} to ${fmtWhen(range.e)}` : `${fmtDay(t.start)}${t.end !== t.start ? " – " + fmtDay(t.end) : ""}`)),
       el("h1", null, t.name),
+      t.private ? el("span", { class: "pill soon", style: "align-self:flex-start" }, "🔒 Invite only") : null,
       el("p", { class: "muted", style: "margin:0" }, `${sc.desc}. Started by @${t.createdByName || "someone"}. Only catches posted to this tournament count.`)));
 
+  if (t.private && !joined) {
+    const jid = t.id + "_" + S.user.uid, jr = S.joinOut.find((x) => x.id === jid);
+    const ask = async () => {
+      try {
+        if (jr) await deleteDoc(doc(db, "tourJoins", jid));
+        await setDoc(doc(db, "tourJoins", jid), { tid: t.id, tname: t.name, uid: S.user.uid, name: S.name, org: t.createdBy, status: "pending", createdAt: serverTimestamp() });
+        toast("Request sent. The organizer will take a look.");
+      } catch (err) { toast(errText(err)); }
+    };
+    p.append(el("section", { class: "stack tour-money", id: "tour-locked" }, el("h2", null, "This one is invite only"),
+      el("p", { class: "muted", style: "margin:0" }, `Ask @${t.createdByName || "the organizer"} if you can join. They'll say yes or no.`),
+      !jr ? el("button", { class: "btn wide", type: "button", id: "t-ask", onclick: ask }, "Ask to join")
+        : jr.status === "pending" ? el("p", { class: "pb-ok", style: "margin:0;font-weight:700" }, "⏳ Waiting for the organizer.")
+        : jr.status === "declined" ? el("div", { class: "stack" }, el("p", { class: "hint", style: "margin:0" }, "They said not this time."), el("button", { class: "btn ghost small", type: "button", style: "align-self:flex-start", onclick: ask }, "Ask again"))
+        : el("p", { class: "hint", style: "margin:0" }, "Approved. One moment…")));
+    if (t.createdBy === S.user.uid || S.owner) { /* organizer and owner fall through */ } else return;
+  }
   p.append(tourMoneyCard(t, joined));
   if (timed) {
     const lab = el("span", { class: "label" }), big = el("b", { class: "big" }), sub = el("span", { class: "hint" });
@@ -2138,7 +2194,7 @@ function viewTour(p) {
           el("span", { class: "s" }, [w.ph.where || null, w.ph.lure ? w.ph.lure + " only" : "Any lure", `${w.ph.mins} min`].filter(Boolean).join(" · "))),
         el("span", { class: "pill " + (w.i === nowIdx ? "live" : Date.now() > w.e ? "final" : "soon") }, w.i === nowIdx ? "Now" : Date.now() > w.e ? "Done" : "Next"))))));
   }
-  if (!joined && st !== "final") p.append(el("button", { class: "btn wide", type: "button", id: "t-join", onclick: async () => {
+  if (!joined && st !== "final" && !t.private) p.append(el("button", { class: "btn wide", type: "button", id: "t-join", onclick: async () => {
     if ((+t.fee || 0) > 0 && !confirm(`This tournament has a ${fmtFee(+t.fee)} entry fee. Weigh-In doesn't take payments. You pay @${t.createdByName || "the organizer"} yourself${t.payHow ? " (" + t.payHow + ")" : ""}. Join?`)) return;
     try { await updateDoc(doc(db, "tournaments", t.id), { members: arrayUnion(S.user.uid) }); toast(`You joined ${t.name}!`); }
     catch (err) { toast(errText(err)); }
