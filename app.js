@@ -931,7 +931,8 @@ const UPDATES = [
   { id: "2026-11-10b", v: 39, date: "Nov 10", title: "Edit mode", items: [
     "New Edit mode switch at the top of Owner tools. Off by default, and it turns itself off every time the app closes.",
     "When it's off, the feed has no Delete (on other people's catches), Ban or Rename buttons. Report stays for everyone.",
-    "When it's on, those buttons show on the feed, plus a Rename button to change the name of any catch."] },
+    "When it's on, those buttons show on the feed, plus a Rename button to change the name of any catch.",
+    "Fishing game: new 📱 Motion mode button at the top. Turn it on, then flick your phone forward to cast and tilt it left or right to aim. Tapping still works. On iPhone it asks to allow motion."] },
   { id: "2026-11-10a", v: 38, date: "Nov 10", title: "Game saves, aim your cast, names", items: [
     "Your fishing game progress now saves to your account. If you get a new phone or re-add the app, sign in and your fish, coins, gear and level come back.",
     "Aim your cast: drag your finger left or right on the water to pick where it lands. Tap to cast like before.",
@@ -4278,7 +4279,17 @@ function playClash(mode, locId, lureIdIn, onExit, duel) {
   const canvas = el("canvas", { class: "game-canvas", role: "img", "aria-label": "Fishing game. Tap to cast and hook. Hold to reel. Let go when the fish runs." });
   let ctx = canvas.getContext("2d", { alpha: false });
   const sndBtn = el("button", { class: "game-x game-snd", type: "button", "aria-label": "Sound on or off", onclick: () => { soundOn = !soundOn; setPref("fcsound", soundOn ? "1" : "0"); sndBtn.textContent = soundOn ? "🔊" : "🔇"; if (!soundOn) whine(false); } });
-  const bg = el("div", { class: "game-bg", role: "dialog", "aria-label": "Fishing" }, canvas, sndBtn,
+  const motBtn = el("button", { class: "game-x game-snd", type: "button", id: "fc-motion", "aria-label": "Motion mode on or off", style: "right:114px;font-size:1.05rem", onclick: async () => {
+    if (!motionOn) {
+      try {   // iPhones ask first. Other phones just say yes.
+        for (const C of [window.DeviceMotionEvent, window.DeviceOrientationEvent]) if (C && typeof C.requestPermission === "function" && (await C.requestPermission()) !== "granted") { toast("Motion was blocked. Allow it in your phone's settings."); return; }
+      } catch { toast("Couldn't turn on motion on this phone."); return; }
+      motionOn = true; setPref("fcmotion", "1"); attachMotion(); toast("Motion mode on. Flick your phone forward to cast. Tilt to aim.");
+      setTimeout(() => { if (motionOn && !motionSeen) toast("No motion detected. This phone or browser may not allow motion sensors. Tapping still works."); }, 2500);
+    } else { motionOn = false; setPref("fcmotion", "0"); detachMotion(); toast("Motion mode off."); }
+    motBtn.textContent = motionOn ? "📱" : "📴";
+  } }, getPref("fcmotion", "0") === "1" ? "📱" : "📴");
+  const bg = el("div", { class: "game-bg", role: "dialog", "aria-label": "Fishing" }, canvas, sndBtn, motBtn,
     el("button", { class: "game-x", type: "button", "aria-label": "Leave the game", onclick: () => end() }, "✕"));
   document.body.append(bg);
   let W = 0, H = 0, raf = 0, dpr = 1, last = 0, deco = null;
@@ -4286,6 +4297,20 @@ function playClash(mode, locId, lureIdIn, onExit, duel) {
   const lowEnd = (navigator.hardwareConcurrency || 8) <= 6 || (navigator.deviceMemory || 8) <= 4;
   let Q = Math.max(+getPref("fcq", "0") || 0, lowEnd ? 1 : 0), ema = 16, nfr = 0, outl = false, LAY = null;
   /* ---------- sound (made with the browser, no files) ---------- */
+  /* ---------- motion mode: flick the phone forward to cast, tilt it to aim ---------- */
+  let motionOn = getPref("fcmotion", "0") === "1", motionSeen = false, lastFlick = 0, motionAttached = false;
+  const onMotion = (e) => {
+    motionSeen = true; const r = e.rotationRate; if (!r) return;
+    const now = performance.now();
+    if (Math.abs(r.beta || 0) > 230 && now - lastFlick > 900 && (st === "cast" || st === "bite")) { lastFlick = now; act(); }
+  };
+  const onTilt = (e) => {
+    motionSeen = true; if (st !== "cast" || aimDrag || e.gamma == null) return;
+    const g = Math.max(-35, Math.min(35, e.gamma)); aimX += (0.5 + g / 35 * 0.38 - aimX) * 0.25;
+  };
+  const attachMotion = () => { if (motionAttached) return; motionAttached = true; addEventListener("devicemotion", onMotion); addEventListener("deviceorientation", onTilt); };
+  const detachMotion = () => { motionAttached = false; removeEventListener("devicemotion", onMotion); removeEventListener("deviceorientation", onTilt); };
+  if (motionOn) attachMotion();
   let soundOn = getPref("fcsound", "1") === "1", actx = null, noise = null, whineNode = null, clickAcc = 0;
   sndBtn.textContent = soundOn ? "🔊" : "🔇";
   const audio = () => {
@@ -4309,7 +4334,7 @@ function playClash(mode, locId, lureIdIn, onExit, duel) {
     whineNode.o.frequency.setTargetAtTime(pitch, a.currentTime, 0.05);
   };
   const resize = () => { dpr = Math.min(Q === 0 ? 2 : Q === 1 ? 1.25 : 1, devicePixelRatio || 1); W = bg.clientWidth; H = bg.clientHeight; canvas.width = W * dpr; canvas.height = H * dpr; canvas.style.width = W + "px"; canvas.style.height = H + "px"; ctx.setTransform(dpr, 0, 0, dpr, 0, 0); deco = buildDeco(); LAY = null; };
-  const end = () => { evSubmit(); cancelAnimationFrame(raf); whine(false); removeEventListener("resize", resize); removeEventListener("keydown", onKey); removeEventListener("keyup", onKeyUp); try { actx && actx.close(); } catch { /* ignore */ } bg.remove(); onExit && onExit(); };
+  const end = () => { evSubmit(); cancelAnimationFrame(raf); whine(false); removeEventListener("resize", resize); removeEventListener("keydown", onKey); removeEventListener("keyup", onKeyUp); detachMotion(); try { actx && actx.close(); } catch { /* ignore */ } bg.remove(); onExit && onExit(); };
 
   /* ---------- scenery ---------- */
   const rng = (seed) => () => { seed |= 0; seed = seed + 0x6D2B79F5 | 0; let t = Math.imul(seed ^ seed >>> 15, 1 | seed); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; };
@@ -4710,7 +4735,7 @@ function playClash(mode, locId, lureIdIn, onExit, duel) {
     text("🪙 " + fcCoins(), 16, 30, 16, "#ffd36b", "left"); text("Bag " + fcBag().length + "/" + fcBagMax(), W - 16, 100, 13, fcBag().length >= fcBagMax() - 3 ? "#ffb74d" : "#fff", "right");
     ctx.shadowBlur = 0;
     if (st === "cast") {
-      text("Tap to cast. Stop the bar in the green.", W / 2, H * 0.2, 18); text("Drag left or right to pick your spot.", W / 2, H * 0.2 + 24, 14, "#d6eefc");
+      text(motionOn ? "Flick your phone forward to cast." : "Tap to cast. Stop the bar in the green.", W / 2, H * 0.2, 18); text(motionOn ? "Tilt left or right to aim. Tapping works too." : "Drag left or right to pick your spot.", W / 2, H * 0.2 + 24, 14, "#d6eefc");
       { const bb = bobber(), pr = 10 + 4 * Math.sin(now / 220); ctx.strokeStyle = "rgba(255,255,255,.85)"; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(bb.x, bb.y, pr, 0, 6.2832); ctx.moveTo(bb.x - pr - 6, bb.y); ctx.lineTo(bb.x - pr + 4, bb.y); ctx.moveTo(bb.x + pr - 4, bb.y); ctx.lineTo(bb.x + pr + 6, bb.y); ctx.stroke(); }
       const bx = W * 0.15, bw = W * 0.7, by = H * 0.945;
       ctx.fillStyle = "rgba(0,0,0,.5)"; ctx.fillRect(bx, by, bw, 14); ctx.fillStyle = "#4caf50"; ctx.fillRect(bx + bw * 0.6, by, bw * 0.3, 14); ctx.fillStyle = "#e53935"; ctx.fillRect(bx + bw * SNAG, by, bw * (1 - SNAG), 14); ctx.fillStyle = "#fff"; ctx.fillRect(bx + bw * power - 3, by - 5, 6, 24); text("SNAG", bx + bw * 0.965, by - 10, 11, "#ff8a80");
