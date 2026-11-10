@@ -347,7 +347,7 @@ function startApp() {
   unsubs.push(onSnapshot(query(collection(db, "likes"), orderBy("createdAt", "desc"), limit(1000)), (s) => {
     const m = new Map();
     for (const d of s.docs) { const x = d.data({ serverTimestamps: "estimate" }); if (!m.has(x.postId)) m.set(x.postId, new Set()); m.get(x.postId).add(x.uid); }
-    S.likes = m; paintLikes(); if (S.tab === "me" && S.meView === "main") renderTab();
+    S.likes = m; paintLikes(); if (S.tab === "me" && (S.meView === "main" || S.meView === "profile")) renderTab();
   }, () => {}));
   unsubs.push(onSnapshot(doc(db, "mods", uid), (d) => {
     const next = d.exists() ? (d.data().perms || {}) : null;
@@ -925,9 +925,13 @@ function feedPosts() {
 /* What's new. Newest first. Add a new entry on top each time the app changes. */
 /* Bump APP_VERSION every time you change the app, and add a matching entry on top of UPDATES (with v: the same number).
    Phones check app.js every few minutes and offer the new version on their own. */
-const APP_VERSION = 39;
+const APP_VERSION = 40;
 try { if ((parseInt(localStorage.getItem("weighin-appv"), 10) || 0) < APP_VERSION) localStorage.setItem("weighin-appv", String(APP_VERSION)); } catch { /* private mode */ }
 const UPDATES = [
+  { id: "2026-11-10c", v: 40, date: "Nov 10", title: "Me tab cleanup", items: [
+    "Tap your picture in Me to open your profile. My catches, Change name, Cash App and Change picture are in there now.",
+    "The Fishing game button looks like the Fishing school one now.",
+    "Owner and Moderator tools moved into Settings, at the bottom of Me."] },
   { id: "2026-11-10b", v: 39, date: "Nov 10", title: "Edit mode", items: [
     "New Edit mode switch at the top of Owner tools. Off by default, and it turns itself off every time the app closes.",
     "When it's off, the feed has no Delete (on other people's catches), Ban or Rename buttons. Report stays for everyone.",
@@ -3548,7 +3552,7 @@ function watchMine() {
   if (meUnsub) return;
   meUnsub = onSnapshot(query(collection(db, "posts"), where("uid", "==", S.user.uid), limit(60)), (s) => {
     S.mine = s.docs.map((d) => ({ id: d.id, ...d.data({ serverTimestamps: "estimate" }) }));
-    if (S.tab === "me" && S.meView === "main") renderTab();
+    if (S.tab === "me" && (S.meView === "main" || S.meView === "profile")) renderTab();
   }, () => {});
 }
 async function setMyPhoto(file) {
@@ -3582,11 +3586,42 @@ function viewMe(p) {
   if (S.meView === "school") return viewSchool(p);
   if (S.meView === "settings") return viewSettings(p);
   if (S.meView === "owner" && isStaff()) return viewOwner(p);
+  if (S.meView === "profile") return viewProfile(p);
   const mine = [...S.mine].sort((a, b) => (b.createdAt?.toMillis?.() || 0) - (a.createdAt?.toMillis?.() || 0));
   const biggest = Math.max(0, ...mine.map((x) => x.lb || 0));
   const pins = S.spots.filter((s) => s.uid === S.user.uid).length;
   const open = (v) => () => { S.meView = v; renderTab(); };
   p.append(
+    el("button", { class: "profile-head", type: "button", id: "me-profile", "aria-label": "Open your profile", style: "background:none;border:0;padding:0;text-align:left;font:inherit;color:inherit;cursor:pointer;width:100%", onclick: open("profile") },
+      el("div", { class: "av-edit" }, avatar(S.user.uid, S.name, 96)),
+      el("div", { class: "stack", style: "gap:2px;min-width:0" }, el("h1", { style: "overflow-wrap:anywhere" }, "@" + S.name),
+        el("span", { class: "hint" }, "Tap your picture for your profile"))),
+    el("div", { class: "stats four" },
+      el("div", null, el("b", null, String(mine.length)), el("span", null, "Catches")),
+      el("div", null, el("b", null, String(mine.reduce((n, x) => n + (S.likes.get(x.id)?.size || 0), 0))), el("span", null, "Likes")),
+      el("div", null, el("b", null, biggest ? fmtLb(biggest) : "–"), el("span", null, "Biggest")),
+      el("div", null, el("b", null, String(pins)), el("span", null, "Map pins"))),
+    (() => { const r = schRank(sch().xp), nx = schNext(); return el("button", { class: "sch-me", type: "button", id: "me-school", onclick: () => { S.sch = { v: "home" }; S.meView = "school"; renderTab(); } },
+      el("span", { class: "sch-badge" }, r.icon), el("span", { class: "stack", style: "gap:2px;text-align:left;flex:1;min-width:0" }, el("b", null, "🎓 Fishing school"), el("span", { class: "hint" }, `${r.title} · ${sch().xp} XP${nx ? " · " + nx.text : ""}`)), el("span", { class: "label" }, "›")); })(),
+    el("button", { class: "sch-me", type: "button", id: "me-game", onclick: openFishGame },
+      el("span", { class: "sch-badge" }, "🎣"), el("span", { class: "stack", style: "gap:2px;text-align:left;flex:1;min-width:0" }, el("b", null, "Fishing game"), el("span", { class: "hint" }, `Level ${fcLevel()} · 🪙 ${fcCoins()} · cast, hook and reel`)), el("span", { class: "label" }, "›")),
+    el("button", { class: "btn wide share-btn", type: "button", id: "me-share", onclick: shareApp }, "📤 Share Weigh-In with friends"),
+    el("div", { class: "list" },
+      el("button", { class: "item", type: "button", id: "me-new", onclick: () => openWhatsNew(renderTab) },
+        el("span", { class: "row", style: "gap:10px" }, el("span", { class: "t" }, "🔔 Release notes"), unseenUpdate() ? el("span", { class: "pill live" }, "New") : null), el("span", { class: "label" }, "›")),
+      el("button", { class: "item", type: "button", onclick: open("friends") },
+        el("span", { class: "row", style: "gap:10px" }, el("span", { class: "t" }, "Friends and chat"), S.reqIn.length ? el("span", { class: "pill live" }, `${S.reqIn.length} new`) : null), el("span", { class: "label" }, "›")),
+      el("button", { class: "item", type: "button", id: "me-water", onclick: open("water") }, el("span", { class: "t" }, "🔍 Gate keep finder"), el("span", { class: "label" }, "›")),
+      el("button", { class: "item", type: "button", onclick: open("log") }, el("span", { class: "t" }, "My fishing log"), el("span", { class: "label" }, "›")),
+      el("button", { class: "item", type: "button", onclick: open("settings") }, el("span", { class: "t" }, "Settings"), el("span", { class: "label" }, "›")))
+  );
+}
+
+function viewProfile(p) {
+  const mine = [...S.mine].sort((a, b) => (b.createdAt?.toMillis?.() || 0) - (a.createdAt?.toMillis?.() || 0));
+  const biggest = Math.max(0, ...mine.map((x) => x.lb || 0));
+  const pins = S.spots.filter((s) => s.uid === S.user.uid).length;
+  p.append(backBtn("‹ Me"),
     el("div", { class: "profile-head" },
       el("div", { class: "av-edit" }, avatar(S.user.uid, S.name, 96), photoInput("me-photo", "Change profile picture")),
       el("div", { class: "stack", style: "gap:2px;min-width:0" }, el("h1", { style: "overflow-wrap:anywhere" }, "@" + S.name),
@@ -3596,21 +3631,9 @@ function viewMe(p) {
       el("div", null, el("b", null, String(mine.reduce((n, x) => n + (S.likes.get(x.id)?.size || 0), 0))), el("span", null, "Likes")),
       el("div", null, el("b", null, biggest ? fmtLb(biggest) : "–"), el("span", null, "Biggest")),
       el("div", null, el("b", null, String(pins)), el("span", null, "Map pins"))),
-    (() => { const r = schRank(sch().xp), nx = schNext(); return el("button", { class: "sch-me", type: "button", id: "me-school", onclick: () => { S.sch = { v: "home" }; S.meView = "school"; renderTab(); } },
-      el("span", { class: "sch-badge" }, r.icon), el("span", { class: "stack", style: "gap:2px;text-align:left;flex:1;min-width:0" }, el("b", null, "🎓 Fishing school"), el("span", { class: "hint" }, `${r.title} · ${sch().xp} XP${nx ? " · " + nx.text : ""}`)), el("span", { class: "label" }, "›")); })(),
-    el("button", { class: "btn wide share-btn", type: "button", id: "me-share", onclick: shareApp }, "📤 Share Weigh-In with friends"),
     el("div", { class: "list" },
-      el("button", { class: "item", type: "button", id: "me-new", onclick: () => openWhatsNew(renderTab) },
-        el("span", { class: "row", style: "gap:10px" }, el("span", { class: "t" }, "🔔 Release notes"), unseenUpdate() ? el("span", { class: "pill live" }, "New") : null), el("span", { class: "label" }, "›")),
-      el("button", { class: "item", type: "button", onclick: open("friends") },
-        el("span", { class: "row", style: "gap:10px" }, el("span", { class: "t" }, "Friends and chat"), S.reqIn.length ? el("span", { class: "pill live" }, `${S.reqIn.length} new`) : null), el("span", { class: "label" }, "›")),
       el("button", { class: "item", type: "button", id: "me-name", onclick: () => openNameSheet(renderTab) }, el("span", { class: "t" }, "✏️ Change name"), el("span", { class: "label" }, "@" + S.name)),
-      el("button", { class: "item", type: "button", id: "me-cash", onclick: () => openCashSheet(renderTab) }, el("span", { class: "t" }, "💵 Cash App"), el("span", { class: "label" }, cashTag(S.cash) || "Add")),
-      el("button", { class: "item", type: "button", id: "me-water", onclick: open("water") }, el("span", { class: "t" }, "🔍 Gate keep finder"), el("span", { class: "label" }, "›")),
-      el("button", { class: "item", type: "button", onclick: open("log") }, el("span", { class: "t" }, "My fishing log"), el("span", { class: "label" }, "›")),
-      el("button", { class: "item", type: "button", id: "me-game", onclick: openFishGame }, el("span", { class: "t" }, "Fishing game"), el("span", { class: "label" }, "🎣")),
-      isStaff() ? el("button", { class: "item", type: "button", onclick: open("owner") }, el("span", { class: "t" }, S.owner ? "Owner tools" : "Moderator tools"), el("span", { class: "label" }, S.editMode ? "Edit mode ON" : "›")) : null,
-      el("button", { class: "item", type: "button", onclick: open("settings") }, el("span", { class: "t" }, "Settings"), el("span", { class: "label" }, "›"))),
+      el("button", { class: "item", type: "button", id: "me-cash", onclick: () => openCashSheet(renderTab) }, el("span", { class: "t" }, "💵 Cash App"), el("span", { class: "label" }, cashTag(S.cash) || "Add"))),
     el("h2", null, "My catches"));
   if (!mine.length) { p.append(el("p", { class: "empty" }, "You haven't posted a catch yet. Tap the red Post button.")); return; }
   p.append(el("div", { class: "list" }, mine.map((c) => el("div", { class: "item", style: "cursor:default" },
@@ -3625,7 +3648,9 @@ function viewSettings(p) {
   const prec = el("select", { id: "s-prec", onchange: () => setPref("prec", prec.value) },
     el("option", { value: "approx" }, "Approximate area (about 1 km)"), el("option", { value: "exact" }, "Exact spot"));
   prec.value = getPref("prec", "approx");
-  p.append(backBtn("‹ Profile"), el("h1", null, "Settings"),
+  p.append(backBtn("‹ Me"), el("h1", null, "Settings"),
+    isStaff() ? el("section", { class: "stack" }, el("h2", null, S.owner ? "Owner" : "Moderator"),
+      el("button", { class: "item", type: "button", id: "me-owner", onclick: () => { S.meView = "owner"; renderTab(); } }, el("span", { class: "t" }, S.owner ? "Owner tools" : "Moderator tools"), el("span", { class: "label" }, S.editMode ? "Edit mode ON" : "›"))) : null,
     el("section", { class: "stack" }, el("h2", null, "Install the app"),
       isInstalled() ? el("p", { class: "muted" }, "You're using the installed app.")
         : el("button", { class: "btn wide", type: "button", id: "s-install", onclick: installApp }, "Install Weigh-In on this device"),
@@ -3637,7 +3662,7 @@ function viewSettings(p) {
     el("section", { class: "stack" }, el("h2", null, "Account"),
       el("div", { class: "kv" }, el("span", null, "Angler name"), el("b", null, "@" + S.name)),
       el("div", { class: "kv" }, el("span", null, "Email"), el("b", null, auth.currentUser?.email || "")),
-      el("span", { class: "hint" }, "Your angler name can't be changed."),
+      el("span", { class: "hint" }, "Change your name in your profile (tap your picture in Me)."),
       el("button", { class: "btn ghost small", type: "button", style: "align-self:flex-start", onclick: async () => {
         try { await sendPasswordResetEmail(auth, auth.currentUser.email); toast("Check your email for a reset link."); } catch (e) { toast(errText(e)); }
       } }, "Email me a password reset link")),
