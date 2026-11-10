@@ -176,6 +176,7 @@ const OWNER_UID = "whNN0b8nbhdQiK8osrBa48SEtm82"; // moderators can't delete or 
 const canOn = (perm, ownerUid) => !!(S.owner || (S.mod && S.mod[perm] && ownerUid !== OWNER_UID));
 const can = (perm) => !!(S.owner || (S.mod && S.mod[perm]));
 const isStaff = () => !!(S.owner || S.mod);
+const editOn = () => isStaff() && !!S.editMode;   // owner buttons only show while Edit mode is on
 const isBad = (...parts) => parts.some((x) => badText(x));
 
 function renderAuth(mode = "signin") {
@@ -269,7 +270,7 @@ onAuthStateChanged(auth, async (user) => {
   stopAll();
   S.user = user;
   S.owner = !!(user && user.emailVerified && String(user.email || "").toLowerCase() === OWNER_EMAIL);
-  S.banned = false; S.mod = null;
+  S.banned = false; S.mod = null; S.editMode = false;
   if (!user) { renderAuth(); return; }
   $app.replaceChildren(el("div", { class: "boot" }, "Loading…"));
   try {
@@ -924,9 +925,13 @@ function feedPosts() {
 /* What's new. Newest first. Add a new entry on top each time the app changes. */
 /* Bump APP_VERSION every time you change the app, and add a matching entry on top of UPDATES (with v: the same number).
    Phones check app.js every few minutes and offer the new version on their own. */
-const APP_VERSION = 38;
+const APP_VERSION = 39;
 try { if ((parseInt(localStorage.getItem("weighin-appv"), 10) || 0) < APP_VERSION) localStorage.setItem("weighin-appv", String(APP_VERSION)); } catch { /* private mode */ }
 const UPDATES = [
+  { id: "2026-11-10b", v: 39, date: "Nov 10", title: "Edit mode", items: [
+    "New Edit mode switch at the top of Owner tools. Off by default, and it turns itself off every time the app closes.",
+    "When it's off, the feed has no Delete (on other people's catches), Ban or Rename buttons. Report stays for everyone.",
+    "When it's on, those buttons show on the feed, plus a Rename button to change the name of any catch."] },
   { id: "2026-11-10a", v: 38, date: "Nov 10", title: "Game saves, aim your cast, names", items: [
     "Your fishing game progress now saves to your account. If you get a new phone or re-add the app, sign in and your fish, coins, gear and level come back.",
     "Aim your cast: drag your finger left or right on the water to pick where it lands. Tap to cast like before.",
@@ -1148,9 +1153,10 @@ function makeCard(p) {
       el("div", null, el("button", { type: "button", class: "like", "data-like": p.id, "aria-pressed": "false", "aria-label": "Like", html: ICON.heart, onclick: () => toggleLike(p) }), el("small", { "data-like-n": p.id }, "0")),
       el("div", { "data-spotbtn": p.id, hidden: true }, el("button", { type: "button", "aria-label": "See where this was caught on the map", html: ICON.map, onclick: () => seeOnMap(p) }), el("small", null, "Map")),
       el("div", null, el("button", { type: "button", "aria-label": "Comments", html: ICON.chat, onclick: () => openComments(p) }), el("small", null, "Comments")),
-      mine || canOn("deletePosts", p.uid) ? el("div", null, el("button", { type: "button", "aria-label": "Delete this post", html: ICON.trash, onclick: () => deletePost(p) }), el("small", null, "Delete")) : null,
+      mine || (editOn() && canOn("deletePosts", p.uid)) ? el("div", null, el("button", { type: "button", "aria-label": "Delete this post", html: ICON.trash, onclick: () => deletePost(p) }), el("small", null, "Delete")) : null,
       !mine ? el("div", null, el("button", { type: "button", "aria-label": "Report this post", html: ICON.flag, onclick: () => reportPost(p) }), el("small", null, "Report")) : null,
-      can("ban") && !mine && p.uid !== OWNER_UID ? el("div", null, el("button", { type: "button", "aria-label": "Ban this angler", html: ICON.ban, onclick: () => banUser(p.uid, p.name) }), el("small", null, "Ban")) : null));
+      editOn() && S.owner ? el("div", null, el("button", { type: "button", "aria-label": "Rename this catch", "data-rename-post": p.id, html: ICON.edit || "✏️", onclick: () => openPostEdit(p.id, p.species) }), el("small", null, "Rename")) : null,
+      editOn() && can("ban") && !mine && p.uid !== OWNER_UID ? el("div", null, el("button", { type: "button", "aria-label": "Ban this angler", html: ICON.ban, onclick: () => banUser(p.uid, p.name) }), el("small", null, "Ban")) : null));
 }
 function paintLikes() {
   const me = S.user?.uid;
@@ -1387,7 +1393,10 @@ function viewOwner(p) {
   if (S.owner) ownerUns.push(onSnapshot(collection(db, "mods"), (s) => { mods = new Map(s.docs.map((d) => [d.id, d.data().perms || {}])); paintMembers(); }, () => {}));
   if (can("ban") || S.owner) ownerUns.push(onSnapshot(query(collection(db, "users"), limit(300)), (s) => { users = s.docs.map((d) => ({ id: d.id, ...d.data() })).sort((a, b) => String(a.name).localeCompare(String(b.name))); paintMembers(); }, () => {}));
   const mine = PERMS.filter(([k]) => can(k)).map(([, l]) => l);
+  const editBox = el("input", { type: "checkbox", id: "edit-mode", checked: S.editMode ? "" : null, style: "width:22px;height:22px;flex:none", onchange: (e) => { S.editMode = e.target.checked; cardCache.clear(); try { renderFeedCards(); } catch { /* feed not built yet */ } toast(S.editMode ? "Edit mode on. Buttons show on the feed." : "Edit mode off."); } });
   p.append(backBtn("‹ Profile"), el("h1", null, S.owner ? "Owner tools" : "Moderator tools"),
+    el("label", { class: "row", style: "gap:12px;flex-wrap:nowrap;padding:12px 14px;border:2px solid var(--line, #c9d6de);border-radius:12px" }, editBox,
+      el("span", { class: "stack", style: "gap:2px" }, el("b", null, "✏️ Edit mode"), el("span", { class: "hint" }, "Turn on to see Delete, Ban and Rename on the feed. It turns itself off when you close the app."))),
     el("p", { class: "muted small" }, S.owner
       ? "You can delete anyone's catch or comment with the Delete button, ban from the feed or the list below, and make moderators with the permissions you choose."
       : "You're a moderator. You can: " + (mine.join(", ") || "nothing yet") + ". Delete buttons show up right on catches and comments."),
@@ -1425,7 +1434,7 @@ function openAngler(uid, name) {
         el("div", null, el("b", null, String(likes)), el("span", null, "Likes"))),
       cashTag(u0?.cash) ? cashButton(cashTag(u0.cash), `💵 ${cashTag(u0.cash)} on Cash App`) : null,
       fav ? el("p", { class: "muted small" }, `Most catches on: ${fav[0].charAt(0).toUpperCase() + fav[0].slice(1)} · ${pins} map pin${pins === 1 ? "" : "s"}`) : null,
-      can("ban") && uid !== S.user.uid && uid !== OWNER_UID ? el("button", { class: "link danger small", type: "button", style: "align-self:flex-start", onclick: () => banUser(uid, name) }, `Ban @${name}`) : null,
+      editOn() && can("ban") && uid !== S.user.uid && uid !== OWNER_UID ? el("button", { class: "link danger small", type: "button", style: "align-self:flex-start", onclick: () => banUser(uid, name) }, `Ban @${name}`) : null,
       ...(rows.length ? rows.map((c) => el("div", { class: "comment", style: "flex-direction:row;gap:12px;align-items:center" },
         c.photo ? el("img", { src: c.photo, alt: `${c.species} photo`, style: "width:72px;height:72px;object-fit:cover;border-radius:10px;flex:none" }) : null,
         el("div", { class: "stack", style: "gap:2px;min-width:0" }, el("b", null, `${c.species}, ${sizeText(c)}`),
@@ -1459,7 +1468,7 @@ function openComments(p) {
     list.replaceChildren(...rows.map((c) => el("div", { class: "comment" },
       el("div", { class: "row spread" }, el("span", { class: "row", style: "gap:8px;flex-wrap:nowrap" }, avatar(c.uid, c.name, 24), el("b", null, "@" + c.name)), el("span", { class: "hint" }, ago(c.createdAt))),
       el("span", null, c.text),
-      c.uid === S.user.uid || canOn("deleteComments", c.uid) ? el("button", { class: "link danger small", type: "button", style: "align-self:flex-start", onclick: () => deleteDoc(doc(db, "posts", p.id, "comments", c.id)).catch((e) => toast(errText(e))) }, "Delete") : null)));
+      c.uid === S.user.uid || (editOn() && canOn("deleteComments", c.uid)) ? el("button", { class: "link danger small", type: "button", style: "align-self:flex-start", onclick: () => deleteDoc(doc(db, "posts", p.id, "comments", c.id)).catch((e) => toast(errText(e))) }, "Delete") : null)));
     list.scrollTop = list.scrollHeight;
   }, () => list.replaceChildren(el("p", { class: "muted" }, "Couldn't load comments.")));
 }
@@ -3599,7 +3608,7 @@ function viewMe(p) {
       el("button", { class: "item", type: "button", id: "me-water", onclick: open("water") }, el("span", { class: "t" }, "🔍 Gate keep finder"), el("span", { class: "label" }, "›")),
       el("button", { class: "item", type: "button", onclick: open("log") }, el("span", { class: "t" }, "My fishing log"), el("span", { class: "label" }, "›")),
       el("button", { class: "item", type: "button", id: "me-game", onclick: openFishGame }, el("span", { class: "t" }, "Fishing game"), el("span", { class: "label" }, "🎣")),
-      isStaff() ? el("button", { class: "item", type: "button", onclick: open("owner") }, el("span", { class: "t" }, S.owner ? "Owner tools" : "Moderator tools"), el("span", { class: "label" }, "›")) : null,
+      isStaff() ? el("button", { class: "item", type: "button", onclick: open("owner") }, el("span", { class: "t" }, S.owner ? "Owner tools" : "Moderator tools"), el("span", { class: "label" }, S.editMode ? "Edit mode ON" : "›")) : null,
       el("button", { class: "item", type: "button", onclick: open("settings") }, el("span", { class: "t" }, "Settings"), el("span", { class: "label" }, "›"))),
     el("h2", null, "My catches"));
   if (!mine.length) { p.append(el("p", { class: "empty" }, "You haven't posted a catch yet. Tap the red Post button.")); return; }
