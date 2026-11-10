@@ -274,7 +274,7 @@ onAuthStateChanged(auth, async (user) => {
   $app.replaceChildren(el("div", { class: "boot" }, "Loading…"));
   try {
     const snap = await getDoc(doc(db, "users", user.uid));
-    if (snap.exists()) { S.name = snap.data().name; startApp(); return; }
+    if (snap.exists()) { S.name = snap.data().name; S.nameAt = snap.data().nameAt?.toMillis?.() || 0; startApp(); return; }
     if (pendingName) {
       const ok = await claimName(pendingName); pendingName = "";
       if (ok) { startApp(); return; }
@@ -293,6 +293,7 @@ onAuthStateChanged(auth, async (user) => {
 function startApp() {
   stopAll(); S.postsSeen = false; S.cash = ""; getUser(S.user.uid).then((u) => { S.cash = cashTag(u?.cash); if (S.tab === "me") renderTab(); }); S.trade = null; S.tradeAll = []; S.tradeMine = []; S.offIn = []; S.offOut = []; S.tradeErr = false;
   const uid = S.user.uid;
+  fcCloudSync();
   unsubs.push(onSnapshot(query(collection(db, "posts"), orderBy("createdAt", "desc"), limit(40)), (s) => {
     S.posts = s.docs.map((d) => ({ id: d.id, ...d.data({ serverTimestamps: "estimate" }) }));
     if (S.postsSeen) s.docChanges().forEach((ch) => { if (ch.type !== "added") return; const p = { id: ch.doc.id, ...ch.doc.data({ serverTimestamps: "estimate" }) }; if (p.pb && p.uid !== uid) pbAlert(p); });
@@ -923,9 +924,17 @@ function feedPosts() {
 /* What's new. Newest first. Add a new entry on top each time the app changes. */
 /* Bump APP_VERSION every time you change the app, and add a matching entry on top of UPDATES (with v: the same number).
    Phones check app.js every few minutes and offer the new version on their own. */
-const APP_VERSION = 37;
+const APP_VERSION = 38;
 try { if ((parseInt(localStorage.getItem("weighin-appv"), 10) || 0) < APP_VERSION) localStorage.setItem("weighin-appv", String(APP_VERSION)); } catch { /* private mode */ }
 const UPDATES = [
+  { id: "2026-11-10a", v: 38, date: "Nov 10", title: "Game saves, aim your cast, names", items: [
+    "Your fishing game progress now saves to your account. If you get a new phone or re-add the app, sign in and your fish, coins, gear and level come back.",
+    "Aim your cast: drag your finger left or right on the water to pick where it lands. Tap to cast like before.",
+    "New HOLD TO REEL button at the bottom while you fight a fish. Holding anywhere still works too.",
+    "Cast way past the green into the red and you snag the weeds and the line breaks.",
+    "You can change your name in Me. Rude names are blocked. You can change it once every 30 days.",
+    "Owner tools: rename any angler (like user11233) and edit the name of any catch.",
+    "Needs the new Firebase rules."] },
   { id: "2026-11-09q", v: 37, date: "Nov 9", title: "Private tournaments", items: [
     "New Private button in Tourneys. Anyone can make an invite-only tournament, no waiting for the owner.",
     "Everyone can see a private tournament in the list with a lock on it. Tap it and press Ask to join. The person who made it says yes or no.",
@@ -1361,6 +1370,7 @@ function viewOwner(p) {
       el("div", { class: "stack", style: "gap:2px;min-width:0" }, el("span", { class: "t" }, `@${r.postName}: ${r.species}`), el("span", { class: "s" }, `Reported by @${r.byName} · ${ago(r.createdAt)}`),
         el("div", { class: "row", style: "gap:12px" },
           can("deletePosts") ? el("button", { class: "link danger small", type: "button", onclick: () => ownerDeletePost(r, reports) }, "Delete post") : null,
+          S.owner ? el("button", { class: "link small", type: "button", onclick: () => openPostEdit(r.postId, r.species) }, "Edit name") : null,
           can("ban") ? el("button", { class: "link danger small", type: "button", onclick: () => banUser(r.postUid, r.postName) }, "Ban") : null,
           el("button", { class: "link small", type: "button", onclick: () => deleteDoc(doc(db, "reports", r.id)).catch((e) => toast(errText(e))) }, "Dismiss")))))) : [el("p", { class: "empty" }, "No reports. All quiet.")]));
   const paintMembers = () => { const rows = users.filter((u) => u.id !== S.user.uid);
@@ -1368,6 +1378,7 @@ function viewOwner(p) {
       el("span", { class: "row", style: "gap:8px;flex-wrap:nowrap;min-width:0" }, avatar(u.id, u.name, 28), el("span", { class: "t" }, "@" + u.name),
         bans.has(u.id) ? el("span", { class: "pill final" }, "Banned") : null, mods.has(u.id) ? el("span", { class: "pill soon" }, "Mod") : null),
       el("span", { class: "row", style: "gap:8px" },
+        S.owner ? el("button", { class: "btn ghost small", type: "button", "data-rename": u.id, onclick: () => openOwnerRename(u.id, u.name) }, "Rename") : null,
         S.owner ? el("button", { class: "btn ghost small", type: "button", onclick: () => openModEditor(u.id, u.name, mods.get(u.id)) }, mods.has(u.id) ? "Edit mod" : "Make mod") : null,
         can("ban") ? (bans.has(u.id) ? el("button", { class: "btn ghost small", type: "button", onclick: () => unbanUser(u.id, u.name) }, "Unban")
           : el("button", { class: "btn small", type: "button", onclick: () => banUser(u.id, u.name) }, "Ban")) : null))) : [el("p", { class: "empty" }, "No other anglers yet.")])); };
@@ -1381,6 +1392,11 @@ function viewOwner(p) {
       ? "You can delete anyone's catch or comment with the Delete button, ban from the feed or the list below, and make moderators with the permissions you choose."
       : "You're a moderator. You can: " + (mine.join(", ") || "nothing yet") + ". Delete buttons show up right on catches and comments."),
     can("reports") ? el("section", { class: "stack" }, el("h2", null, "Reports"), reportsBox) : null,
+    S.owner ? el("section", { class: "stack", id: "own-edit" }, el("h2", null, "Edit catch names"),
+      el("p", { class: "muted small", style: "margin:0" }, "Change the name of any recent catch."),
+      el("div", { class: "list" }, S.posts.slice(0, 40).map((x) => el("div", { class: "item", style: "cursor:default" },
+        el("div", { class: "stack", style: "gap:0;min-width:0" }, el("span", { class: "t" }, x.species), el("span", { class: "s" }, "@" + x.name)),
+        el("button", { class: "btn ghost small", type: "button", "data-edit": x.id, onclick: () => openPostEdit(x.id, x.species) }, "Edit"))))) : null,
     can("ban") || S.owner ? el("section", { class: "stack" }, el("h2", null, S.owner ? "Anglers and moderators" : "Anglers"), membersBox) : null);
 }
 
@@ -1669,6 +1685,79 @@ function viewPost(p) {
 const cashTag = (v) => { const t = String(v || "").trim().replace(/^\$/, ""); return /^(?=.*[A-Za-z])[A-Za-z0-9_]{1,20}$/.test(t) ? "$" + t : ""; };
 const cashLink = (tag, amt) => "https://cash.app/" + tag + (amt ? "/" + amt : "");
 function cashButton(tag, label, amt) { return el("a", { class: "btn small cash-btn", href: cashLink(tag, amt), target: "_blank", rel: "noopener" }, label || `💵 Pay ${tag} on Cash App`); }
+/* ---------- names: change yours, owner can change anyone's ---------- */
+async function renameUser(uid, oldName, newName) {
+  const nl = newName.toLowerCase(), ol = String(oldName || "").toLowerCase();
+  if (nl !== ol) {
+    try { await setDoc(doc(db, "usernames", nl), { uid, name: newName }); }
+    catch { toast(`"${newName}" is taken. Try another.`); return false; }
+  }
+  try { await updateDoc(doc(db, "users", uid), { name: newName, nameAt: serverTimestamp() }); }
+  catch (err) { if (nl !== ol) deleteDoc(doc(db, "usernames", nl)).catch(() => {}); toast(errText(err)); return false; }
+  if (nl !== ol && ol) deleteDoc(doc(db, "usernames", ol)).catch(() => {});
+  try { const snap = await getDocs(query(collection(db, "posts"), where("uid", "==", uid), limit(150))); await Promise.all(snap.docs.map((d) => updateDoc(doc(db, "posts", d.id), { name: newName }).catch(() => {}))); } catch { /* the name still changed */ }
+  updateDoc(doc(db, "fcboard", uid), { name: newName }).catch(() => {});
+  userCache.delete(uid); cardCache.clear();
+  if (uid === S.user.uid) { S.name = newName; S.nameAt = Date.now(); fcLastPub = ""; fcPublish(); }
+  return true;
+}
+const NAME_DAYS = 30;
+function openNameSheet(onDone) {
+  const wait = !S.owner && S.nameAt ? S.nameAt + NAME_DAYS * 864e5 - Date.now() : 0;
+  const inp = el("input", { id: "nm-in", maxlength: 20, value: S.name, autocapitalize: "off", autocorrect: "off", spellcheck: "false", "aria-label": "New angler name" });
+  const close = () => bg.remove();
+  const bg = el("div", { class: "sheet-bg", onclick: (e) => { if (e.target === bg) close(); } },
+    el("div", { class: "sheet", role: "dialog", "aria-label": "Change name", style: "height:auto" },
+      el("div", { class: "sheet-h" }, el("h2", null, "✏️ Change name"), el("button", { class: "link", type: "button", onclick: close }, "Close")),
+      el("div", { class: "stack", style: "padding:16px" },
+        el("p", { class: "muted", style: "margin:0" }, `Heads up: you can only change your name once every ${NAME_DAYS} days. Your old name becomes free for anyone to take, and your catches will show the new name. Rude or racist names are blocked.`),
+        wait > 0 ? el("p", { id: "nm-wait", style: "margin:0;font-weight:700" }, `You can change it again in ${Math.ceil(wait / 864e5)} day${Math.ceil(wait / 864e5) === 1 ? "" : "s"}.`) : inp,
+        wait > 0 ? null : el("p", { class: "hint", style: "margin:0" }, "2 to 20 letters, numbers or _"),
+        wait > 0 ? null : el("button", { class: "btn wide", type: "button", id: "nm-save", onclick: async (e) => {
+          const v = inp.value.trim();
+          if (!NAME_RE.test(v)) { toast("Use 2 to 20 letters, numbers or _."); return; }
+          if (badText(v)) { toast("That name isn't allowed. Pick another one."); return; }
+          if (v === S.name) { toast("That's already your name."); return; }
+          if (!confirm(`Change your name to @${v}? You can't change it again for ${NAME_DAYS} days.`)) return;
+          e.target.disabled = true;
+          const ok = await renameUser(S.user.uid, S.name, v);
+          e.target.disabled = false;
+          if (ok) { toast(`You're @${v} now.`); close(); onDone?.(); }
+        } }, "Change my name"))));
+  document.body.append(bg); if (!(wait > 0)) inp.focus();
+}
+function openOwnerRename(uid, oldName) {
+  const rand = () => "user" + String(Math.floor(10000 + Math.random() * 90000));
+  const inp = el("input", { id: "orn-in", maxlength: 20, value: rand(), autocapitalize: "off", autocorrect: "off", "aria-label": "New name" });
+  const close = () => bg.remove();
+  const bg = el("div", { class: "sheet-bg", onclick: (e) => { if (e.target === bg) close(); } },
+    el("div", { class: "sheet", role: "dialog", "aria-label": "Rename angler", style: "height:auto" },
+      el("div", { class: "sheet-h" }, el("h2", { style: "overflow-wrap:anywhere" }, `Rename @${oldName}`), el("button", { class: "link", type: "button", onclick: close }, "Close")),
+      el("div", { class: "stack", style: "padding:16px" },
+        el("p", { class: "muted", style: "margin:0" }, "Their name changes everywhere, including their catches. Their old name becomes free. They can pick their own name again after 30 days."),
+        inp,
+        el("div", { class: "row" },
+          el("button", { class: "btn ghost small", type: "button", onclick: () => { inp.value = rand(); } }, "🎲 New random"),
+          el("button", { class: "btn", type: "button", id: "orn-save", onclick: async (e) => {
+            const v = inp.value.trim(); if (!NAME_RE.test(v)) { toast("Use 2 to 20 letters, numbers or _."); return; }
+            e.target.disabled = true; const ok = await renameUser(uid, oldName, v); e.target.disabled = false;
+            if (ok) { toast(`@${oldName} is now @${v}.`); close(); }
+          } }, "Rename")))));
+  document.body.append(bg); inp.select();
+}
+function openPostEdit(postId, cur) {
+  const inp = el("input", { id: "pe-in", maxlength: 40, value: cur || "", "aria-label": "Catch name" });
+  const close = () => bg.remove();
+  const bg = el("div", { class: "sheet-bg", onclick: (e) => { if (e.target === bg) close(); } },
+    el("div", { class: "sheet", role: "dialog", "aria-label": "Edit catch name", style: "height:auto" },
+      el("div", { class: "sheet-h" }, el("h2", null, "Edit catch name"), el("button", { class: "link", type: "button", onclick: close }, "Close")),
+      el("div", { class: "stack", style: "padding:16px" }, inp,
+        el("button", { class: "btn wide", type: "button", id: "pe-save", onclick: async () => {
+          const v = inp.value.trim(); if (!v) { toast("Type a name."); return; }
+          try { await updateDoc(doc(db, "posts", postId), { species: v }); updateDoc(doc(db, "spots", postId), { species: v }).catch(() => {}); cardCache.delete(postId); toast("Catch name changed."); close(); } catch (err) { toast(errText(err)); }
+        } }, "Save"))));
+  document.body.append(bg); inp.focus();
+}
 function openCashSheet(onDone) {
   const cur = cashTag(S.cash);
   const inp = el("input", { id: "cash-in", maxlength: 21, placeholder: "$yourcashtag", value: cur, autocapitalize: "off", autocorrect: "off", "aria-label": "Your Cash App cashtag" });
@@ -3505,6 +3594,7 @@ function viewMe(p) {
         el("span", { class: "row", style: "gap:10px" }, el("span", { class: "t" }, "🔔 Release notes"), unseenUpdate() ? el("span", { class: "pill live" }, "New") : null), el("span", { class: "label" }, "›")),
       el("button", { class: "item", type: "button", onclick: open("friends") },
         el("span", { class: "row", style: "gap:10px" }, el("span", { class: "t" }, "Friends and chat"), S.reqIn.length ? el("span", { class: "pill live" }, `${S.reqIn.length} new`) : null), el("span", { class: "label" }, "›")),
+      el("button", { class: "item", type: "button", id: "me-name", onclick: () => openNameSheet(renderTab) }, el("span", { class: "t" }, "✏️ Change name"), el("span", { class: "label" }, "@" + S.name)),
       el("button", { class: "item", type: "button", id: "me-cash", onclick: () => openCashSheet(renderTab) }, el("span", { class: "t" }, "💵 Cash App"), el("span", { class: "label" }, cashTag(S.cash) || "Add")),
       el("button", { class: "item", type: "button", id: "me-water", onclick: open("water") }, el("span", { class: "t" }, "🔍 Gate keep finder"), el("span", { class: "label" }, "›")),
       el("button", { class: "item", type: "button", onclick: open("log") }, el("span", { class: "t" }, "My fishing log"), el("span", { class: "label" }, "›")),
@@ -3879,9 +3969,37 @@ function fcMine() {
   for (const k in d) if ((d[k].best || 0) > bw) { bw = d[k].best; bn = k; }
   return { name: S.name || "angler", xp: fcXp(), lv: fcLevel(), big: +bw.toFixed(2), bigN: bn, catches: s.catches, trophies: s.trophies, wins: s.duelWins, tw: s.tWins };
 }
+/* ---------- cloud save: the game progress follows your account ---------- */
+const FC_SAVE_KEYS = ["fcach", "fcbag", "fccoins", "fcdex", "fcents", "fcgear", "fcloc", "fclure", "fclv", "fclvpaid", "fcpaid", "fcrod", "fcxp", "fcstats"];
+let fcCloudLast = "", fcCloudAt = 0, fcCloudReady = false, fcCloudTimer = 0;
+function fcSnapshot() { const d = {}; for (const k of FC_SAVE_KEYS) { const v = getPref(k, ""); if (v) d[k] = v; } return d; }
+async function fcCloudPush(force) {
+  if (!S.user || !fcCloudReady) return;
+  const json = JSON.stringify(fcSnapshot());
+  if (json === fcCloudLast || json === "{}") return;
+  if (!force && Date.now() - fcCloudAt < 8000) return;
+  fcCloudAt = Date.now(); const prev = fcCloudLast; fcCloudLast = json;
+  try { await setDoc(doc(db, "fcsave", S.user.uid), { d: json, casts: +fcStatsRaw().casts || 0, upd: serverTimestamp() }); } catch { fcCloudLast = prev; }
+}
+async function fcCloudSync() {
+  if (!S.user) return;
+  const uid = S.user.uid; fcCloudReady = false; fcCloudLast = "";
+  let c = null;
+  try { const snap = await getDoc(doc(db, "fcsave", uid)); if (snap.exists()) c = snap.data(); } catch { return; }   // offline: try again next time
+  const owner = getPref("fcowner", ""), foreign = !!owner && owner !== uid;   // the progress on this phone belongs to someone else
+  const localCasts = +fcStatsRaw().casts || 0;
+  if (foreign) FC_SAVE_KEYS.forEach((k) => setPref(k, ""));
+  if (c && (foreign || (+c.casts || 0) > localCasts)) {
+    try { const d = JSON.parse(c.d); FC_SAVE_KEYS.forEach((k) => { if (k in d) setPref(k, d[k]); }); fcCloudLast = c.d; toast("Your fishing game progress was restored."); } catch { /* bad save, keep local */ }
+  }
+  setPref("fcowner", uid); fcCloudReady = true;
+  fcCloudPush(true);
+  if (!fcCloudTimer) { fcCloudTimer = setInterval(() => fcCloudPush(), 15000); document.addEventListener("visibilitychange", () => { if (document.hidden) fcCloudPush(true); }); }
+}
 let fcLastPub = "";
 async function fcPublish() {
   if (!S.user) return;
+  fcCloudPush();
   const data = fcMine(), key = JSON.stringify(data);
   if (key === fcLastPub) return;
   fcLastPub = key;
@@ -4212,7 +4330,7 @@ function playClash(mode, locId, lureIdIn, onExit, duel) {
 
   /* ---------- game state ---------- */
   const CASTS = 3, rivalName = ["Lakeside Lou", "Big Mike", "Sunny", "Cody", "Captain Pete"][Math.floor(Math.random() * 5)];
-  let agit = 0, ringT = 0, eatFx = false, castAt = -9999, landed = true, achNew = [], target = null, inBag = true, netSave = false, st = "cast", ci = 0, mine = [], rival = [], down = false, powerT = 0, power = 0, great = false, timer = 0, biteAt = 0, msg = "", fish = null, weight = 0, F = null, rec = false, resText = "", earned = { xp: 0, coins: 0 }, btn = null, shakeT = 0, drops = [], rip = [], lastTier = null;
+  let snag = false, aimX = 0.5, aimDrag = false, aimX0 = 0, agit = 0, ringT = 0, eatFx = false, castAt = -9999, landed = true, achNew = [], target = null, inBag = true, netSave = false, st = "cast", ci = 0, mine = [], rival = [], down = false, powerT = 0, power = 0, great = false, timer = 0, biteAt = 0, msg = "", fish = null, weight = 0, F = null, rec = false, resText = "", earned = { xp: 0, coins: 0 }, btn = null, shakeT = 0, drops = [], rip = [], lastTier = null;
   const setSt = (s) => { st = s; bg.dataset.state = s; };
   setSt("cast");
   const pickFish = (rand = Math.random) => {
@@ -4224,12 +4342,16 @@ function playClash(mode, locId, lureIdIn, onExit, duel) {
   const seeded = (i) => rng((duel ? duel.seed : 1) * 31 + i * 7919);
   if (mode === "duel") for (let i = 0; i < CASTS; i++) rival.push(Math.random() < 0.15 ? 0 : rollWeight(pickFish(), Math.random() < 0.4, 0));
 
-  const bobber = () => ({ x: W / 2 + Math.sin(ci * 2.1) * W * 0.12, y: H * (0.62 - 0.3 * power) });
+  const bobber = () => ({ x: W * aimX, y: H * (0.62 - 0.3 * power) });
+  const SNAG = 0.93;
   const shore = () => ({ x: W / 2, y: H * 0.86 });
   const tipPos = () => ({ x: W / 2 + 30 + (F ? -F.t * 14 : 0), y: H * 0.8 + (F ? F.t * 16 : 0) });
 
   function doCast() {
-    audio(); power = powerT; great = power > 0.6 && power < 0.9;
+    audio(); power = powerT; great = power > 0.6 && power < 0.9; snag = false;
+    if (power > SNAG) {   // way past the green: the lure flies into the weeds and the line breaks
+      snag = true; target = null; fcStat("casts", 1); castAt = performance.now(); landed = false; timer = 1.2; setSt("wait"); tick(700, 0.2, 0.25, 1); rip.push({ ...bobber(), a: 1 }); return;
+    }
     // the fish is chosen now but you can't see what it is. Bigger fish take longer to bite.
     const sr = mode === "friend" || mode === "event" ? seeded(ci) : Math.random, n = pickFish(sr), w = rollWeight(n, great, lureLv, sr), q = fcTier(n, w)[2];
     target = { n, w, q: Math.max(0, Math.min(1, q)) };
@@ -4242,7 +4364,7 @@ function playClash(mode, locId, lureIdIn, onExit, duel) {
   const hooks = { phase: (n) => { bg.dataset.phase = n; if (n === "jump") { splash(0.9); tick(450, 0.3, 0.3, 1); } if (n === "run") clickAcc = 0; } };
   function splash(k) { const b = fightPos(); for (let i = 0; i < 14 * k; i++) drops.push({ x: b.x, y: b.y, vx: (Math.random() - 0.5) * 160, vy: -80 - Math.random() * 140, a: 1 }); rip.push({ x: b.x, y: b.y, a: 1 }); }
   function finish(win) {
-    resText = ""; rec = false; achNew = []; earned = { xp: 0, coins: 0 }; whine(false);
+    resText = ""; rec = false; achNew = []; earned = { xp: 0, coins: 0 }; whine(false); setTimeout(() => fcCloudPush(true), 400);
     if (!win) netSave = false;
     if (win) {
       mine[ci] = weight; const dex = fcDex(), d = dex[fish] || { best: 0, n: 0 };
@@ -4275,20 +4397,27 @@ function playClash(mode, locId, lureIdIn, onExit, duel) {
       setPref("fcxp", String(fcXp() + bonus[0])); setPref("fccoins", String(fcCoins() + bonus[1])); earned = { xp: bonus[0], coins: bonus[1] };
       resText = out; setSt("over"); return;
     }
-    ci++; fish = null; F = null; target = null; setSt("cast"); powerT = 0;
+    ci++; fish = null; F = null; target = null; snag = false; setSt("cast"); powerT = 0;
   }
   const act = () => {
     if (st === "cast") doCast();
-    else if (st === "wait") { lose("Too early! The fish got spooked."); }
+    else if (st === "wait") { if (snag) { snag = false; lose("Snagged! The line broke."); } else lose("Too early! The fish got spooked."); }
     else if (st === "bite") hook();
   };
   const press = () => { if (st === "result") advance(); else if (st === "over") end(); };
   canvas.addEventListener("pointerdown", (e) => {
     canvas.setPointerCapture?.(e.pointerId); const r = canvas.getBoundingClientRect(), x = e.clientX - r.left, y = e.clientY - r.top;
     if (st === "result" || st === "over") { if (btn && x >= btn.x && x <= btn.x + btn.w && y >= btn.y && y <= btn.y + btn.h) press(); return; }
+    if (st === "cast") { aimDrag = false; aimX0 = x; down = true; return; }   // a tap casts when you let go. Dragging aims.
     down = true; act();
   });
-  canvas.addEventListener("pointerup", () => { down = false; });
+  canvas.addEventListener("pointermove", (e) => {
+    if (!down || st !== "cast") return;
+    const r = canvas.getBoundingClientRect(), x = e.clientX - r.left;
+    if (!aimDrag && Math.abs(x - aimX0) > 10) aimDrag = true;
+    if (aimDrag) aimX = Math.max(0.12, Math.min(0.88, x / W));
+  });
+  canvas.addEventListener("pointerup", () => { if (down && st === "cast" && !aimDrag) { down = false; act(); } down = false; aimDrag = false; });
   canvas.addEventListener("pointercancel", () => { down = false; });
   const onKey = (e) => { if (e.key === "Escape") { end(); return; } if (e.key === " " || e.key === "Enter") { e.preventDefault(); if (e.repeat) return; if (st === "result" || st === "over") press(); else { down = true; act(); } } };
   const onKeyUp = (e) => { if (e.key === " " || e.key === "Enter") down = false; };
@@ -4572,13 +4701,16 @@ function playClash(mode, locId, lureIdIn, onExit, duel) {
     text("🪙 " + fcCoins(), 16, 30, 16, "#ffd36b", "left"); text("Bag " + fcBag().length + "/" + fcBagMax(), W - 16, 100, 13, fcBag().length >= fcBagMax() - 3 ? "#ffb74d" : "#fff", "right");
     ctx.shadowBlur = 0;
     if (st === "cast") {
-      text("Tap to cast. Stop the bar in the green.", W / 2, H * 0.2, 18);
+      text("Tap to cast. Stop the bar in the green.", W / 2, H * 0.2, 18); text("Drag left or right to pick your spot.", W / 2, H * 0.2 + 24, 14, "#d6eefc");
+      { const bb = bobber(), pr = 10 + 4 * Math.sin(now / 220); ctx.strokeStyle = "rgba(255,255,255,.85)"; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(bb.x, bb.y, pr, 0, 6.2832); ctx.moveTo(bb.x - pr - 6, bb.y); ctx.lineTo(bb.x - pr + 4, bb.y); ctx.moveTo(bb.x + pr - 4, bb.y); ctx.lineTo(bb.x + pr + 6, bb.y); ctx.stroke(); }
       const bx = W * 0.15, bw = W * 0.7, by = H * 0.945;
-      ctx.fillStyle = "rgba(0,0,0,.5)"; ctx.fillRect(bx, by, bw, 14); ctx.fillStyle = "#4caf50"; ctx.fillRect(bx + bw * 0.6, by, bw * 0.3, 14); ctx.fillStyle = "#fff"; ctx.fillRect(bx + bw * power - 3, by - 5, 6, 24);
+      ctx.fillStyle = "rgba(0,0,0,.5)"; ctx.fillRect(bx, by, bw, 14); ctx.fillStyle = "#4caf50"; ctx.fillRect(bx + bw * 0.6, by, bw * 0.3, 14); ctx.fillStyle = "#e53935"; ctx.fillRect(bx + bw * SNAG, by, bw * (1 - SNAG), 14); ctx.fillStyle = "#fff"; ctx.fillRect(bx + bw * power - 3, by - 5, 6, 24); text("SNAG", bx + bw * 0.965, by - 10, 11, "#ff8a80");
     }
-    if (st === "wait") text("Wait for a bite...", W / 2, H * 0.2, 20);
+    if (st === "wait") text(snag ? "Snagged in the weeds..." : "Wait for a bite...", W / 2, H * 0.2, 20, snag ? "#ff8a80" : "#fff");
     if (st === "bite") text("TAP NOW!", W / 2, H * 0.2, 30, "#ffd36b");
     if (st === "fight") {
+      { const rw = 190, rh = 58, rx = W / 2 - rw / 2, ry = H - rh - 22; ctx.fillStyle = down ? "rgba(214,69,40,.95)" : "rgba(0,0,0,.45)"; ctx.strokeStyle = "rgba(255,255,255,.8)"; ctx.lineWidth = 3;
+        ctx.beginPath(); if (ctx.roundRect) ctx.roundRect(rx, ry, rw, rh, 29); else ctx.rect(rx, ry, rw, rh); ctx.fill(); ctx.stroke(); text(down ? "REELING..." : "HOLD TO REEL", W / 2, ry + 36, 18); }
       const gx = W - 54, gy = H * 0.3, gh = H * 0.42, gw = 36;
       lineGauge(gx, gy, gw, gh, now, F.tn ?? F.t);
       const ty = gy + gh * (1 - Math.min(1, F.tn ?? F.t)); ctx.fillStyle = "#fff"; ctx.fillRect(gx - 6, ty - 3, gw + 12, 6); text("LINE", gx + gw / 2, gy - 8, 13);
@@ -4664,7 +4796,9 @@ function playClash(mode, locId, lureIdIn, onExit, duel) {
   function update(dt) {
     shakeT = Math.max(0, shakeT - dt);
     if (st === "cast") { powerT += dt * 0.9; if (powerT > 2) powerT = 0; power = powerT <= 1 ? powerT : 2 - powerT; }
-    if (st === "wait") { timer -= dt; if (timer <= 0) { biteAt = 0; setSt("bite"); tick(1500, 0.12, 0.05); } }
+    if (st === "wait") { timer -= dt; if (timer <= 0) {
+      if (snag) { snag = false; lose("Snagged! The line broke."); shakeT = 0.35; tick(3000, 0.3, 0.08); }
+      else { biteAt = 0; setSt("bite"); tick(1500, 0.12, 0.05); } } }
     if (st === "bite") { biteAt += dt; if (biteAt > BITE_WINDOW) lose("Too slow. It got away."); }
     if (st === "fight") {
       const out = fcStep(F, down, dt, G, hooks); bg.dataset.tension = F.t.toFixed(2);
