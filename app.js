@@ -915,9 +915,13 @@ function feedPosts() {
 /* What's new. Newest first. Add a new entry on top each time the app changes. */
 /* Bump APP_VERSION every time you change the app, and add a matching entry on top of UPDATES (with v: the same number).
    Phones check app.js every few minutes and offer the new version on their own. */
-const APP_VERSION = 32;
+const APP_VERSION = 33;
 try { if ((parseInt(localStorage.getItem("weighin-appv"), 10) || 0) < APP_VERSION) localStorage.setItem("weighin-appv", String(APP_VERSION)); } catch { /* private mode */ }
 const UPDATES = [
+  { id: "2026-11-09m", v: 33, date: "Nov 9", title: "New bobber and lures in the game", items: [
+    "The bobber only shows when you fish with the worm. It looks like a real push-button bobber now: white top, red bottom, red lip and a red button.",
+    "Spinner, crankbait and minnow jig now show the actual lure in the water, with no bobber.",
+    "New bobber app icon."] },
   { id: "2026-11-09l", v: 32, date: "Nov 9", title: "Fishing game runs smoother", items: [
     "The fishing game is much faster on older and cheaper phones. The scenery is drawn once instead of every frame.",
     "The game checks how your phone is doing. If it stutters, it lowers the detail by itself until it runs smooth.",
@@ -4270,6 +4274,33 @@ function playClash(mode, locId, lureIdIn, onExit, duel) {
     F.off += ((Math.sin(F.time * (F.ph === "run" ? 2.2 : 3)) * amp * (F.ph === "run" ? F.runDir : 1)) - F.off) * 0.08;
     return { x: base.x + F.off, y: base.y - (F.ph === "jump" && F.phA < 1 ? Math.sin(F.phA * Math.PI) * (50 + 40 * F.s) : 0) };
   }
+  /* the bobber (a push-button bobber, like the real ones) only shows when you fish the worm. Other lures show up in the water. */
+  function drawBobber(x, y, k) {
+    const r = 11 * k, g = ctx.createRadialGradient(x - r * 0.4, y - r * 0.6, 1, x, y - r * 0.2, r * 1.2);
+    ctx.fillStyle = "rgba(190,40,32,.5)"; ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI); ctx.fill();                 // red half under the water
+    ctx.fillStyle = "#c81f17"; ctx.beginPath(); ctx.roundRect ? ctx.roundRect(x - 3.6 * k, y - r - 7 * k, 7.2 * k, 9 * k, 2 * k) : ctx.rect(x - 3.6 * k, y - r - 7 * k, 7.2 * k, 9 * k); ctx.fill();      // red push button
+    ctx.fillStyle = "rgba(255,255,255,.45)"; ctx.fillRect(x - 2.2 * k, y - r - 5.5 * k, 1.6 * k, 5 * k);
+    g.addColorStop(0, "#ffffff"); g.addColorStop(0.7, "#eef1f2"); g.addColorStop(1, "#b9c3c7"); ctx.fillStyle = g; ctx.beginPath(); ctx.arc(x, y, r, Math.PI, 0); ctx.closePath(); ctx.fill();   // white dome
+    ctx.fillStyle = "#d3251b"; ctx.beginPath(); ctx.ellipse(x, y, r + 2.4 * k, 3.1 * k, 0, 0, 7); ctx.fill();         // red lip where the two halves meet
+    ctx.fillStyle = "rgba(255,255,255,.35)"; ctx.beginPath(); ctx.ellipse(x, y - 0.8 * k, r + 1.2 * k, 1 * k, 0, Math.PI, 0); ctx.fill();
+    ctx.fillStyle = "rgba(255,255,255,.75)"; ctx.beginPath(); ctx.ellipse(x - r * 0.42, y - r * 0.62, r * 0.28, r * 0.15, -0.6, 0, 7); ctx.fill();
+  }
+  function drawLure(id, x, y, k, now) {
+    ctx.save(); ctx.translate(x, y); ctx.scale(k, k); ctx.globalAlpha = 0.92;
+    if (id === "spinner") { const w = 5 + Math.abs(Math.sin(now / 70)) * 5;
+      ctx.fillStyle = "#c8d0d4"; ctx.beginPath(); ctx.ellipse(0, 6, 3, 8, 0, 0, 7); ctx.fill();
+      ctx.fillStyle = "#e9c46a"; ctx.beginPath(); ctx.ellipse(w * 0.2, -2, w, 6, Math.sin(now / 90) * 0.5, 0, 7); ctx.fill();
+      ctx.fillStyle = "rgba(255,255,255,.7)"; ctx.beginPath(); ctx.ellipse(w * 0.2 - 2, -4, w * 0.4, 2, 0, 0, 7); ctx.fill();
+      ctx.strokeStyle = "#aab4b8"; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.arc(0, 15, 3, 0, 4.7); ctx.stroke(); }
+    else if (id === "crank") { ctx.fillStyle = "#e8a23a"; ctx.beginPath(); ctx.ellipse(0, 4, 13, 7, 0, 0, 7); ctx.fill();
+      ctx.fillStyle = "#c4502a"; ctx.beginPath(); ctx.ellipse(2, 7, 11, 3, 0, 0, Math.PI); ctx.fill();
+      ctx.fillStyle = "#6d4a2a"; ctx.beginPath(); ctx.moveTo(-12, 2); ctx.lineTo(-20, -4); ctx.lineTo(-14, 6); ctx.closePath(); ctx.fill();
+      ctx.fillStyle = "#fff"; ctx.beginPath(); ctx.arc(7, 2, 2.4, 0, 7); ctx.fill(); ctx.fillStyle = "#111"; ctx.beginPath(); ctx.arc(7.4, 2, 1.1, 0, 7); ctx.fill(); }
+    else { ctx.fillStyle = "#d94a2a"; ctx.beginPath(); ctx.arc(0, 2, 6.5, 0, 7); ctx.fill();
+      ctx.fillStyle = "rgba(255,255,255,.6)"; ctx.beginPath(); ctx.arc(-2, 0, 2, 0, 7); ctx.fill();
+      ctx.strokeStyle = "#f4f1e6"; ctx.lineWidth = 2; ctx.lineCap = "round"; for (let i = -2; i <= 2; i++) { ctx.beginPath(); ctx.moveTo(i * 1.8, 8); ctx.quadraticCurveTo(i * 3 + Math.sin(now / 160 + i) * 3, 14, i * 3.4, 21); ctx.stroke(); } }
+    ctx.restore();
+  }
   /* ---------- the parts that never move are painted once and kept, so low-end phones only redraw what moves ---------- */
   const mkLayer = () => { const c = document.createElement("canvas"); c.width = Math.round(W * dpr); c.height = Math.round(H * dpr); const x = c.getContext("2d"); x.setTransform(dpr, 0, 0, dpr, 0, 0); return { c, x }; };
   function buildLayers() {
@@ -4380,13 +4411,13 @@ function playClash(mode, locId, lureIdIn, onExit, duel) {
     if (flying) {      // the lure flies out in an arc, then lands with a splash
       const k = (now - castAt) / 650, px = tip.x + (b.x - tip.x) * k, py = tip.y + (b.y - tip.y) * k - Math.sin(k * Math.PI) * H * 0.22;
       ctx.strokeStyle = "rgba(255,255,255,.7)"; ctx.lineWidth = 1.1; ctx.beginPath(); ctx.moveTo(tip.x, tip.y); ctx.quadraticCurveTo((tip.x + px) / 2, (tip.y + py) / 2 + 12 * (1 - k), px, py); ctx.stroke();
-      ctx.fillStyle = "#e5352b"; ctx.beginPath(); ctx.arc(px, py, 5, 0, 7); ctx.fill(); landed = false;
+      if (lureId === "worm") drawBobber(px, py, 0.75); else drawLure(lureId, px, py, 0.7, now); landed = false;
     } else if ((st === "wait" || st === "bite") && !landed) { landed = true; for (let i = 0; i < 10; i++) drops.push({ x: b.x, y: b.y, vx: (Math.random() - 0.5) * 90, vy: -60 - Math.random() * 90, a: 1 }); rip.push({ x: b.x, y: b.y, a: 1 }); rip.push({ x: b.x, y: b.y, a: 0.7 }); tick(500, 0.2, 0.18, 1); }
     if ((st === "wait" || st === "bite") && !flying) {
       const dip = st === "bite" ? 7 + Math.sin(now / 40) * 3 : Math.sin(now / 500) * 2 + Math.sin(now / 170 + 1) * 0.8;
       ctx.strokeStyle = "rgba(255,255,255,.8)"; ctx.lineWidth = 1.2; ctx.beginPath(); ctx.moveTo(tip.x, tip.y); ctx.quadraticCurveTo((tip.x + b.x) / 2, Math.max(tip.y, b.y) + 26 + Math.sin(now / 900) * 3, b.x, b.y + dip); ctx.stroke();
       ctx.fillStyle = "rgba(0,0,0,.18)"; ctx.beginPath(); ctx.ellipse(b.x + 3, b.y + dip + 9, 10, 3, 0, 0, 7); ctx.fill();
-      ctx.fillStyle = "#e5352b"; ctx.beginPath(); ctx.arc(b.x, b.y + dip, 9, Math.PI, 0); ctx.fill(); ctx.fillStyle = "#fff"; ctx.beginPath(); ctx.arc(b.x, b.y + dip, 9, 0, Math.PI); ctx.fill();
+      if (lureId === "worm") drawBobber(b.x, b.y + dip, 1); else drawLure(lureId, b.x, b.y + dip + 12 + (st === "bite" ? Math.sin(now / 35) * 2 : 0), 1, now);
       ctx.strokeStyle = "rgba(255,255,255,.5)"; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.ellipse(b.x, b.y + 10, 16 + Math.sin(now / 400) * 3, 5, 0, 0, 7); ctx.stroke();
       if (st === "bite") { ctx.strokeStyle = "rgba(255,255,255,.7)"; ctx.beginPath(); ctx.ellipse(b.x, b.y + 4, 18 + (biteAt / BITE_WINDOW * 38), 7 + biteAt / BITE_WINDOW * 13, 0, 0, 7); ctx.stroke();
         if (target) { const a = now / 260; drawReal(target.n, b.x + Math.cos(a) * 38, b.y + 20 + Math.sin(a) * 8, fishR(target.n, target.w) * 0.75, Math.sin(a) > 0 ? -1 : 1, 0, false, true); }
