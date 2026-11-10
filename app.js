@@ -936,7 +936,7 @@ const UPDATES = [
     "New Edit mode switch at the top of Owner tools. Off by default, and it turns itself off every time the app closes.",
     "When it's off, the feed has no Delete (on other people's catches), Ban or Rename buttons. Report stays for everyone.",
     "When it's on, those buttons show on the feed, plus a Rename button to change the name of any catch.",
-    "Fishing game: new 📱 Motion mode button at the top. Turn it on, then flick your phone forward to cast and tilt it left or right to aim. Tapping still works. On iPhone it asks to allow motion."] },
+    "Fishing game: new 📱 Motion mode button at the top. Turn it on, then flick your phone forward to cast and tilt it left or right to aim. Flick it toward you when the ! shows to hook the fish. Tapping still works. On iPhone it asks to allow motion."] },
   { id: "2026-11-10a", v: 38, date: "Nov 10", title: "Game saves, aim your cast, names", items: [
     "Your fishing game progress now saves to your account. If you get a new phone or re-add the app, sign in and your fish, coins, gear and level come back.",
     "Aim your cast: drag your finger left or right on the water to pick where it lands. Tap to cast like before.",
@@ -4327,7 +4327,8 @@ function playClash(mode, locId, lureIdIn, onExit, duel) {
   const onMotion = (e) => {
     motionSeen = true; const r = e.rotationRate; if (!r) return;
     const now = performance.now();
-    if (Math.abs(r.beta || 0) > 230 && now - lastFlick > 900 && (st === "cast" || st === "bite")) { lastFlick = now; act(); }
+    const b = r.beta || 0;   // negative = top of the phone flicked away from you, positive = flicked toward you
+    if (now - lastFlick > 900 && ((st === "cast" && (b < -230 || b > 330)) || (st === "bite" && (b > 200 || b < -330)))) { lastFlick = now; act(); }
   };
   const onTilt = (e) => {
     motionSeen = true; if (st !== "cast" || aimDrag || e.gamma == null) return;
@@ -4766,7 +4767,7 @@ function playClash(mode, locId, lureIdIn, onExit, duel) {
       ctx.fillStyle = "rgba(0,0,0,.5)"; ctx.fillRect(bx, by, bw, 14); ctx.fillStyle = "#4caf50"; ctx.fillRect(bx + bw * 0.6, by, bw * 0.3, 14); ctx.fillStyle = "#e53935"; ctx.fillRect(bx + bw * SNAG, by, bw * (1 - SNAG), 14); ctx.fillStyle = "#fff"; ctx.fillRect(bx + bw * power - 3, by - 5, 6, 24); text("SNAG", bx + bw * 0.965, by - 10, 11, "#ff8a80");
     }
     if (st === "wait") text(snag ? "Snagged in the weeds..." : "Wait for a bite...", W / 2, H * 0.2, 20, snag ? "#ff8a80" : "#fff");
-    if (st === "bite") text("TAP NOW!", W / 2, H * 0.2, 30, "#ffd36b");
+    if (st === "bite") { text(motionOn ? "FLICK BACK NOW!" : "TAP NOW!", W / 2, H * 0.2, 30, "#ffd36b"); if (motionOn) text("or tap", W / 2, H * 0.2 + 24, 14, "#fff3c4"); }
     if (st === "fight") {
       { const rw = 190, rh = 58, rx = W / 2 - rw / 2, ry = H - rh - 22; ctx.fillStyle = down ? "rgba(214,69,40,.95)" : "rgba(0,0,0,.45)"; ctx.strokeStyle = "rgba(255,255,255,.8)"; ctx.lineWidth = 3;
         ctx.beginPath(); if (ctx.roundRect) ctx.roundRect(rx, ry, rw, rh, 29); else ctx.rect(rx, ry, rw, rh); ctx.fill(); ctx.stroke(); text(down ? "REELING..." : "HOLD TO REEL", W / 2, ry + 36, 18); }
