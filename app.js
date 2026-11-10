@@ -915,9 +915,13 @@ function feedPosts() {
 /* What's new. Newest first. Add a new entry on top each time the app changes. */
 /* Bump APP_VERSION every time you change the app, and add a matching entry on top of UPDATES (with v: the same number).
    Phones check app.js every few minutes and offer the new version on their own. */
-const APP_VERSION = 35;
+const APP_VERSION = 36;
 try { if ((parseInt(localStorage.getItem("weighin-appv"), 10) || 0) < APP_VERSION) localStorage.setItem("weighin-appv", String(APP_VERSION)); } catch { /* private mode */ }
 const UPDATES = [
+  { id: "2026-11-09p", v: 36, date: "Nov 9", title: "Fish eat the lure, rough water, new line bar", items: [
+    "When a fish bites it rushes the lure and eats it. The lure disappears and the water swirls where it was. The bobber gets pulled under.",
+    "The water moves a lot more while you fight a fish: bigger waves, rings around the fish, a wake behind it and splashes.",
+    "The line bar looks like real line now. At the bottom it is a loose untied knot, in the middle it is a straight normal line, and in the red it splits into 4 frayed, damaged strands."] },
   { id: "2026-11-09o", v: 35, date: "Nov 9", title: "Lures look underwater", items: [
     "Lures under the water now have a blue water tint so they look like they are really down there."] },
   { id: "2026-11-09n", v: 34, date: "Nov 9", title: "Lures sink in the water", items: [
@@ -4152,7 +4156,7 @@ function playClash(mode, locId, lureIdIn, onExit, duel) {
 
   /* ---------- game state ---------- */
   const CASTS = 3, rivalName = ["Lakeside Lou", "Big Mike", "Sunny", "Cody", "Captain Pete"][Math.floor(Math.random() * 5)];
-  let castAt = -9999, landed = true, achNew = [], target = null, inBag = true, netSave = false, st = "cast", ci = 0, mine = [], rival = [], down = false, powerT = 0, power = 0, great = false, timer = 0, biteAt = 0, msg = "", fish = null, weight = 0, F = null, rec = false, resText = "", earned = { xp: 0, coins: 0 }, btn = null, shakeT = 0, drops = [], rip = [], lastTier = null;
+  let agit = 0, ringT = 0, eatFx = false, castAt = -9999, landed = true, achNew = [], target = null, inBag = true, netSave = false, st = "cast", ci = 0, mine = [], rival = [], down = false, powerT = 0, power = 0, great = false, timer = 0, biteAt = 0, msg = "", fish = null, weight = 0, F = null, rec = false, resText = "", earned = { xp: 0, coins: 0 }, btn = null, shakeT = 0, drops = [], rip = [], lastTier = null;
   const setSt = (s) => { st = s; bg.dataset.state = s; };
   setSt("cast");
   const pickFish = (rand = Math.random) => {
@@ -4381,7 +4385,7 @@ function playClash(mode, locId, lureIdIn, onExit, duel) {
     blit(LAY.c);
     // mirror image of the shore and sky on the water. Fast phones bend it with tiny waves.
     { const al = TOD === "night" ? 0.16 : 0.26, rh = y0 * 0.95; ctx.globalAlpha = al;
-      if (Q < 1) { const calm = K === "ocean" || L.big ? 2.2 : K === "river" ? 1.6 : 1; for (let r = 0; r < rh; r += 6) ctx.drawImage(LAY.r, 0, r * dpr, W * dpr, 6 * dpr, Math.sin(t * 1.6 + r / 5) * (1 + r / y0 * 4) * calm, y0 + r, W, 6); }
+      if (Q < 1) { const calm = (K === "ocean" || L.big ? 2.2 : K === "river" ? 1.6 : 1) * (1 + agit * 2); for (let r = 0; r < rh; r += 6) ctx.drawImage(LAY.r, 0, r * dpr, W * dpr, 6 * dpr, Math.sin(t * 1.6 + r / 5) * (1 + r / y0 * 4) * calm, y0 + r, W, 6); }
       else ctx.drawImage(LAY.r, 0, 0, W * dpr, rh * dpr, 0, y0, W, rh);
       ctx.globalAlpha = 1; }
     if (Q < 1 && (TOD === "dawn" || TOD === "dusk")) for (let i = 0; i < 3; i++) { const mx = ((i * W * 0.45 + t * (6 + i * 3)) % (W * 1.5)) - W * 0.25, mg = ctx.createRadialGradient(mx, y0 + 6, 4, mx, y0 + 6, W * 0.4); mg.addColorStop(0, "rgba(255,255,255,.22)"); mg.addColorStop(1, "rgba(255,255,255,0)"); ctx.fillStyle = mg; ctx.fillRect(mx - W * 0.4, y0 - 24, W * 0.8, 60); }
@@ -4392,9 +4396,9 @@ function playClash(mode, locId, lureIdIn, onExit, duel) {
     if (Q < 2) for (let i = 0; i < 16; i++) { const ww = 30 - i * 1.4 + Math.sin(t * 3 + i * 1.3) * 8; if (ww > 2) { ctx.fillStyle = `rgba(255,248,210,${0.5 - i * 0.025})`; ctx.fillRect(W * 0.8 - ww / 2 + Math.sin(t * 1.5 + i) * 6, y0 + 4 + i * 11, ww, 2); } }
     for (const s of D.shadows) { const sx = ((s.x + t * s.v) % (W + 80) + W + 80) % (W + 80) - 40; ctx.fillStyle = "rgba(0,20,30,.18)"; ctx.beginPath(); ctx.ellipse(sx, s.y, s.s * 1.5, s.s * 0.55, 0, 0, 7); ctx.fill(); ctx.beginPath(); ctx.moveTo(sx - s.s * 1.4 * Math.sign(s.v), s.y); ctx.lineTo(sx - s.s * 2.2 * Math.sign(s.v), s.y - s.s * 0.5); ctx.lineTo(sx - s.s * 2.2 * Math.sign(s.v), s.y + s.s * 0.5); ctx.fill(); }
     ctx.strokeStyle = "rgba(255,255,255,.2)"; ctx.lineWidth = 2;
-    for (let i = 0; i < (Q >= 2 ? 3 : 6); i++) { const y = y0 + 30 + i * (H - y0) / 6.5; ctx.beginPath(); for (let x = 0; x <= W; x += 14) ctx.lineTo(x, y + Math.sin(x / 30 + now / 500 + i) * (K === "ocean" || L.big ? 6 : 3)); ctx.stroke(); }
+    for (let i = 0; i < (Q >= 2 ? 3 : 6); i++) { const y = y0 + 30 + i * (H - y0) / 6.5; ctx.beginPath(); for (let x = 0; x <= W; x += 14) ctx.lineTo(x, y + Math.sin(x / 30 + now / 500 + i) * (K === "ocean" || L.big ? 6 : 3) * (1 + agit * 2.4) + Math.sin(x / 13 - now / 170 + i) * agit * 3.2); ctx.stroke(); }
     // small bright wavelets: bigger and wider the closer they are to you, drifting with the wind
-    for (let i = 0; i < (Q >= 2 ? 10 : Q ? 24 : 46); i++) { const dpt = Math.pow(rnd(i * 5 + 2), 1.5), wy2 = y0 + 8 + dpt * (H * 0.88 - y0), wx = ((rnd(i * 5 + 1) * W + t * (6 + 10 * rnd(i + 9)) * (0.4 + dpt)) % (W + 40)) - 20, len = 5 + dpt * 26 + rnd(i + 4) * 6, al = (0.12 + 0.2 * Math.abs(Math.sin(t * 1.3 + i))) * (0.4 + dpt);
+    for (let i = 0; i < (Q >= 2 ? 10 : Q ? 24 : 46); i++) { const dpt = Math.pow(rnd(i * 5 + 2), 1.5), wy2 = y0 + 8 + dpt * (H * 0.88 - y0), wx = ((rnd(i * 5 + 1) * W + t * (6 + 10 * rnd(i + 9)) * (0.4 + dpt) * (1 + agit * 2.2)) % (W + 40)) - 20, len = 5 + dpt * 26 + rnd(i + 4) * 6, al = (0.12 + 0.2 * Math.abs(Math.sin(t * 1.3 + i))) * (0.4 + dpt) * (1 + agit * 0.9);
       ctx.strokeStyle = `rgba(255,255,255,${al})`; ctx.lineWidth = 1 + dpt * 1.5; ctx.beginPath(); ctx.moveTo(wx, wy2); ctx.quadraticCurveTo(wx + len / 2, wy2 - 1.5 - dpt * 2, wx + len, wy2); ctx.stroke(); }
     // caustics: moving net of light on the bottom of shallow water
     if (Q < 1 && !(K === "ocean" || L.big)) { ctx.strokeStyle = "rgba(255,255,230,.07)"; ctx.lineWidth = 1.5; for (let i = 0; i < 9; i++) { const cy2 = H * 0.62 + i * (H * 0.3 / 9); ctx.beginPath(); for (let x = 0; x <= W; x += 12) ctx.lineTo(x, cy2 + Math.sin(x / 22 + t * 1.2 + i * 1.9) * 5 + Math.cos(x / 41 - t * 0.8 + i) * 4); ctx.stroke(); } }
@@ -4414,6 +4418,7 @@ function playClash(mode, locId, lureIdIn, onExit, duel) {
     raf = requestAnimationFrame(frame);
     if (Q >= 2 && last && now - last < 28) return;                      // lightest mode draws about 30 times a second
     const raw = now - (last || now), dt = Math.min(0.05, raw / 1000); last = now; update(dt);
+    { const ph0 = F && st === "fight" ? F.ph : "", tg = st === "fight" ? (ph0 === "run" || ph0 === "thrash" || ph0 === "jump" ? 1 : 0.6) : st === "bite" ? 0.35 : 0; agit += (tg - agit) * Math.min(1, dt * 3); }      // the water gets rougher while a fish is on
     if (raw > 0 && ++nfr > 40) { ema += (Math.min(raw, 120) - ema) * 0.08;
       if (nfr % 30 === 0 && ema > 23 && Q < 2) { Q++; setPref("fcq", String(Q)); ema = 17; nfr = 0; resize(); } }      // stuttering, so go lighter
     ctx.save(); if (shakeT > 0) ctx.translate((Math.random() - 0.5) * 6, (Math.random() - 0.5) * 6);
@@ -4428,22 +4433,41 @@ function playClash(mode, locId, lureIdIn, onExit, duel) {
       ctx.strokeStyle = "rgba(255,255,255,.7)"; ctx.lineWidth = 1.1; ctx.beginPath(); ctx.moveTo(tip.x, tip.y); ctx.quadraticCurveTo((tip.x + px) / 2, (tip.y + py) / 2 + 12 * (1 - k), px, py); ctx.stroke();
       if (lureId === "worm") drawBobber(px, py, 0.75); else drawLure(lureId, px, py, 0.7, now); landed = false;
     } else if ((st === "wait" || st === "bite") && !landed) { landed = true; for (let i = 0; i < 10; i++) drops.push({ x: b.x, y: b.y, vx: (Math.random() - 0.5) * 90, vy: -60 - Math.random() * 90, a: 1 }); rip.push({ x: b.x, y: b.y, a: 1 }); rip.push({ x: b.x, y: b.y, a: 0.7 }); tick(500, 0.2, 0.18, 1); }
+    if (st !== "bite") eatFx = false;
     if ((st === "wait" || st === "bite") && !flying) {
+      const eaten = st === "bite" && biteAt >= 0.3, since = st === "bite" ? Math.max(0, biteAt - 0.3) : 0, rush = st === "bite" ? Math.min(1, biteAt / 0.3) : 0;
       const dip = st === "bite" ? 7 + Math.sin(now / 40) * 3 : Math.sin(now / 500) * 2 + Math.sin(now / 170 + 1) * 0.8;
       const sink = Math.min(1, Math.max(0, (now - castAt - 650) / 1100)), dep = lureId === "worm" ? 0 : Math.max(64, H * 0.1) * (1 - (1 - sink) * (1 - sink));      // lures sink down into the water after they land
-      ctx.strokeStyle = "rgba(255,255,255,.8)"; ctx.lineWidth = 1.2; ctx.beginPath(); ctx.moveTo(tip.x, tip.y); ctx.quadraticCurveTo((tip.x + b.x) / 2, Math.max(tip.y, b.y) + 26 + Math.sin(now / 900) * 3, b.x, b.y + dip); ctx.stroke();
-      ctx.fillStyle = "rgba(0,0,0,.18)"; ctx.beginPath(); ctx.ellipse(b.x + 3, b.y + dip + 9, 10, 3, 0, 0, 7); ctx.fill();
-      if (lureId === "worm") drawBobber(b.x, b.y + dip, 1);
-      else { const lx = b.x + Math.sin(now / 700) * 4, ly = b.y + dip + dep + (st === "bite" ? Math.sin(now / 35) * 2 : 0);
-        ctx.strokeStyle = "rgba(255,255,255,.5)"; ctx.lineWidth = 1.1; ctx.beginPath(); ctx.moveTo(b.x, b.y + dip); ctx.quadraticCurveTo(b.x + 8, b.y + dip + dep * 0.5, lx, ly - 8); ctx.stroke();      // the line goes down through the water
-        drawLureWet(lureId, lx, ly, 1, now);
-        const hz = ctx.createRadialGradient(lx, ly, 4, lx, ly, 38); hz.addColorStop(0, "rgba(60,150,180,.18)"); hz.addColorStop(1, "rgba(40,120,150,0)"); ctx.fillStyle = hz; ctx.beginPath(); ctx.arc(lx, ly, 38, 0, 7); ctx.fill(); }
-      ctx.strokeStyle = "rgba(255,255,255,.5)"; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.ellipse(b.x, b.y + 10, 16 + Math.sin(now / 400) * 3, 5, 0, 0, 7); ctx.stroke();
-      if (st === "bite") { ctx.strokeStyle = "rgba(255,255,255,.7)"; ctx.beginPath(); ctx.ellipse(b.x, b.y + 4, 18 + (biteAt / BITE_WINDOW * 38), 7 + biteAt / BITE_WINDOW * 13, 0, 0, 7); ctx.stroke();
-        if (target) { const a = now / 260; drawReal(target.n, b.x + Math.cos(a) * 38, b.y + (dep || 20) + Math.sin(a) * 8, fishR(target.n, target.w) * 0.75, Math.sin(a) > 0 ? -1 : 1, 0, false, true); }
+      const lx = b.x + (eaten ? 0 : Math.sin(now / 700) * 4), baitY = b.y + (dep || 24);
+      if (!eaten) { ctx.strokeStyle = "rgba(255,255,255,.8)"; ctx.lineWidth = 1.2; ctx.beginPath(); ctx.moveTo(tip.x, tip.y); ctx.quadraticCurveTo((tip.x + b.x) / 2, Math.max(tip.y, b.y) + 26 + Math.sin(now / 900) * 3, b.x, b.y + dip); ctx.stroke();
+        ctx.fillStyle = "rgba(0,0,0,.18)"; ctx.beginPath(); ctx.ellipse(b.x + 3, b.y + dip + 9, 10, 3, 0, 0, 7); ctx.fill(); }
+      if (!eaten) {
+        if (lureId === "worm") drawBobber(b.x, b.y + dip, 1);
+        else { const ly = b.y + dip + dep;
+          ctx.strokeStyle = "rgba(255,255,255,.5)"; ctx.lineWidth = 1.1; ctx.beginPath(); ctx.moveTo(b.x, b.y + dip); ctx.quadraticCurveTo(b.x + 8, b.y + dip + dep * 0.5, lx, ly - 8); ctx.stroke();      // the line goes down through the water
+          drawLureWet(lureId, lx, ly, 1, now);
+          const hz = ctx.createRadialGradient(lx, ly, 4, lx, ly, 38); hz.addColorStop(0, "rgba(60,150,180,.18)"); hz.addColorStop(1, "rgba(40,120,150,0)"); ctx.fillStyle = hz; ctx.beginPath(); ctx.arc(lx, ly, 38, 0, 7); ctx.fill(); }
+        ctx.strokeStyle = "rgba(255,255,255,.5)"; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.ellipse(b.x, b.y + 10, 16 + Math.sin(now / 400) * 3, 5, 0, 0, 7); ctx.stroke();
+      }
+      if (st === "bite" && target) {
+        const fr = fishR(target.n, target.w) * 0.75, side = (target.n.length % 2) ? 1 : -1;
+        let fx, fy, dir, wob = 0;
+        if (!eaten) { const e = 1 - Math.pow(1 - rush, 2); fx = lx + side * (1 - e) * 120; fy = baitY + Math.sin(now / 90) * 3; dir = -side; wob = Math.sin(now / 45) * 0.12; }      // it rushes at the lure
+        else { const a = since * 9 + (side > 0 ? 0 : 3.14), rr = 20 * Math.min(1, since * 6) + 6; fx = lx + Math.cos(a) * rr; fy = baitY + Math.sin(a) * rr * 0.4; dir = -Math.sin(a) >= 0 ? 1 : -1; wob = Math.sin(now / 40) * 0.3; }      // it turns in the water with the lure in its mouth
+        if (eaten && !eatFx) { eatFx = true; for (let i = 0; i < 12; i++) drops.push({ x: b.x, y: b.y, vx: (Math.random() - 0.5) * 140, vy: -80 - Math.random() * 120, a: 1 }); rip.push({ x: b.x, y: b.y, a: 1 }); rip.push({ x: b.x, y: b.y, a: 0.75 }); rip.push({ x: b.x, y: b.y, a: 0.5 }); tick(260, 0.25, 0.2, 1); }
+        if (eaten) {       // the lure is gone: a swirl in the water, and the bobber is pulled under
+          const sc = Math.min(1, since * 4); ctx.lineCap = "round";
+          for (let arm = 0; arm < 3; arm++) { ctx.strokeStyle = `rgba(255,255,255,${0.42 * (1 - since * 0.5)})`; ctx.lineWidth = 2; ctx.beginPath(); for (let th = 0; th < 4.4; th += 0.3) { const rr = (3 + th * 8) * sc * (1 + since * 0.9), an = th + arm * 2.09 + now / 130; const x = lx + Math.cos(an) * rr, y = baitY + Math.sin(an) * rr * 0.42; th === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y); } ctx.stroke(); }
+          ctx.strokeStyle = "rgba(255,255,255,.55)"; ctx.lineWidth = 1.6; ctx.beginPath(); ctx.ellipse(b.x, b.y + 6, 14 + since * 70, 5 + since * 20, 0, 0, 7); ctx.stroke();
+          if (lureId === "worm" && since < 0.28) { ctx.globalAlpha = 1 - since / 0.28; drawBobber(b.x, b.y + dip + since * 90, 1); ctx.globalAlpha = 1; }
+          ctx.strokeStyle = "rgba(255,255,255,.7)"; ctx.lineWidth = 1.2; ctx.beginPath(); ctx.moveTo(tip.x, tip.y); ctx.quadraticCurveTo((tip.x + b.x) / 2, Math.max(tip.y, b.y) + 12, b.x, b.y + 4); ctx.lineTo(fx, fy); ctx.stroke();      // the line is tight to the fish
+        }
+        drawReal(target.n, fx, fy, fr, dir, wob, false, true);
+        const fh = ctx.createRadialGradient(fx, fy, fr * 0.3, fx, fy, fr * 1.6); fh.addColorStop(0, "rgba(60,150,180,0)"); fh.addColorStop(1, "rgba(40,120,150,.22)"); ctx.fillStyle = fh; ctx.beginPath(); ctx.arc(fx, fy, fr * 1.6, 0, 7); ctx.fill();
         text("!", b.x, b.y - 34, 54, "#ffd36b");
-        if (upFinder && target) { const t3 = fcTier(target.n, target.w)[0];
-          text(upFinder >= 3 ? target.n : upFinder >= 2 ? `${t3} · about ${target.w.toFixed(1)} lb` : t3, b.x, b.y + 56, 17, "#aefcff"); } }
+        if (upFinder) { const t3 = fcTier(target.n, target.w)[0];
+          text(upFinder >= 3 ? target.n : upFinder >= 2 ? `${t3} · about ${target.w.toFixed(1)} lb` : t3, b.x, b.y + 56, 17, "#aefcff"); }
+      }
     }
     let fp = null;
     if (st === "fight") {
@@ -4457,6 +4481,9 @@ function playClash(mode, locId, lureIdIn, onExit, duel) {
       drawReal(fish, fp.x, fp.y, r, dir, wob, ph === "thrash" || airborne, true);
       if (!airborne) { const hg = ctx.createRadialGradient(fp.x, fp.y, r * 0.2, fp.x, fp.y, r * 1.5); hg.addColorStop(0, "rgba(120,170,190,.0)"); hg.addColorStop(1, "rgba(120,170,190,.22)"); ctx.fillStyle = hg; ctx.beginPath(); ctx.ellipse(fp.x, fp.y, r * 1.5, r * 0.8, 0, 0, 7); ctx.fill();
         ctx.strokeStyle = "rgba(255,255,255,.18)"; ctx.lineWidth = 1; for (let i = -1; i <= 1; i++) { ctx.beginPath(); ctx.moveTo(fp.x - r * 1.2, fp.y + i * r * 0.3); for (let x = -r * 1.2; x <= r * 1.2; x += 8) ctx.lineTo(fp.x + x, fp.y + i * r * 0.3 + Math.sin(x / 9 + now / 160) * 1.5); ctx.stroke(); } }
+      ringT -= dt; if (!airborne && ringT <= 0) { ringT = ((ph === "run" || ph === "thrash") ? 0.16 : 0.38) * (Q >= 2 ? 2 : 1); rip.push({ x: fp.x, y: fp.y, a: 1 }); }
+      if (ph === "thrash" && !airborne && Math.random() < dt * 14) drops.push({ x: fp.x, y: fp.y, vx: (Math.random() - 0.5) * 160, vy: -90 - Math.random() * 120, a: 1 });
+      if (!airborne && (ph === "run" || ph === "pull" || ph === "thrash")) { const wk = 46 + 44 * agit; ctx.strokeStyle = "rgba(255,255,255,.3)"; ctx.lineWidth = 1.6; ctx.beginPath(); ctx.moveTo(fp.x - dir * r * 1.1, fp.y + 2); ctx.lineTo(fp.x - dir * (r * 1.1 + wk), fp.y - 13 - Math.sin(now / 90) * 2); ctx.moveTo(fp.x - dir * r * 1.1, fp.y + 2); ctx.lineTo(fp.x - dir * (r * 1.1 + wk), fp.y + 17 + Math.sin(now / 110) * 2); ctx.stroke(); }
       if (ph === "run" || ph === "thrash") { ctx.strokeStyle = "rgba(255,255,255,.55)"; ctx.lineWidth = 2; for (let i = 0; i < 2; i++) { ctx.beginPath(); ctx.ellipse(fp.x, fp.y + 4, 30 + ((now / 8 + i * 60) % 120), 10 + ((now / 20 + i * 20) % 36), 0, 0, 7); ctx.globalAlpha = 0.5; ctx.stroke(); ctx.globalAlpha = 1; } }
     }
     for (const d of drops) { d.x += d.vx * dt; d.y += d.vy * dt; d.vy += 420 * dt; d.a -= dt * 1.4; ctx.fillStyle = `rgba(255,255,255,${Math.max(0, d.a)})`; ctx.beginPath(); ctx.arc(d.x, d.y, 2.2, 0, 7); ctx.fill(); } for (let i = drops.length - 1; i >= 0; i--) if (drops[i].a <= 0) drops.splice(i, 1);
@@ -4496,13 +4523,45 @@ function playClash(mode, locId, lureIdIn, onExit, duel) {
     if (st === "wait") text("Wait for a bite...", W / 2, H * 0.2, 20);
     if (st === "bite") text("TAP NOW!", W / 2, H * 0.2, 30, "#ffd36b");
     if (st === "fight") {
-      const gx = W - 44, gy = H * 0.3, gh = H * 0.42;
-      ctx.fillStyle = "rgba(0,0,0,.4)"; ctx.fillRect(gx, gy, 26, gh); ctx.fillStyle = "#4caf50"; ctx.fillRect(gx, gy + gh * 0.28, 26, gh * 0.42); ctx.fillStyle = "#d9423a"; ctx.fillRect(gx, gy, 26, gh * 0.28);
-      const ty = gy + gh * (1 - Math.min(1, F.tn ?? F.t)); ctx.fillStyle = "#fff"; ctx.fillRect(gx - 6, ty - 3, 38, 6); text("LINE", gx + 13, gy - 8, 13);
+      const gx = W - 54, gy = H * 0.3, gh = H * 0.42, gw = 36;
+      lineGauge(gx, gy, gw, gh, now, F.tn ?? F.t);
+      const ty = gy + gh * (1 - Math.min(1, F.tn ?? F.t)); ctx.fillStyle = "#fff"; ctx.fillRect(gx - 6, ty - 3, gw + 12, 6); text("LINE", gx + gw / 2, gy - 8, 13);
       ctx.fillStyle = "rgba(0,0,0,.4)"; ctx.fillRect(16, gy, 14, gh); ctx.fillStyle = "#ffd36b"; const dh = gh * (1 - F.d / 100); ctx.fillRect(16, gy + gh - dh, 14, dh);
       const msgs = { rest: ["It's tiring! Reel it in!", "#fff"], pull: ["Reel steadily", "#fff"], run: ["FISH RUNNING! Let go!", "#ffb74d"], thrash: ["It's thrashing! Careful!", "#ffb74d"], jump: ["It jumped! Let go!", "#ff8a80"] }[F.ph];
       ctx.shadowColor = "rgba(0,0,0,.6)"; ctx.shadowBlur = Q ? 0 : 5; text(msgs[0], W / 2, H * 0.2, 22, msgs[1]); ctx.shadowBlur = 0;
     }
+  }
+  /* The line gauge is drawn as real line: a loose untied knot at the bottom (too slack), a straight clean line in the middle (just right), and line that frays into 4 damaged strands at the top (about to snap). */
+  function lineGauge(gx, gy, gw, gh, now, tn) {
+    const cx = gx + gw / 2, yR = gy + gh * 0.28, yG = gy + gh * 0.70, kh = gy + gh - yG, hr = yR - gy, jit = tn > 0.72 ? 1.7 : 0.6;
+    ctx.save(); ctx.lineCap = "round"; ctx.lineJoin = "round";
+    ctx.fillStyle = "rgba(0,0,0,.42)"; rrect(gx, gy, gw, gh, 9); ctx.fill(); rrect(gx, gy, gw, gh, 9); ctx.clip();
+    ctx.fillStyle = "rgba(217,66,58,.3)"; ctx.fillRect(gx, gy, gw, hr); ctx.fillStyle = "rgba(76,175,80,.26)"; ctx.fillRect(gx, yR, gw, yG - yR);
+    ctx.fillStyle = "rgba(255,255,255,.2)"; ctx.fillRect(gx, yR - 1, gw, 2); ctx.fillRect(gx, yG - 1, gw, 2);
+    // middle: normal, tight line
+    ctx.strokeStyle = "rgba(0,0,0,.4)"; ctx.lineWidth = 5; ctx.beginPath(); ctx.moveTo(cx, yR - 2); ctx.lineTo(cx, yG + 2); ctx.stroke();
+    ctx.strokeStyle = "#eef3f4"; ctx.lineWidth = 3; ctx.beginPath(); ctx.moveTo(cx, yR - 2); ctx.lineTo(cx, yG + 2); ctx.stroke();
+    ctx.strokeStyle = "#fff"; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(cx - 0.9, yR); ctx.lineTo(cx - 0.9, yG); ctx.stroke();
+    // bottom: an undone knot, loops hanging loose
+    ctx.save(); ctx.translate(cx + Math.sin(now / 520) * 1.2, yG); ctx.scale(gw / 38, kh / 96);
+    const knot = () => { ctx.beginPath(); ctx.moveTo(0, -2); ctx.bezierCurveTo(0, 10, -13, 14, -12, 28); ctx.bezierCurveTo(-11, 42, 12, 40, 11, 27); ctx.bezierCurveTo(10, 14, -11, 22, -10, 40); ctx.bezierCurveTo(-9, 56, 9, 52, 9, 64); ctx.bezierCurveTo(9, 74, -4, 74, -6, 84); ctx.lineTo(-3, 92); };
+    ctx.strokeStyle = "rgba(0,0,0,.4)"; ctx.lineWidth = 5.4; knot(); ctx.stroke(); ctx.beginPath(); ctx.moveTo(9, 64); ctx.bezierCurveTo(15, 70, 14, 80, 8, 90); ctx.stroke();
+    ctx.strokeStyle = "#eef3f4"; ctx.lineWidth = 3; knot(); ctx.stroke(); ctx.beginPath(); ctx.moveTo(9, 64); ctx.bezierCurveTo(15, 70, 14, 80, 8, 90); ctx.stroke();
+    ctx.strokeStyle = "rgba(255,255,255,.9)"; ctx.lineWidth = 1; knot(); ctx.stroke();
+    ctx.restore();
+    // top: the line splits into 4 strands that end ragged and damaged
+    ctx.strokeStyle = "rgba(0,0,0,.35)"; ctx.lineWidth = 5; ctx.beginPath(); ctx.moveTo(cx, yR + 2); ctx.lineTo(cx, yR - 7); ctx.stroke();
+    ctx.strokeStyle = "#f6e9e6"; ctx.lineWidth = 3; ctx.beginPath(); ctx.moveTo(cx, yR + 2); ctx.lineTo(cx, yR - 7); ctx.stroke();
+    const xo = [-0.36, -0.12, 0.13, 0.37], ln = [0.8, 0.96, 0.6, 0.88];
+    for (let i = 0; i < 4; i++) {
+      const wb = Math.sin(now / (55 + i * 13) + i * 2) * jit, ex = cx + xo[i] * gw + wb, ey = yR - hr * ln[i], mx = cx + xo[i] * gw * 0.35 + wb * 0.6, my = yR - 7 - (yR - 7 - ey) * 0.5;
+      ctx.strokeStyle = "rgba(0,0,0,.3)"; ctx.lineWidth = 2.8; ctx.beginPath(); ctx.moveTo(cx, yR - 7); ctx.quadraticCurveTo(mx, my, ex, ey); ctx.stroke();
+      ctx.strokeStyle = i % 2 ? "#ffd9d3" : "#f3e1dc"; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.moveTo(cx, yR - 7); ctx.quadraticCurveTo(mx, my, ex, ey); ctx.stroke();
+      if (i === 1 || i === 3) { ctx.strokeStyle = "#ffd9d3"; ctx.lineWidth = 1.2; ctx.beginPath(); ctx.moveTo(mx, my); ctx.lineTo(mx + (i === 1 ? -5 : 5), my - 3); ctx.lineTo(mx + (i === 1 ? 1 : -1), my - 7); ctx.stroke(); }      // a kink where the strand is worn
+      ctx.strokeStyle = "rgba(255,225,215,.8)"; ctx.lineWidth = 0.9; for (let k = 0; k < 3; k++) { ctx.beginPath(); ctx.moveTo(ex, ey); ctx.lineTo(ex + (k - 1) * 3.2 + wb * 0.5, ey - 4 - (k % 2) * 3); ctx.stroke(); }      // frayed fibers
+      ctx.fillStyle = "#7a463c"; ctx.beginPath(); ctx.arc(ex, ey, 1.5, 0, 7); ctx.fill();      // burnt, damaged tip
+    }
+    ctx.restore();
   }
   function rrect(x, y, w, h, r) { ctx.beginPath(); ctx.moveTo(x + r, y); ctx.arcTo(x + w, y, x + w, y + h, r); ctx.arcTo(x + w, y + h, x, y + h, r); ctx.arcTo(x, y + h, x, y, r); ctx.arcTo(x, y, x + w, y, r); ctx.closePath(); }
   function button(label, y) { const w = Math.min(280, W * 0.7), h = 52, x = (W - w) / 2; btn = { x, y, w, h }; ctx.fillStyle = "#d4442a"; rrect(x, y, w, h, 26); ctx.fill(); ctx.strokeStyle = "rgba(255,255,255,.7)"; ctx.lineWidth = 2; ctx.stroke(); text(label, W / 2, y + 34, 21, "#fff"); }
