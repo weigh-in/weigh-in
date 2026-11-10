@@ -915,9 +915,12 @@ function feedPosts() {
 /* What's new. Newest first. Add a new entry on top each time the app changes. */
 /* Bump APP_VERSION every time you change the app, and add a matching entry on top of UPDATES (with v: the same number).
    Phones check app.js every few minutes and offer the new version on their own. */
-const APP_VERSION = 33;
+const APP_VERSION = 34;
 try { if ((parseInt(localStorage.getItem("weighin-appv"), 10) || 0) < APP_VERSION) localStorage.setItem("weighin-appv", String(APP_VERSION)); } catch { /* private mode */ }
 const UPDATES = [
+  { id: "2026-11-09n", v: 34, date: "Nov 9", title: "Lures sink in the water", items: [
+    "Spinner, crankbait and minnow jig now sink down under the water after you cast. The line goes down to them.",
+    "Fish swim up to the lure down in the water when they bite."] },
   { id: "2026-11-09m", v: 33, date: "Nov 9", title: "New bobber and lures in the game", items: [
     "The bobber only shows when you fish with the worm. It looks like a real push-button bobber now: white top, red bottom, red lip and a red button.",
     "Spinner, crankbait and minnow jig now show the actual lure in the water, with no bobber.",
@@ -4415,12 +4418,17 @@ function playClash(mode, locId, lureIdIn, onExit, duel) {
     } else if ((st === "wait" || st === "bite") && !landed) { landed = true; for (let i = 0; i < 10; i++) drops.push({ x: b.x, y: b.y, vx: (Math.random() - 0.5) * 90, vy: -60 - Math.random() * 90, a: 1 }); rip.push({ x: b.x, y: b.y, a: 1 }); rip.push({ x: b.x, y: b.y, a: 0.7 }); tick(500, 0.2, 0.18, 1); }
     if ((st === "wait" || st === "bite") && !flying) {
       const dip = st === "bite" ? 7 + Math.sin(now / 40) * 3 : Math.sin(now / 500) * 2 + Math.sin(now / 170 + 1) * 0.8;
+      const sink = Math.min(1, Math.max(0, (now - castAt - 650) / 1100)), dep = lureId === "worm" ? 0 : Math.max(64, H * 0.1) * (1 - (1 - sink) * (1 - sink));      // lures sink down into the water after they land
       ctx.strokeStyle = "rgba(255,255,255,.8)"; ctx.lineWidth = 1.2; ctx.beginPath(); ctx.moveTo(tip.x, tip.y); ctx.quadraticCurveTo((tip.x + b.x) / 2, Math.max(tip.y, b.y) + 26 + Math.sin(now / 900) * 3, b.x, b.y + dip); ctx.stroke();
       ctx.fillStyle = "rgba(0,0,0,.18)"; ctx.beginPath(); ctx.ellipse(b.x + 3, b.y + dip + 9, 10, 3, 0, 0, 7); ctx.fill();
-      if (lureId === "worm") drawBobber(b.x, b.y + dip, 1); else drawLure(lureId, b.x, b.y + dip + 12 + (st === "bite" ? Math.sin(now / 35) * 2 : 0), 1, now);
+      if (lureId === "worm") drawBobber(b.x, b.y + dip, 1);
+      else { const lx = b.x + Math.sin(now / 700) * 4, ly = b.y + dip + dep + (st === "bite" ? Math.sin(now / 35) * 2 : 0);
+        ctx.strokeStyle = "rgba(255,255,255,.5)"; ctx.lineWidth = 1.1; ctx.beginPath(); ctx.moveTo(b.x, b.y + dip); ctx.quadraticCurveTo(b.x + 8, b.y + dip + dep * 0.5, lx, ly - 8); ctx.stroke();      // the line goes down through the water
+        drawLure(lureId, lx, ly, 1, now);
+        const hz = ctx.createRadialGradient(lx, ly, 4, lx, ly, 34); hz.addColorStop(0, "rgba(60,150,180,0)"); hz.addColorStop(1, "rgba(40,120,150,.2)"); ctx.fillStyle = hz; ctx.beginPath(); ctx.arc(lx, ly, 34, 0, 7); ctx.fill(); }
       ctx.strokeStyle = "rgba(255,255,255,.5)"; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.ellipse(b.x, b.y + 10, 16 + Math.sin(now / 400) * 3, 5, 0, 0, 7); ctx.stroke();
       if (st === "bite") { ctx.strokeStyle = "rgba(255,255,255,.7)"; ctx.beginPath(); ctx.ellipse(b.x, b.y + 4, 18 + (biteAt / BITE_WINDOW * 38), 7 + biteAt / BITE_WINDOW * 13, 0, 0, 7); ctx.stroke();
-        if (target) { const a = now / 260; drawReal(target.n, b.x + Math.cos(a) * 38, b.y + 20 + Math.sin(a) * 8, fishR(target.n, target.w) * 0.75, Math.sin(a) > 0 ? -1 : 1, 0, false, true); }
+        if (target) { const a = now / 260; drawReal(target.n, b.x + Math.cos(a) * 38, b.y + (dep || 20) + Math.sin(a) * 8, fishR(target.n, target.w) * 0.75, Math.sin(a) > 0 ? -1 : 1, 0, false, true); }
         text("!", b.x, b.y - 34, 54, "#ffd36b");
         if (upFinder && target) { const t3 = fcTier(target.n, target.w)[0];
           text(upFinder >= 3 ? target.n : upFinder >= 2 ? `${t3} · about ${target.w.toFixed(1)} lb` : t3, b.x, b.y + 56, 17, "#aefcff"); } }
