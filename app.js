@@ -166,7 +166,7 @@ function badText(text) {
   return leet.split(/[^a-z]+/).some((w) => BLOCK_WORDS.has(w));
 }
 const NO_SLURS = "That includes language that isn't allowed here. Please change it.";
-const PERMS = [["deletePosts", "Delete catches"], ["deleteComments", "Delete comments"], ["reports", "See and handle reports"], ["ban", "Ban and unban anglers"]];
+const PERMS = [["deletePosts", "Delete catches"], ["deleteComments", "Delete comments"], ["reports", "See and handle reports"], ["ban", "Ban and unban anglers"], ["warn", "Warn anglers"]];
 const MODERN_TILES = "https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}";
 const MODERN_OPTS = { maxZoom: 19, attribution: "Tiles &copy; Esri, HERE, Garmin, OpenStreetMap contributors" };
 const US_STATES = [["AL","Alabama"],["AK","Alaska"],["AZ","Arizona"],["AR","Arkansas"],["CA","California"],["CO","Colorado"],["CT","Connecticut"],["DE","Delaware"],["DC","District of Columbia"],["FL","Florida"],["GA","Georgia"],["HI","Hawaii"],["ID","Idaho"],["IL","Illinois"],["IN","Indiana"],["IA","Iowa"],["KS","Kansas"],["KY","Kentucky"],["LA","Louisiana"],["ME","Maine"],["MD","Maryland"],["MA","Massachusetts"],["MI","Michigan"],["MN","Minnesota"],["MS","Mississippi"],["MO","Missouri"],["MT","Montana"],["NE","Nebraska"],["NV","Nevada"],["NH","New Hampshire"],["NJ","New Jersey"],["NM","New Mexico"],["NY","New York"],["NC","North Carolina"],["ND","North Dakota"],["OH","Ohio"],["OK","Oklahoma"],["OR","Oregon"],["PA","Pennsylvania"],["RI","Rhode Island"],["SC","South Carolina"],["SD","South Dakota"],["TN","Tennessee"],["TX","Texas"],["UT","Utah"],["VT","Vermont"],["VA","Virginia"],["WA","Washington"],["WV","West Virginia"],["WI","Wisconsin"],["WY","Wyoming"]];
@@ -301,6 +301,7 @@ function startApp() {
     const b = document.querySelector("#rc-btn"); if (b) b.hidden = !S.recaps.length;
     if (document.querySelector("#rc-list")) paintRecaps();
   }, () => {}));
+  unsubs.push(onSnapshot(query(collection(db, "warnings"), where("to", "==", uid)), (sn) => showWarnings(sn.docs.map((d) => ({ id: d.id, ...d.data({ serverTimestamps: "estimate" }) }))), () => {}));
   unsubs.push(() => { msgUns.forEach((u) => u()); msgUns.clear(); S.unread.clear(); S.chatOpen = null; });
   setTimeout(() => { if (S.user && S.user.uid === uid && wrapSeason() && !getPref("wrapped" + wrapYear(), "")) openWrapped(wrapYear(), true); }, 6000);
   unsubs.push(onSnapshot(query(collection(db, "posts"), orderBy("createdAt", "desc"), limit(40)), (s) => {
@@ -979,9 +980,12 @@ function feedPosts() {
 /* What's new. Newest first. Add a new entry on top each time the app changes. */
 /* Bump APP_VERSION every time you change the app, and add a matching entry on top of UPDATES (with v: the same number).
    Phones check app.js every few minutes and offer the new version on their own. */
-const APP_VERSION = 45;
+const APP_VERSION = 46;
 try { if ((parseInt(localStorage.getItem("weighin-appv"), 10) || 0) < APP_VERSION) localStorage.setItem("weighin-appv", String(APP_VERSION)); } catch { /* private mode */ }
 const UPDATES = [
+  { id: "2026-11-11e", v: 46, date: "Nov 11", title: "Warnings", items: [
+    "The owner and moderators can now send a warning to an angler. It shows up as a pop-up they have to read and tap I understand.",
+    "Moderators need the new Warn anglers permission. The owner turns it on in Make mod."] },
   { id: "2026-11-11d", v: 45, date: "Nov 11", title: "Post your year in fish", items: [
     "At the end of your Year in fish slideshow, tap Post to feed to share it. Everyone can watch it.",
     "The new 🎞️ button at the top of the feed shows everyone's year slideshows. Tap one to watch.",
@@ -1236,6 +1240,7 @@ function makeCard(p) {
       mine || (editOn() && canOn("deletePosts", p.uid)) ? el("div", null, el("button", { type: "button", "aria-label": "Delete this post", html: ICON.trash, onclick: () => deletePost(p) }), el("small", null, "Delete")) : null,
       !mine ? el("div", null, el("button", { type: "button", "aria-label": "Report this post", html: ICON.flag, onclick: () => reportPost(p) }), el("small", null, "Report")) : null,
       editOn() && S.owner ? el("div", null, el("button", { type: "button", "aria-label": "Rename this catch", "data-rename-post": p.id, html: ICON.edit || "✏️", onclick: () => openPostEdit(p.id, p.species) }), el("small", null, "Rename")) : null,
+      editOn() && can("warn") && !mine && p.uid !== OWNER_UID ? el("div", null, el("button", { type: "button", "aria-label": "Warn this angler", style: "font-size:20px", onclick: () => warnUser(p.uid, p.name) }, "⚠️"), el("small", null, "Warn")) : null,
       editOn() && can("ban") && !mine && p.uid !== OWNER_UID ? el("div", null, el("button", { type: "button", "aria-label": "Ban this angler", html: ICON.ban, onclick: () => banUser(p.uid, p.name) }), el("small", null, "Ban")) : null));
 }
 function paintLikes() {
@@ -1613,6 +1618,44 @@ async function deletePost(p) {
 /* ======================= owner tools: reports, bans ======================= */
 let ownerUns = [];
 function stopOwner() { ownerUns.splice(0).forEach((u) => u()); }
+const WARN_REASONS = ["Please post fishing photos only.", "Please keep comments and chat kind. No rude or hateful words.", "That post broke the rules. Please don't do it again.", "Next time you may be banned."];
+function warnUser(uid, name) {
+  if (!can("warn") || !uid || uid === S.user.uid || uid === OWNER_UID) return;
+  const ta = el("textarea", { id: "warn-text", maxlength: 300, rows: 4, placeholder: "What should they know?", style: "width:100%;resize:vertical" });
+  const close = () => bg.remove();
+  const bg = el("div", { class: "sheet-bg", onclick: (e) => { if (e.target === bg) close(); } },
+    el("div", { class: "sheet", role: "dialog", "aria-label": "Warn " + name },
+      el("div", { class: "sheet-h" }, el("h2", null, "⚠️ Warn @" + name), el("button", { class: "link", type: "button", onclick: close }, "Cancel")),
+    el("div", { class: "stack", style: "padding:0 16px 16px;gap:12px" },
+      el("p", { class: "hint" }, "They will see this as a pop-up the next time they open Weigh-In."),
+      el("div", { class: "chips" }, WARN_REASONS.map((r, i) => el("button", { class: "chip", type: "button", "data-reason": String(i), onclick: () => { ta.value = r; } }, r.replace(/\.$/, "")))),
+      ta,
+      el("button", { class: "btn wide", type: "button", id: "warn-send", onclick: async (e) => {
+        const text = ta.value.trim(); if (!text) { toast("Write what the warning says."); return; }
+        e.target.disabled = true;
+        try { await addDoc(collection(db, "warnings"), { to: uid, toName: String(name).slice(0, 30), by: S.user.uid, byName: S.name, text, ack: false, createdAt: serverTimestamp() }); toast(`Warning sent to @${name}.`); close(); }
+        catch (err) { toast(errText(err)); e.target.disabled = false; }
+      } }, "Send warning"))));
+  document.body.append(bg);
+}
+let warnQ = [];
+function showWarnings(list) {
+  warnQ = list.filter((w) => !w.ack).sort((a, b) => (a.createdAt?.toMillis?.() || 0) - (b.createdAt?.toMillis?.() || 0));
+  if (!warnQ.length || document.querySelector("#warn-pop")) return;
+  const w = warnQ[0];
+  const bg = el("div", { class: "sheet-bg", id: "warn-pop", style: "z-index:10000" },
+    el("div", { class: "sheet", role: "alertdialog", "aria-label": "Warning" },
+      el("div", { class: "sheet-h" }, el("h2", null, "⚠️ Warning")),
+    el("div", { class: "stack", style: "padding:0 16px 16px;gap:12px" },
+      el("p", null, "The Weigh-In team sent you a warning:"),
+      el("p", { style: "font-weight:700;overflow-wrap:anywhere" }, w.text),
+      el("p", { class: "hint" }, "Fishing photos only, no slurs or hate, be kind. Breaking the rules again can get an account banned."),
+      el("button", { class: "btn wide", type: "button", id: "warn-ok", onclick: async () => {
+        try { await updateDoc(doc(db, "warnings", w.id), { ack: true }); } catch (err) { toast(errText(err)); return; }
+        bg.remove();
+      } }, "I understand"))));
+  document.body.append(bg);
+}
 async function banUser(uid, name) {
   if (!can("ban")) return;
   if (uid === S.user.uid) { toast("You can't ban yourself."); return; }
@@ -1669,6 +1712,7 @@ function viewOwner(p) {
         el("div", { class: "row", style: "gap:12px" },
           can("deletePosts") ? el("button", { class: "link danger small", type: "button", onclick: () => ownerDeletePost(r, reports) }, "Delete post") : null,
           S.owner ? el("button", { class: "link small", type: "button", onclick: () => openPostEdit(r.postId, r.species) }, "Edit name") : null,
+          can("warn") ? el("button", { class: "link small", type: "button", onclick: () => warnUser(r.postUid, r.postName) }, "Warn") : null,
           can("ban") ? el("button", { class: "link danger small", type: "button", onclick: () => banUser(r.postUid, r.postName) }, "Ban") : null,
           el("button", { class: "link small", type: "button", onclick: () => deleteDoc(doc(db, "reports", r.id)).catch((e) => toast(errText(e))) }, "Dismiss")))))) : [el("p", { class: "empty" }, "No reports. All quiet.")]));
   const paintMembers = () => { const rows = users.filter((u) => u.id !== S.user.uid);
@@ -1678,6 +1722,7 @@ function viewOwner(p) {
       el("span", { class: "row", style: "gap:8px" },
         S.owner ? el("button", { class: "btn ghost small", type: "button", "data-rename": u.id, onclick: () => openOwnerRename(u.id, u.name) }, "Rename") : null,
         S.owner ? el("button", { class: "btn ghost small", type: "button", onclick: () => openModEditor(u.id, u.name, mods.get(u.id)) }, mods.has(u.id) ? "Edit mod" : "Make mod") : null,
+        can("warn") && u.id !== OWNER_UID && u.id !== S.user.uid ? el("button", { class: "btn ghost small", type: "button", "data-warn": u.id, onclick: () => warnUser(u.id, u.name) }, "Warn") : null,
         can("ban") ? (bans.has(u.id) ? el("button", { class: "btn ghost small", type: "button", onclick: () => unbanUser(u.id, u.name) }, "Unban")
           : el("button", { class: "btn small", type: "button", onclick: () => banUser(u.id, u.name) }, "Ban")) : null))) : [el("p", { class: "empty" }, "No other anglers yet.")])); };
   if (can("reports")) ownerUns.push(onSnapshot(query(collection(db, "reports"), orderBy("createdAt", "desc"), limit(50)), (s) => { reports = s.docs.map((d) => ({ id: d.id, ...d.data({ serverTimestamps: "estimate" }) })); paintReports(); }, () => reportsBox.replaceChildren(el("p", { class: "muted" }, "Couldn't load reports."))));
@@ -1726,6 +1771,7 @@ function openAngler(uid, name) {
         el("div", null, el("b", null, String(likes)), el("span", null, "Likes"))),
       cashTag(u0?.cash) ? cashButton(cashTag(u0.cash), `💵 ${cashTag(u0.cash)} on Cash App`) : null,
       fav ? el("p", { class: "muted small" }, `Most catches on: ${fav[0].charAt(0).toUpperCase() + fav[0].slice(1)} · ${pins} map pin${pins === 1 ? "" : "s"}`) : null,
+      editOn() && can("warn") && uid !== S.user.uid && uid !== OWNER_UID ? el("button", { class: "link small", type: "button", id: "prof-warn", style: "align-self:flex-start", onclick: () => warnUser(uid, name) }, `⚠️ Warn @${name}`) : null,
       editOn() && can("ban") && uid !== S.user.uid && uid !== OWNER_UID ? el("button", { class: "link danger small", type: "button", style: "align-self:flex-start", onclick: () => banUser(uid, name) }, `Ban @${name}`) : null,
       ...(rows.length ? rows.map((c) => el("div", { class: "comment", style: "flex-direction:row;gap:12px;align-items:center" },
         c.photo ? el("img", { src: c.photo, alt: `${c.species} photo`, style: "width:72px;height:72px;object-fit:cover;border-radius:10px;flex:none" }) : null,
