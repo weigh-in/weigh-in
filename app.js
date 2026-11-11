@@ -295,9 +295,12 @@ function startApp() {
   stopAll(); S.postsSeen = false; S.cash = ""; getUser(S.user.uid).then((u) => { S.cash = cashTag(u?.cash); if (S.tab === "me") renderTab(); }); S.trade = null; S.tradeAll = []; S.tradeMine = []; S.offIn = []; S.offOut = []; S.tradeErr = false;
   const uid = S.user.uid;
   fcCloudSync();
+  watchMine();
   unsubs.push(onSnapshot(query(collection(db, "posts"), orderBy("createdAt", "desc"), limit(40)), (s) => {
     S.posts = s.docs.map((d) => ({ id: d.id, ...d.data({ serverTimestamps: "estimate" }) }));
     if (S.postsSeen) s.docChanges().forEach((ch) => { if (ch.type !== "added") return; const p = { id: ch.doc.id, ...ch.doc.data({ serverTimestamps: "estimate" }) }; if (p.pb && p.uid !== uid) pbAlert(p); });
+    if (S.postsSeen) s.docChanges().forEach((ch) => { if (ch.type === "added") checkBeaten([{ id: ch.doc.id, ...ch.doc.data({ serverTimestamps: "estimate" }) }]); });
+    else setTimeout(() => { const since = +getPref("pbseenAt", "0"); if (since) checkBeaten(S.posts.filter((x) => (x.createdAt?.toMillis?.() || 0) > since)); setPref("pbseenAt", String(Date.now())); }, 3500);
     S.postsSeen = true;
     if (S.tab === "feed") renderFeedCards();
   }, () => {}));
@@ -515,6 +518,45 @@ function viewBite(p) {
   if (saved && typeof saved.lat === "number") loadWx(saved); else box.append(wxPicker(loadWx));
   S.biteChart = lureChart(); p.append(S.biteChart);
 }
+/* Real river gauges from the US Geological Survey (free, no key). */
+async function loadGauges(box, loc) {
+  box.replaceChildren(el("p", { class: "muted" }, "Looking for river gauges near " + loc.name + "…"));
+  try {
+    const d = 0.4, bb = [loc.lng - d, loc.lat - d, loc.lng + d, loc.lat + d].map((x) => x.toFixed(4)).join(",");
+    const r = await fetch(`https://waterservices.usgs.gov/nwis/iv/?format=json&bBox=${bb}&parameterCd=00060,00065&siteType=ST&siteStatus=active&period=PT6H`);
+    if (!r.ok) throw new Error("The river service said no (" + r.status + ").");
+    const j = await r.json(), by = new Map();
+    for (const ts of j.value?.timeSeries || []) {
+      const code = ts.sourceInfo.siteCode[0].value, g = ts.sourceInfo.geoLocation?.geographicLocation;
+      if (!g) continue;
+      const vals = (ts.values?.[0]?.value || []).filter((v) => v.value !== "" && +v.value > -999990);
+      if (!vals.length) continue;
+      if (!by.has(code)) by.set(code, { code, name: ts.sourceInfo.siteName, lat: g.latitude, lng: g.longitude, mi: km(loc, { lat: g.latitude, lng: g.longitude }) / 1.609 });
+      const o = by.get(code), key = ts.variable.variableCode[0].value === "00060" ? "flow" : "stage";
+      o[key] = { now: +vals[vals.length - 1].value, then: +vals[0].value }; o.time = vals[vals.length - 1].dateTime;
+    }
+    const sites = [...by.values()].sort((a, b) => a.mi - b.mi).slice(0, 10);
+    const trend = (o) => { const m = o.flow || o.stage; if (!m) return null; const base = Math.max(Math.abs(m.then), o.flow ? 1 : 0.5), pct = (m.now - m.then) / base;
+      return pct > 0.15 ? ["⬆️ Rising fast", "Water is climbing and getting muddy. Fish the slack water, eddies and edges, and be careful near the bank."]
+        : pct > 0.03 ? ["↗️ Rising", "A little more water often gets fish feeding. Try the edges and the mouths of creeks."]
+        : pct < -0.15 ? ["⬇️ Dropping fast", "Water is falling quickly. Fish can be spooky. Try deeper holes."]
+        : pct < -0.03 ? ["↘️ Falling", "Water is clearing up. A good time to fish."]
+        : ["➡️ Steady", "Steady water. Fish act normally."]; };
+    const rows = sites.map((o) => { const t = trend(o), nm = o.name.replace(/\b(\w)(\w*)/g, (m, a, b) => a + b.toLowerCase()).replace(/\bNr\b/g, "near").replace(/\bAt\b/g, "at").replace(/\bBlw\b/g, "below").replace(/\bAbv\b/g, "above").replace(/\bR\b/g, "River").replace(/\bCk\b/g, "Creek").replace(/,\s*([A-Za-z]{2})$/, (m, c) => ", " + c.toUpperCase());
+      return el("div", { class: "card-lite stack", style: "gap:6px;padding:14px;border:2px solid var(--line, #c9d6de);border-radius:14px", "data-gauge": o.code },
+        el("div", { class: "row spread", style: "gap:8px;flex-wrap:nowrap" }, el("b", { style: "overflow-wrap:anywhere" }, nm), el("span", { class: "muted small", style: "white-space:nowrap" }, o.mi.toFixed(o.mi < 10 ? 1 : 0) + " mi")),
+        el("div", { class: "cond-grid" },
+          o.stage ? condTile("Water level", o.stage.now.toFixed(2) + " ft", "gauge height", "") : null,
+          o.flow ? condTile("Flow", Math.round(o.flow.now).toLocaleString() + " cfs", "cubic ft per second", "") : null),
+        t ? el("p", { style: "margin:0" }, el("b", null, t[0] + ". "), t[1]) : null,
+        el("a", { href: "https://waterdata.usgs.gov/monitoring-location/" + o.code + "/", target: "_blank", rel: "noopener", class: "link small" }, "See the full gauge on USGS ›")); });
+    box.replaceChildren(
+      el("p", { class: "muted small", style: "margin:0" }, "Real gauges near " + loc.name + ", updated about every 15 minutes. Rising and falling is over the last 6 hours."),
+      ...(rows.length ? rows : [el("p", { class: "muted" }, "No river gauges within about 25 miles. Try searching for a town on a river.")]),
+      el("button", { class: "btn ghost small", type: "button", id: "riv-refresh", style: "align-self:flex-start", onclick: () => loadGauges(box, loc) }, "Refresh"),
+      el("p", { class: "muted small" }, "Data from the US Geological Survey. Gauges are in the US only."));
+  } catch (e) { box.replaceChildren(el("p", { class: "muted" }, "Couldn't load river gauges. Check your internet and try again."), el("p", { class: "muted small" }, String(e.message || e)), el("button", { class: "btn ghost small", type: "button", onclick: () => loadGauges(box, loc) }, "Try again")); }
+}
 function wxPicker(onPick, note) {
   const q = el("input", { type: "search", placeholder: "Search a town or lake, like Austin", "aria-label": "Search for a place", maxlength: 60 });
   const res = el("div", { class: "list" });
@@ -568,16 +610,17 @@ function drawWx(box, w, loc, onPick) {
     el("div", { class: "hours", "aria-label": "Next 12 hours" }, next.map((x) => el("div", { class: "hr" },
       el("small", null, new Date(x.t).toLocaleTimeString([], { hour: "numeric" })), el("b", null, Math.round(x.temp) + "°"), el("small", null, (x.rain ?? 0) + "% rain")))),
     el("p", { class: "muted small" }, "Weather from Open-Meteo. Your location is only used to ask for the forecast and is not saved to your account.")];
-  const tabs = [["fore", "Forecast"], ["adv", "Advisor"], ["chart", "What's biting"]];
+  const tabs = [["fore", "Forecast"], ["adv", "Advisor"], ["riv", "Rivers"], ["chart", "What's biting"]];
+  const riv = el("div", { class: "stack", id: "bite-p-riv" }); let rivDone = false;
   const fore = el("div", { class: "stack", id: "bite-p-fore" }, _now, _stats, _bite, _best, _hours, _foot);
   const adv = el("div", { class: "stack", id: "bite-p-adv" }, _adv);
   const seg = el("div", { class: "seg", id: "bite-seg", role: "tablist" });
   const show = (k) => {
-    setPref("biteTab", k); fore.hidden = k !== "fore"; adv.hidden = k !== "adv"; if (S.biteChart) S.biteChart.hidden = k !== "chart";
+    setPref("biteTab", k); fore.hidden = k !== "fore"; adv.hidden = k !== "adv"; riv.hidden = k !== "riv"; if (k === "riv" && !rivDone) { rivDone = true; loadGauges(riv, loc); } if (S.biteChart) S.biteChart.hidden = k !== "chart";
     [...seg.children].forEach((x) => x.setAttribute("aria-selected", String(x.dataset.k === k)));
   };
   tabs.forEach(([k, n]) => seg.append(el("button", { type: "button", role: "tab", id: "bite-seg-" + k, "data-k": k, onclick: () => show(k) }, n)));
-  box.replaceChildren(_place, seg, fore, adv);
+  box.replaceChildren(_place, seg, fore, adv, riv);
   const want = getPref("biteTab", "fore"); show(tabs.some((t) => t[0] === want) ? want : "fore");
 }
 
@@ -898,7 +941,9 @@ function renderFeed() {
   $screen.className = "screen feed-wrap";
   $feed = el("div", { class: "feed", "aria-label": "Catch feed. Swipe up for the next catch." });
   $screen.replaceChildren(el("div", { class: "feed-top" }, el("span", { class: "brand" }, "Weigh-In"),
-    el("button", { class: "scope-btn", type: "button", id: "scope-btn", "aria-label": "Choose whose catches to show", onclick: openScopeSheet }, scopeLabel() + " ▾")), $feed);
+    el("div", { class: "row", style: "gap:8px;flex-wrap:nowrap" },
+      el("button", { class: "scope-btn", type: "button", id: "lb-btn", "aria-label": "Biggest catches leaderboard", onclick: () => openLeaderboard() }, "🏆"),
+      el("button", { class: "scope-btn", type: "button", id: "scope-btn", "aria-label": "Choose whose catches to show", onclick: openScopeSheet }, scopeLabel() + " ▾"))), $feed);
   renderFeedCards();
 }
 /* Feed area: everyone, near me (opt-in location, kept only on this device), or one state */
@@ -925,9 +970,14 @@ function feedPosts() {
 /* What's new. Newest first. Add a new entry on top each time the app changes. */
 /* Bump APP_VERSION every time you change the app, and add a matching entry on top of UPDATES (with v: the same number).
    Phones check app.js every few minutes and offer the new version on their own. */
-const APP_VERSION = 41;
+const APP_VERSION = 42;
 try { if ((parseInt(localStorage.getItem("weighin-appv"), 10) || 0) < APP_VERSION) localStorage.setItem("weighin-appv", String(APP_VERSION)); } catch { /* private mode */ }
 const UPDATES = [
+  { id: "2026-11-11a", v: 42, date: "Nov 11", title: "River gauges, leaderboards, tournament fish", items: [
+    "Bite tab has a new Rivers tab. It shows real river gauges near the place you picked: water level, flow, and whether the river is rising or falling.",
+    "Feed has a new 🏆 button. Pick any fish and see who has the biggest one. You can switch between weight and length.",
+    "If somebody posts a bigger fish than your biggest of that kind, you get an alert.",
+    "Tournaments can now count all fish, only one type of fish, or a few types. Only the right fish count on the leaderboard."] },
   { id: "2026-11-10d", v: 41, date: "Nov 10", title: "Game restart and motion bar", items: [
     "New ↻ button at the top of the fishing game restarts it (Free fishing).",
     "New Restart my game progress button in the fishing game menu. It erases your fish, coins, gear and level and starts from zero. It asks twice first.",
@@ -1307,6 +1357,73 @@ function celebrate(title, sub) {
     el("button", { class: "btn", type: "button", id: "pb-ok", onclick: () => pop.remove() }, "Nice!")));
   document.body.append(pop); setTimeout(() => pop.remove(), 6000);
 }
+const sk = (x) => String(x || "").trim().toLowerCase().replace(/\s+/g, " ");
+const spVariants = (n) => { const t = String(n).trim().replace(/\s+/g, " "), l = t.toLowerCase(); return [...new Set([t, l, l.replace(/\b\w/g, (c) => c.toUpperCase()), l.charAt(0).toUpperCase() + l.slice(1), l.toUpperCase()])]; };
+function myBestFor(species) {
+  const k = sk(species); let lb = 0, inch = 0;
+  for (const x of S.mine) if (sk(x.species) === k) { lb = Math.max(lb, +x.lb || 0); inch = Math.max(inch, +x.inches || 0); }
+  return { lb, inch };
+}
+function checkBeaten(list) {
+  if (!S.user || !S.mine.length) return;
+  const hits = [];
+  for (const p of list) {
+    if (!p || p.uid === S.user.uid || !p.species) continue;
+    const b = myBestFor(p.species); if (!b.lb && !b.inch) continue;
+    if ((b.lb && +p.lb > b.lb) || (!b.lb && b.inch && +p.inches > b.inch)) hits.push({ p, b });
+  }
+  if (!hits.length) return;
+  const top = hits.sort((x, y) => (+y.p.lb || 0) - (+x.p.lb || 0))[0], { p, b } = top;
+  document.querySelector(".pb-alert")?.remove();
+  const a = el("button", { class: "pb-alert", type: "button", id: "beat-alert", onclick: () => { a.remove(); openLeaderboard(p.species); } },
+    el("span", null, "😬"), el("span", { class: "stack", style: "gap:0;text-align:left" }, el("b", null, `@${p.name} beat your biggest ${p.species}!`),
+      el("span", null, `${sizeText(p)} passed your ${b.lb ? b.lb + " lb" : b.inch + " in"}.${hits.length > 1 ? ` ${hits.length - 1} more of your records got beaten too.` : ""} Tap to see.`)));
+  document.body.append(a); setTimeout(() => a.remove(), 10000);
+}
+document.addEventListener("visibilitychange", () => { if (document.hidden && S.user) setPref("pbseenAt", String(Date.now())); });
+function openLeaderboard(startSpecies) {
+  const opts = [...document.querySelectorAll("#species option")].map((o) => o.value || o.textContent).filter(Boolean);
+  const mineLast = [...S.mine].sort((a, b) => (b.createdAt?.toMillis?.() || 0) - (a.createdAt?.toMillis?.() || 0))[0];
+  let sp = startSpecies || mineLast?.species || "Largemouth Bass", metric = "lb";
+  const sel = el("select", { id: "lb-sp", "aria-label": "Pick a fish" }, ...opts.map((o) => el("option", { value: o }, o)), el("option", { value: "__other" }, "Other fish…"));
+  const other = el("input", { id: "lb-other", placeholder: "Type a fish, like Striped Bass", maxlength: 40, hidden: "" });
+  const seg = el("div", { class: "seg", role: "tablist" });
+  const list = el("div", { class: "list", id: "lb-list" });
+  const close = () => bg.remove();
+  let token = 0;
+  const load = async () => {
+    const my = ++token; list.replaceChildren(el("p", { class: "muted" }, "Loading…"));
+    try {
+      const snap = await getDocs(query(collection(db, "posts"), where("species", "in", spVariants(sp)), limit(150)));
+      if (my !== token) return;
+      const best = new Map();
+      for (const d of snap.docs) {
+        const x = { id: d.id, ...d.data() }, v = +x[metric === "lb" ? "lb" : "inches"] || 0; if (!v) continue;
+        const cur = best.get(x.uid); if (!cur || v > cur.v) best.set(x.uid, { ...x, v });
+      }
+      const rows = [...best.values()].sort((a, b) => b.v - a.v).slice(0, 25);
+      if (!rows.length) { list.replaceChildren(el("p", { class: "muted" }, `Nobody has posted a ${sp} ${metric === "lb" ? "with a weight" : "with a length"} yet. Be the first!`)); return; }
+      list.replaceChildren(...rows.map((r, i) => el("div", { class: "item", style: "cursor:default;gap:10px" + (r.uid === S.user.uid ? ";outline:2px solid var(--accent, #1f7a5c);border-radius:12px" : ""), "data-rank": String(i + 1) },
+        el("span", { style: "width:28px;text-align:center;font-weight:800" }, ["🥇", "🥈", "🥉"][i] || String(i + 1)),
+        avatar(r.uid, r.name, 36),
+        el("div", { class: "stack", style: "gap:0;min-width:0;flex:1" }, el("span", { class: "t", style: "overflow-wrap:anywhere" }, "@" + r.name + (r.uid === S.user.uid ? " (you)" : "")),
+          el("span", { class: "s" }, [r.lb ? r.lb + " lb" : "", r.inches ? r.inches + " in" : ""].filter(Boolean).join(" · ") + (r.catchDate ? " · " + r.catchDate : ""))),
+        el("b", null, metric === "lb" ? r.v + " lb" : r.v + " in"))));
+    } catch (err) { list.replaceChildren(el("p", { class: "muted" }, "Couldn't load that. " + errText(err))); }
+  };
+  const setSp = (v) => { sp = v; load(); };
+  sel.addEventListener("change", () => { if (sel.value === "__other") { other.hidden = false; other.focus(); } else { other.hidden = true; setSp(sel.value); } });
+  other.addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); if (other.value.trim().length >= 3) setSp(other.value.trim()); } });
+  other.addEventListener("change", () => { if (other.value.trim().length >= 3) setSp(other.value.trim()); });
+  [["lb", "Weight"], ["in", "Length"]].forEach(([k, n]) => seg.append(el("button", { type: "button", role: "tab", id: "lb-m-" + k, "aria-selected": String(k === metric), onclick: () => { metric = k; [...seg.children].forEach((b) => b.setAttribute("aria-selected", String(b.id === "lb-m-" + k))); load(); } }, n)));
+  const inList = opts.some((o) => sk(o) === sk(sp)); if (inList) sel.value = opts.find((o) => sk(o) === sk(sp)); else { sel.value = "__other"; other.hidden = false; other.value = sp; }
+  const bg = el("div", { class: "sheet-bg", onclick: (e) => { if (e.target === bg) close(); } },
+    el("div", { class: "sheet", role: "dialog", "aria-label": "Biggest catches", style: "max-height:88vh;overflow:auto" },
+      el("div", { class: "sheet-h" }, el("h2", null, "🏆 Biggest catches"), el("button", { class: "link", type: "button", onclick: close }, "Close")),
+      el("div", { class: "stack", style: "padding:16px" }, sel, other, seg, list,
+        el("p", { class: "muted small", style: "margin:0" }, "Each angler's biggest catch of that fish. If someone beats your biggest, you get an alert."))));
+  document.body.append(bg); load();
+}
 function pbAlert(p) {
   document.querySelector(".pb-alert")?.remove();
   const a = el("button", { class: "pb-alert", type: "button", id: "pb-alert", onclick: () => { a.remove(); const c = document.querySelector(`.card[data-id="${p.id}"]`); c?.scrollIntoView({ block: "start" }); } },
@@ -1602,7 +1719,7 @@ function viewPost(p) {
     const t = myLive.find((x) => x.id === tid);
     if (!t) { tourHint.textContent = myLive.length ? "Only tournaments you've joined that are happening now show up here." : "Join a tournament in Tourneys to count this catch."; return; }
     const ph = phasesOf(t)[phaseAt(t)];
-    tourHint.textContent = ph ? `Now: ${ph.name}${ph.where ? " at " + ph.where : ""}${ph.lure ? ". Lure rule: " + ph.lure + " only" : ""}.` : "This catch will count in this tournament.";
+    tourHint.textContent = (ph ? `Now: ${ph.name}${ph.where ? " at " + ph.where : ""}${ph.lure ? ". Lure rule: " + ph.lure + " only" : ""}.` : "This catch will count in this tournament.") + (tourSpecies(t).length ? ` Only ${tourSpeciesText(t)} counts.` : "");
   };
   const f = el("form", { novalidate: true },
     el("div", { class: "field" }, el("span", null, "Photo"), preview, removeBtn,
@@ -1648,6 +1765,11 @@ function viewPost(p) {
     if (rule?.lure && !lureOk(rule.lure, fd.get("lure"))) {
       if (!confirm(`This phase is "${rule.lure}" only. Your lure doesn't match, so this catch won't count in the tournament. Post it anyway?`)) return;
     }
+    let tOk = !!t;
+    if (t && !tourSpeciesOk(t, species)) {
+      if (!confirm(`This tournament only counts ${tourSpeciesText(t)}. Your fish doesn't match, so it won't count in the tournament. Post it anyway?`)) return;
+      tOk = false;
+    }
     const btn = f.querySelector("button[type=submit]"); btn.disabled = true; btn.textContent = "Posting…";
     let pin = draftLoc, autoPinned = "";
     const spotText = String(fd.get("spot") || "").trim(), cityText = String(fd.get("city") || "").trim(), stateCode = String(fd.get("state") || "");
@@ -1678,7 +1800,7 @@ function viewPost(p) {
       await setDoc(ref, {
         uid: S.user.uid, name: S.name, species, lb, inches, ...(vinfo ? { vid: vinfo } : {}), ...(pb ? { pb: true, pbKind: pb } : {}),
         lure, spot: spotText, city: cityText, state: stateCode,
-        catchDate: dateStr, photo: draftPhoto || "", tournamentId: t ? t.id : "", tournamentName: t ? t.name : "",
+        catchDate: dateStr, photo: draftPhoto || "", tournamentId: tOk ? t.id : "", tournamentName: tOk ? t.name : "",
         phase: phaseIdx, createdAt: serverTimestamp(),
       });
       let pinFailed = false;
@@ -2023,6 +2145,13 @@ const SCORING = {
   most: { name: "Most fish", desc: "Whoever catches the most fish", unit: "fish" },
 };
 const fmtFee = (n) => "$" + (Math.round(n * 100) % 100 ? Number(n).toFixed(2) : Math.round(n));
+const tourSpecies = (t) => Array.isArray(t?.species) ? t.species.filter(Boolean) : [];
+function tourSpeciesOk(t, species) {
+  const list = tourSpecies(t); if (!list.length) return true;
+  const k = sk(species); return list.some((n) => { const q = sk(n); return k === q || (q.length >= 3 && k.includes(q)); });
+}
+const tourSpeciesText = (t) => { const l = tourSpecies(t); return l.length === 1 ? l[0] : l.join(", "); };
+const speciesPill = (t) => tourSpecies(t).length ? el("span", { class: "pill final", style: "align-self:flex-start", "data-species": "1" }, "🐟 " + tourSpeciesText(t) + (tourSpecies(t).length === 1 ? " only" : "")) : null;
 function tourMoneyLine(t) {
   const fee = +t.fee || 0, prize = t.prize || "";
   if (!fee && !prize) return null;
@@ -2111,7 +2240,7 @@ function viewTours(p) {
   p.append(el("div", { class: "list" }, ts.map((t) => {
     const st = tourStatus(t), n = (t.members || []).length;
     return el("button", { class: "item", type: "button", onclick: () => openTour(t.id) },
-      el("div", { class: "stack", style: "gap:2px;min-width:0" }, el("span", { class: "t" }, t.name), t.private ? el("span", { class: "pill soon", style: "align-self:flex-start" }, "🔒 Invite only") : null, tourMoneyLine(t),
+      el("div", { class: "stack", style: "gap:2px;min-width:0" }, el("span", { class: "t" }, t.name), t.private ? el("span", { class: "pill soon", style: "align-self:flex-start" }, "🔒 Invite only") : null, speciesPill(t), tourMoneyLine(t),
         el("span", { class: "s" }, `${SCORING[t.scoring]?.name || ""} · ${t.startAt ? fmtWhen(t.startAt) : fmtDay(t.start) + (t.end !== t.start ? " – " + fmtDay(t.end) : "")}${phasesOf(t).length ? " · " + phasesOf(t).length + " phases" : ""} · ${n} angler${n === 1 ? "" : "s"}`)),
       el("span", { class: "pill " + st }, { live: "Live", soon: "Upcoming", final: "Final" }[st]));
   })));
@@ -2156,11 +2285,21 @@ function viewCreateTour(p) {
   phaseWrap.append(phasesBox, el("button", { class: "btn ghost small", type: "button", style: "align-self:flex-start", onclick: () => { if (phaseRows.length >= 8) { toast("That's the max of 8 phases."); return; } addPhase({ mins: 60 }); } }, "+ Add phase"), summary);
   splitBox.addEventListener("change", () => { phaseWrap.hidden = !splitBox.checked; endField.hidden = splitBox.checked; paintSummary(); });
   startInput.addEventListener("input", paintSummary);
+  const spMode = el("select", { id: "t-spmode", "aria-label": "Which fish count" }, el("option", { value: "all" }, "Any fish"), el("option", { value: "one" }, "Only one type of fish"), el("option", { value: "many" }, "A few types of fish"));
+  const spIn = el("input", { id: "t-species", maxlength: 150, placeholder: "Largemouth Bass", autocomplete: "off", hidden: "" });
+  const spHint = el("span", { class: "hint", id: "t-sphint" }, "Every fish counts on the leaderboard.");
+  spMode.addEventListener("change", () => {
+    const m = spMode.value; spIn.hidden = m === "all";
+    if (m === "one") { spIn.setAttribute("list", "species"); spIn.placeholder = "Largemouth Bass"; spHint.textContent = "Only this fish counts. Other fish posted into the tournament are left out."; }
+    else if (m === "many") { spIn.removeAttribute("list"); spIn.placeholder = "Largemouth Bass, Crappie, Bluegill"; spHint.textContent = "Separate the fish with commas (up to 6). Typing just Bass counts every kind of bass."; }
+    else spHint.textContent = "Every fish counts on the leaderboard.";
+  });
   const f = el("form", { novalidate: true },
     el("label", { class: "field" }, el("span", null, "Name"), el("input", { id: "t-name", name: "name", maxlength: 40, placeholder: "Saturday Bass Bash", required: true })),
     el("label", { class: "field" }, el("span", null, "How is the leaderboard scored?"),
       el("select", { id: "t-scoring", name: "scoring" }, Object.entries(SCORING).map(([k, s]) => el("option", { value: k }, `${s.name}: ${s.desc}`))),
       el("span", { class: "hint" }, "First fish, biggest fish and most fish awards are always shown too.")),
+    el("div", { class: "field", id: "t-fish" }, el("span", null, "Which fish count?"), spMode, spIn, spHint),
     el("label", { class: "field" }, el("span", null, "Starts"), startInput),
     endField,
     el("label", { class: "row", style: "gap:10px;flex-wrap:nowrap" }, splitBox, el("span", null, "Split into phases (a different lake or lure for each part)")),
@@ -2189,6 +2328,15 @@ function viewCreateTour(p) {
       endAt = new Date(f.querySelector("#t-end").value).getTime();
       if (!endAt || endAt <= startAt) { toast("The end has to be after the start."); return; }
     }
+    let spNames = [];
+    if (spMode.value !== "all") {
+      const seen = new Set();
+      for (const part of spIn.value.split(",")) { const n = part.trim().replace(/\s+/g, " "); if (n && !seen.has(sk(n))) { seen.add(sk(n)); spNames.push(n.slice(0, 40)); } }
+      if (spMode.value === "one") spNames = spNames.slice(0, 1);
+      spNames = spNames.slice(0, 6);
+      if (!spNames.length) { toast("Type which fish count in this tournament."); return; }
+      if (isBad(...spNames)) { toast(NO_SLURS); return; }
+    }
     try {
       const fee = feeBox.checked ? Math.round(Number(feeIn.value) * 100) / 100 : 0, prize = prizeIn.value.trim(), payHow = payIn.value.trim();
       if (feeBox.checked && !(fee >= 1 && fee <= 500)) { toast("Entry fee has to be between $1 and $500."); return; }
@@ -2197,6 +2345,7 @@ function viewCreateTour(p) {
       const data = { name, fee, prize, payHow: fee ? payHow : "", paid: [S.user.uid], scoring: fd.get("scoring"), start: localDate(new Date(startAt)), end: localDate(new Date(endAt)), startAt, endAt,
         createdBy: S.user.uid, createdByName: S.name, members: [S.user.uid], createdAt: serverTimestamp() };
       if (phases.length) data.phases = phases;
+      if (spNames.length) data.species = spNames;
       if (priv) data.private = true;
       if (!S.owner && !priv) {   // only the owner makes public tournaments, so everyone else asks first
         const { createdBy, createdByName, members, createdAt, paid, ...spec } = data;
@@ -2216,12 +2365,14 @@ function openTour(id) {
   S.openTournament = id; S.viewing = null; S.tourPosts = []; phaseFilter = null;
   tourUnsub?.();
   tourUnsub = onSnapshot(query(collection(db, "posts"), where("tournamentId", "==", id)), (s) => {
-    S.tourPosts = s.docs.map((d) => ({ id: d.id, ...d.data({ serverTimestamps: "estimate" }) }));
+    const tt = S.tournaments.find((x) => x.id === id);
+    S.tourPosts = s.docs.map((d) => ({ id: d.id, ...d.data({ serverTimestamps: "estimate" }) })).filter((x) => !tt || tourSpeciesOk(tt, x.species));
     if (S.tab === "tours" && S.openTournament === id) renderTab();
   }, () => {});
   renderTab();
 }
 function standings(t, posts) {
+  if (tourSpecies(t).length) posts = posts.filter((x) => tourSpeciesOk(t, x.species));
   const by = new Map();
   for (const p of posts) {
     if (!by.has(p.uid)) by.set(p.uid, { uid: p.uid, name: p.name, fish: [] });
@@ -2258,6 +2409,7 @@ function viewTour(p) {
         el("span", { class: "label" }, timed ? `${fmtWhen(range.s)} to ${fmtWhen(range.e)}` : `${fmtDay(t.start)}${t.end !== t.start ? " – " + fmtDay(t.end) : ""}`)),
       el("h1", null, t.name),
       t.private ? el("span", { class: "pill soon", style: "align-self:flex-start" }, "🔒 Invite only") : null,
+      speciesPill(t),
       el("p", { class: "muted", style: "margin:0" }, `${sc.desc}. Started by @${t.createdByName || "someone"}. Only catches posted to this tournament count.`)));
 
   if (t.private && !joined) {
