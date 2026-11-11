@@ -143,7 +143,7 @@ function setPref(k, v) { try { localStorage.setItem("weighin-" + k, v); } catch 
 const S = {
   user: null, name: "", tab: "feed",
   posts: [], tournaments: [], log: [],
-  reqIn: [], reqOut: [], friendships: [], unread: new Set(), chatOpen: null, offIn: [], offOut: [], tradeAll: [], tradeMine: [], tourReqs: [], joinIn: [], joinOut: [],
+  reqIn: [], reqOut: [], friendships: [], unread: new Set(), chatOpen: null, recaps: [], offIn: [], offOut: [], tradeAll: [], tradeMine: [], tourReqs: [], joinIn: [], joinOut: [],
   openTournament: null, tourPosts: [], viewing: null, creatingTour: false,
   meView: "main", mine: [], spots: [], map: null, markers: null, likes: new Map(), mod: null,
 };
@@ -296,6 +296,11 @@ function startApp() {
   const uid = S.user.uid;
   fcCloudSync();
   watchMine();
+  unsubs.push(onSnapshot(query(collection(db, "recaps"), orderBy("createdAt", "desc"), limit(30)), (sn) => {
+    S.recaps = sn.docs.map((d) => ({ id: d.id, ...d.data({ serverTimestamps: "estimate" }) }));
+    const b = document.querySelector("#rc-btn"); if (b) b.hidden = !S.recaps.length;
+    if (document.querySelector("#rc-list")) paintRecaps();
+  }, () => {}));
   unsubs.push(() => { msgUns.forEach((u) => u()); msgUns.clear(); S.unread.clear(); S.chatOpen = null; });
   setTimeout(() => { if (S.user && S.user.uid === uid && wrapSeason() && !getPref("wrapped" + wrapYear(), "")) openWrapped(wrapYear(), true); }, 6000);
   unsubs.push(onSnapshot(query(collection(db, "posts"), orderBy("createdAt", "desc"), limit(40)), (s) => {
@@ -945,6 +950,7 @@ function renderFeed() {
   $feed = el("div", { class: "feed", "aria-label": "Catch feed. Swipe up for the next catch." });
   $screen.replaceChildren(el("div", { class: "feed-top" }, el("span", { class: "brand" }, "Weigh-In"),
     el("div", { class: "row", style: "gap:8px;flex-wrap:nowrap" },
+      el("button", { class: "scope-btn", type: "button", id: "rc-btn", "aria-label": "Year in fish slideshows", hidden: S.recaps.length ? null : "", onclick: openRecaps }, "🎞️"),
       el("button", { class: "scope-btn", type: "button", id: "lb-btn", "aria-label": "Biggest catches leaderboard", onclick: () => openLeaderboard() }, "🏆"),
       el("button", { class: "scope-btn", type: "button", id: "scope-btn", "aria-label": "Choose whose catches to show", onclick: openScopeSheet }, scopeLabel() + " ▾"))), $feed);
   renderFeedCards();
@@ -973,9 +979,13 @@ function feedPosts() {
 /* What's new. Newest first. Add a new entry on top each time the app changes. */
 /* Bump APP_VERSION every time you change the app, and add a matching entry on top of UPDATES (with v: the same number).
    Phones check app.js every few minutes and offer the new version on their own. */
-const APP_VERSION = 44;
+const APP_VERSION = 45;
 try { if ((parseInt(localStorage.getItem("weighin-appv"), 10) || 0) < APP_VERSION) localStorage.setItem("weighin-appv", String(APP_VERSION)); } catch { /* private mode */ }
 const UPDATES = [
+  { id: "2026-11-11d", v: 45, date: "Nov 11", title: "Post your year in fish", items: [
+    "At the end of your Year in fish slideshow, tap Post to feed to share it. Everyone can watch it.",
+    "The new 🎞️ button at the top of the feed shows everyone's year slideshows. Tap one to watch.",
+    "You can take yours down any time."] },
   { id: "2026-11-11c", v: 44, date: "Nov 11", title: "Photo slideshow and Your years", items: [
     "Your year in fish is all photos now. Your catches fill the whole screen.",
     "At the bottom of Me, Your years keeps every past year so you can watch them again."] },
@@ -1431,6 +1441,7 @@ function syncMsgWatch() {
 /* ---------- Your year in fish ---------- */
 const wrapSeason = () => { const d = new Date(); return d.getMonth() === 11 || (d.getMonth() === 0 && d.getDate() <= 15); };
 const wrapYear = () => { const d = new Date(); return d.getMonth() === 0 ? d.getFullYear() - 1 : d.getFullYear(); };
+const MONTHS = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
 async function openWrapped(yr, auto) {
   if (!S.user || document.querySelector(".wrap-ov")) return;
   let all = S.mine;
@@ -1438,40 +1449,75 @@ async function openWrapped(yr, auto) {
   const ps = all.filter((p) => new Date(catchMs(p)).getFullYear() === yr).sort((a, b) => catchMs(a) - catchMs(b));
   if (!ps.length) { if (!auto) toast(`No catches logged in ${yr} yet.`); return; }
   setPref("wrapped" + yr, "1");
-  const MON = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
   const count = (f) => { const m = new Map(); for (const p of ps) { const k = f(p); if (k) m.set(k, (m.get(k) || 0) + 1); } return [...m.entries()].sort((a, b) => b[1] - a[1]); };
-  const spec = count((p) => sk(p.species)), mons = count((p) => MON[new Date(catchMs(p)).getMonth()]);
-  const nice = (k) => { const p = ps.find((x) => sk(x.species) === k); return String(p?.species || k).trim(); };
+  const spec = count((p) => sk(p.species)), mons = count((p) => MONTHS[new Date(catchMs(p)).getMonth()]);
+  const nice = (k) => String(ps.find((x) => sk(x.species) === k)?.species || k).trim();
   const likeN = (p) => S.likes.get(p.id)?.size || 0;
   const byLb = [...ps].sort((a, b) => (+b.lb || 0) - (+a.lb || 0))[0];
   const liked = [...ps].sort((a, b) => likeN(b) - likeN(a))[0];
-  const totalLikes = ps.reduce((n, p) => n + likeN(p), 0);
   const withPhoto = ps.filter((p) => p.photo);
-  const stage = [...withPhoto].sort((a, b) => (+b.lb || 0) - (+a.lb || 0)).slice(0, 14).sort((a, b) => catchMs(a) - catchMs(b));
+  const chosen = [];
+  for (const p of [byLb, liked, ...[...withPhoto].sort((a, b) => (+b.lb || 0) - (+a.lb || 0))]) if (p?.photo && !chosen.includes(p) && chosen.length < 8) chosen.push(p);
+  chosen.sort((a, b) => catchMs(a) - catchMs(b));
+  const d = {
+    uid: S.user.uid, name: S.name, year: yr, n: ps.length, kinds: spec.length, topSp: nice(spec[0][0]), topN: spec[0][1],
+    bigLb: +byLb?.lb || 0, bigSp: byLb?.species || "", bigIn: +byLb?.inches || 0, bigIdx: chosen.indexOf(byLb),
+    likedN: liked ? likeN(liked) : 0, likedSp: liked?.species || "", likedIdx: liked ? chosen.indexOf(liked) : -1,
+    likes: ps.reduce((n, p) => n + likeN(p), 0), month: mons[0]?.[0] || "", monthN: mons[0]?.[1] || 0,
+    photos: chosen.map((p) => ({ p: p.photo, s: String(p.species || "Fish").slice(0, 40), z: sizeText(p) === "Size not entered" ? "" : sizeText(p), d: fmtDayY(p.catchDate || new Date(catchMs(p)).toISOString().slice(0, 10)) })),
+  };
+  playWrap(d, true);
+}
+function playWrap(d, own) {
+  document.querySelector(".wrap-ov")?.remove();
+  const yr = d.year, photos = d.photos || [];
   const H = (t, sz = 28, extra = "") => el("div", { style: `font-size:${sz}px;font-weight:800;line-height:1.1;text-wrap:balance;${extra}` }, t);
   const S2 = (t) => el("div", { style: "font-size:17px;opacity:.9;max-width:320px" }, t);
-  const pool = withPhoto.length ? [...withPhoto].sort((a, b) => (+b.lb || 0) - (+a.lb || 0)).map((p) => p.photo) : [];
+  const pool = photos.map((x) => x.p);
   let pi = 0; const nextPhoto = () => (pool.length ? pool[pi++ % pool.length] : "");
   const slides = [];
   const add = (bg, ...kids) => slides.push({ bg, kids, photo: nextPhoto() });
   const addP = (bg, photo, ...kids) => slides.push({ bg, kids, photo: photo || nextPhoto() });
-  add("linear-gradient(160deg,#0b5fa5,#0a2a4a)", H("🎣", 72), H(`Your ${yr} in fish`, 38), S2(`@${S.name}, here's your year on the water.`));
-  add("linear-gradient(160deg,#e8742a,#7a2a0a)", S2("You logged"), H(String(ps.length), 96), S2(ps.length === 1 ? "catch this year" : "catches this year"));
-  add("linear-gradient(160deg,#1f9d6a,#0a3b2a)", S2("You caught"), H(String(spec.length), 80), S2(spec.length === 1 ? "kind of fish" : "different kinds of fish"),
-    el("div", { style: "font-size:20px;font-weight:700;margin-top:6px" }, `Most often: ${nice(spec[0][0])} (${spec[0][1]})`));
-  if (byLb && byLb.lb) addP("linear-gradient(160deg,#7b3fc4,#2a0f55)", byLb.photo, S2("Your biggest fish"), H(fmtLb(byLb.lb), 56), S2(`${byLb.species || "Fish"}${byLb.inches ? " · " + fmtIn(byLb.inches) : ""}`));
-  if (liked && likeN(liked) > 0) addP("linear-gradient(160deg,#d6336c,#5a0f2b)", liked.photo, S2("Your most liked catch"), H(`❤️ ${likeN(liked)}`, 48), S2(`${liked.species || "Fish"} · ${totalLikes} ${totalLikes === 1 ? "like" : "likes"} in all`));
-  if (mons.length) add("linear-gradient(160deg,#1b8fd1,#08304f)", S2("Your best month"), H(mons[0][0], 44), S2(`${mons[0][1]} ${mons[0][1] === 1 ? "catch" : "catches"}`));
-  for (const p of stage) addP("linear-gradient(160deg,#222,#000)", p.photo, H(p.species || "Fish", 30), S2([sizeText(p) !== "Size not entered" ? sizeText(p) : "", fmtDayY(p.catchDate || new Date(catchMs(p)).toISOString().slice(0, 10))].filter(Boolean).join(" · ")));
-  const shareText = `My ${yr} in fish on Weigh-In: ${ps.length} catches, ${spec.length} kinds of fish${byLb?.lb ? ", biggest " + fmtLb(byLb.lb) + " " + (byLb.species || "") : ""}. 🎣`;
-  add("linear-gradient(160deg,#0b5fa5,#0a2a4a)", H("🏆", 64), H(`That's your ${yr}!`, 34), S2(`See you on the water in ${yr + 1}.`),
-    el("button", { class: "btn", type: "button", id: "wrap-share", style: "margin-top:10px", onclick: async (e) => { e.stopPropagation(); try { if (navigator.share) await navigator.share({ text: shareText }); else { await navigator.clipboard.writeText(shareText); toast("Copied. Paste it anywhere."); } } catch { /* cancelled */ } } }, "Share"),
+  add("linear-gradient(160deg,#0b5fa5,#0a2a4a)", H("🎣", 72), H(`${own ? "Your" : "@" + d.name + "'s"} ${yr} in fish`, 38), S2(own ? `@${d.name}, here's your year on the water.` : "A year on the water."));
+  add("linear-gradient(160deg,#e8742a,#7a2a0a)", S2(own ? "You logged" : "Logged"), H(String(d.n), 96), S2(d.n === 1 ? "catch this year" : "catches this year"));
+  add("linear-gradient(160deg,#1f9d6a,#0a3b2a)", S2(own ? "You caught" : "Caught"), H(String(d.kinds), 80), S2(d.kinds === 1 ? "kind of fish" : "different kinds of fish"),
+    el("div", { style: "font-size:20px;font-weight:700;margin-top:6px" }, `Most often: ${d.topSp} (${d.topN})`));
+  if (d.bigLb) addP("linear-gradient(160deg,#7b3fc4,#2a0f55)", photos[d.bigIdx]?.p, S2(own ? "Your biggest fish" : "Biggest fish"), H(fmtLb(d.bigLb), 56), S2(`${d.bigSp || "Fish"}${d.bigIn ? " · " + fmtIn(d.bigIn) : ""}`));
+  if (d.likedN > 0) addP("linear-gradient(160deg,#d6336c,#5a0f2b)", photos[d.likedIdx]?.p, S2(own ? "Your most liked catch" : "Most liked catch"), H(`❤️ ${d.likedN}`, 48), S2(`${d.likedSp || "Fish"} · ${d.likes} ${d.likes === 1 ? "like" : "likes"} in all`));
+  if (d.month) add("linear-gradient(160deg,#1b8fd1,#08304f)", S2(own ? "Your best month" : "Best month"), H(d.month, 44), S2(`${d.monthN} ${d.monthN === 1 ? "catch" : "catches"}`));
+  for (const x of photos) addP("linear-gradient(160deg,#222,#000)", x.p, H(x.s || "Fish", 30), S2([x.z, x.d].filter(Boolean).join(" · ")));
+  const shareText = `${own ? "My" : "@" + d.name + "'s"} ${yr} in fish on Weigh-In: ${d.n} catches, ${d.kinds} kinds of fish${d.bigLb ? ", biggest " + fmtLb(d.bigLb) + " " + (d.bigSp || "") : ""}. 🎣`;
+  const rid = d.uid + "_" + yr;
+  const mine = () => S.recaps.some((r) => r.id === rid);
+  const postBtn = el("button", { class: "btn", type: "button", id: "wrap-post", style: "margin-top:10px" });
+  const paintPost = () => { postBtn.textContent = mine() ? "✓ Posted. Tap to take down" : "📣 Post to feed"; };
+  paintPost();
+  postBtn.onclick = async (e) => {
+    e.stopPropagation(); postBtn.disabled = true;
+    try {
+      if (mine()) { await deleteDoc(doc(db, "recaps", rid)); S.recaps = S.recaps.filter((r) => r.id !== rid); toast("Taken down."); }
+      else {
+        const th = [];
+        for (const x of photos) th.push({ p: (await thumbFrom(x.p, 420)) || "", s: x.s, z: x.z, d: x.d });
+        const { uid, name, year, n, kinds, topSp, topN, bigLb, bigSp, bigIn, bigIdx, likedN, likedSp, likedIdx, likes, month, monthN } = d;
+        await setDoc(doc(db, "recaps", rid), { uid, name, year, n, kinds, topSp, topN, bigLb, bigSp, bigIn, bigIdx, likedN, likedSp, likedIdx, likes, month, monthN, photos: th.filter((x) => x.p), createdAt: serverTimestamp() });
+        S.recaps = [{ id: rid, uid, name, year, n }, ...S.recaps.filter((r) => r.id !== rid)];
+        toast("Posted! Everyone can watch it from the 🎞️ button on the feed.");
+      }
+    } catch (err) { toast(errText(err)); }
+    postBtn.disabled = false; paintPost();
+  };
+  const staffBtn = !own && isStaff() ? el("button", { class: "btn ghost", type: "button", id: "wrap-remove", style: "margin-top:6px", onclick: async (e) => { e.stopPropagation(); if (!confirm("Remove this slideshow from the feed?")) return; try { await deleteDoc(doc(db, "recaps", rid)); toast("Removed."); close(); } catch (err) { toast(errText(err)); } } }, "Remove from feed") : null;
+  add("linear-gradient(160deg,#0b5fa5,#0a2a4a)", H("🏆", 64), H(`That's ${own ? "your" : "@" + d.name + "'s"} ${yr}!`, 34), S2(`See you on the water in ${yr + 1}.`),
+    own ? postBtn : null,
+    el("button", { class: "btn" + (own ? " ghost" : ""), type: "button", id: "wrap-share", style: "margin-top:6px", onclick: async (e) => { e.stopPropagation(); try { if (navigator.share) await navigator.share({ text: shareText }); else { await navigator.clipboard.writeText(shareText); toast("Copied. Paste it anywhere."); } } catch { /* cancelled */ } } }, "Share"),
+    staffBtn,
     el("button", { class: "btn ghost", type: "button", id: "wrap-done", style: "margin-top:6px", onclick: (e) => { e.stopPropagation(); close(); } }, "Done"));
   let i = 0, timer = 0;
   const bars = el("div", { style: "display:flex;gap:4px;width:100%" }, slides.map(() => el("i", { style: "flex:1;height:3px;border-radius:2px;background:rgba(255,255,255,.3)" })));
   const body = el("div", { style: "flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;text-align:center;padding:10px 0;min-height:0" });
   const closeBtn = el("button", { type: "button", id: "wrap-x", "aria-label": "Close", style: "background:none;border:0;color:#fff;font-size:26px;line-height:1;padding:4px 8px;cursor:pointer", onclick: (e) => { e.stopPropagation(); close(); } }, "✕");
-  const ov = el("div", { class: "wrap-ov", role: "dialog", "aria-label": `Your ${yr} in fish`, style: "position:fixed;inset:0;z-index:9999;color:#fff;display:flex;flex-direction:column;padding:calc(12px + env(safe-area-inset-top,0px)) 16px calc(16px + env(safe-area-inset-bottom,0px));gap:8px;font-family:inherit;user-select:none;transition:background .3s" },
+  const ov = el("div", { class: "wrap-ov", role: "dialog", "aria-label": `${yr} in fish`, style: "position:fixed;inset:0;z-index:9999;color:#fff;display:flex;flex-direction:column;padding:calc(12px + env(safe-area-inset-top,0px)) 16px calc(16px + env(safe-area-inset-bottom,0px));gap:8px;font-family:inherit;user-select:none;transition:background .3s" },
     bars, el("div", { style: "display:flex;justify-content:flex-end" }, closeBtn), body);
   const close = () => { clearTimeout(timer); ov.remove(); };
   const show = (n) => {
@@ -1486,6 +1532,19 @@ async function openWrapped(yr, auto) {
   };
   ov.addEventListener("click", (e) => { if (e.target.closest("button")) return; e.clientX < innerWidth / 3 ? show(i - 1) : show(i + 1); });
   document.body.append(ov); show(0);
+}
+function paintRecaps() {
+  const box = document.querySelector("#rc-list"); if (!box) return;
+  box.replaceChildren(...(S.recaps.length ? S.recaps.map((r) => el("button", { class: "item", type: "button", "data-rc": r.id, onclick: () => playWrap(r, r.uid === S.user.uid) },
+    el("span", { class: "row", style: "gap:10px;flex-wrap:nowrap" }, avatar(r.uid, r.name, 34), el("span", { class: "t" }, "@" + r.name)),
+    el("span", { class: "label" }, `${r.year} · ${r.n} ${r.n === 1 ? "catch" : "catches"} ›`))) : [el("p", { class: "empty" }, "Nobody has posted a year slideshow yet. Finish yours and tap Post to feed.")]));
+}
+function openRecaps() {
+  const bg = el("div", { class: "sheet-bg", onclick: (e) => { if (e.target === bg) bg.remove(); } },
+    el("div", { class: "sheet", role: "dialog", "aria-label": "Year in fish slideshows" },
+      el("div", { class: "sheet-h" }, el("h2", null, "🎞️ Year in fish"), el("button", { class: "link", type: "button", onclick: () => bg.remove() }, "Close")),
+      el("div", { class: "list", id: "rc-list" })));
+  document.body.append(bg); paintRecaps();
 }
 document.addEventListener("visibilitychange", () => { if (document.hidden && S.user) setPref("pbseenAt", String(Date.now())); });
 function openLeaderboard(startSpecies) {
