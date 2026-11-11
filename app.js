@@ -925,9 +925,13 @@ function feedPosts() {
 /* What's new. Newest first. Add a new entry on top each time the app changes. */
 /* Bump APP_VERSION every time you change the app, and add a matching entry on top of UPDATES (with v: the same number).
    Phones check app.js every few minutes and offer the new version on their own. */
-const APP_VERSION = 40;
+const APP_VERSION = 41;
 try { if ((parseInt(localStorage.getItem("weighin-appv"), 10) || 0) < APP_VERSION) localStorage.setItem("weighin-appv", String(APP_VERSION)); } catch { /* private mode */ }
 const UPDATES = [
+  { id: "2026-11-10d", v: 41, date: "Nov 10", title: "Game restart and motion bar", items: [
+    "New ↻ button at the top of the fishing game restarts it (Free fishing).",
+    "New Restart my game progress button in the fishing game menu. It erases your fish, coins, gear and level and starts from zero. It asks twice first.",
+    "In Motion mode the power bar at the bottom is gone. How hard you flick is how far you cast."] },
   { id: "2026-11-10c", v: 40, date: "Nov 10", title: "Me tab cleanup", items: [
     "Tap your picture in Me to open your profile. My catches, Change name, Cash App and Change picture are in there now.",
     "The Fishing game button looks like the Fishing school one now.",
@@ -4031,6 +4035,16 @@ async function fcCloudSync() {
   fcCloudPush(true);
   if (!fcCloudTimer) { fcCloudTimer = setInterval(() => fcCloudPush(), 15000); document.addEventListener("visibilitychange", () => { if (document.hidden) fcCloudPush(true); }); }
 }
+async function resetFcProgress(after) {
+  if (!S.user) return;
+  if (!confirm("Start the fishing game over?\n\nThis erases your fish, coins, gear, level and records in the game. It can't be undone.")) return;
+  if (!confirm("Are you really sure? Everything in the fishing game goes back to zero.")) return;
+  try { await deleteDoc(doc(db, "fcsave", S.user.uid)); } catch { toast("Couldn't reach the server. Try again when you're online."); return; }   // otherwise your cloud save would bring it all back
+  deleteDoc(doc(db, "fcboard", S.user.uid)).catch(() => {});
+  FC_SAVE_KEYS.forEach((k) => setPref(k, ""));
+  fcCloudLast = ""; fcLastPub = "";
+  toast("Fishing game restarted from zero."); after?.();
+}
 let fcLastPub = "";
 async function fcPublish() {
   if (!S.user) return;
@@ -4233,6 +4247,9 @@ function openFishGame() {
         el("button", { class: "btn small ghost", type: "button", "data-challenge": f.uid, onclick: () => challenge(f) }, "Challenge")))) :
         el("p", { class: "muted small" }, "Add friends in Me, then Friends and chat. Then you can challenge them here. You each fish 3 casts in the same place when it suits you, and the biggest total wins."),
       fr.length ? el("p", { class: "muted small" }, `A challenge uses your picked place (${L0.n}) and lure.`) : null,
+      el("h2", null, "Start over"),
+      el("p", { class: "muted small" }, "Erases your fish, coins, gear, level and records in the fishing game and starts from zero. Your Fishing school and your posted catches stay."),
+      el("button", { class: "btn ghost wide", type: "button", id: "fc-reset", style: "color:#c62828;border-color:#c62828", onclick: () => resetFcProgress(draw) }, "Restart my game progress"),
       ],
       tab === "shop" && [
       el("h2", { id: "fc-bag-h" }, `My bag (${bag.length}/${fcBagMax()})`),
@@ -4314,7 +4331,11 @@ function playClash(mode, locId, lureIdIn, onExit, duel) {
     } else { motionOn = false; setPref("fcmotion", "0"); detachMotion(); toast("Motion mode off."); }
     motBtn.textContent = motionOn ? "📱" : "📴";
   } }, getPref("fcmotion", "0") === "1" ? "📱" : "📴");
-  const bg = el("div", { class: "game-bg", role: "dialog", "aria-label": "Fishing" }, canvas, sndBtn, motBtn,
+  const restartBtn = el("button", { class: "game-x game-snd", type: "button", id: "fc-restart", "aria-label": "Restart the game", style: "right:auto;left:10px;top:calc(58px + env(safe-area-inset-top));width:40px;height:40px;font-size:1.15rem", onclick: () => {
+    if (mode !== "free") { toast("Restart is only in Free fishing. Tap ✕ and start again."); return; }
+    whine(false); fish = null; F = null; target = null; snag = false; landed = true; down = false; flickPow = null; powerT = 0; setSt("cast"); toast("Game restarted.");
+  } }, "↻");
+  const bg = el("div", { class: "game-bg", role: "dialog", "aria-label": "Fishing" }, canvas, sndBtn, motBtn, restartBtn,
     el("button", { class: "game-x", type: "button", "aria-label": "Leave the game", onclick: () => end() }, "✕"));
   document.body.append(bg);
   let W = 0, H = 0, raf = 0, dpr = 1, last = 0, deco = null;
@@ -4328,7 +4349,10 @@ function playClash(mode, locId, lureIdIn, onExit, duel) {
     motionSeen = true; const r = e.rotationRate; if (!r) return;
     const now = performance.now();
     const b = r.beta || 0;   // negative = top of the phone flicked away from you, positive = flicked toward you
-    if (now - lastFlick > 900 && ((st === "cast" && (b < -230 || b > 330)) || (st === "bite" && (b > 200 || b < -330)))) { lastFlick = now; act(); }
+    if (now - lastFlick > 900 && ((st === "cast" && (b < -230 || b > 330)) || (st === "bite" && (b > 200 || b < -330)))) {
+      lastFlick = now; if (st === "cast") flickPow = 0.4 + 0.52 * Math.min(1, (Math.abs(b) - 230) / 400);   // harder flick, longer cast
+      act();
+    }
   };
   const onTilt = (e) => {
     motionSeen = true; if (st !== "cast" || aimDrag || e.gamma == null) return;
@@ -4390,7 +4414,7 @@ function playClash(mode, locId, lureIdIn, onExit, duel) {
 
   /* ---------- game state ---------- */
   const CASTS = 3, rivalName = ["Lakeside Lou", "Big Mike", "Sunny", "Cody", "Captain Pete"][Math.floor(Math.random() * 5)];
-  let snag = false, aimX = 0.5, aimDrag = false, aimX0 = 0, agit = 0, ringT = 0, eatFx = false, castAt = -9999, landed = true, achNew = [], target = null, inBag = true, netSave = false, st = "cast", ci = 0, mine = [], rival = [], down = false, powerT = 0, power = 0, great = false, timer = 0, biteAt = 0, msg = "", fish = null, weight = 0, F = null, rec = false, resText = "", earned = { xp: 0, coins: 0 }, btn = null, shakeT = 0, drops = [], rip = [], lastTier = null;
+  let flickPow = null, snag = false, aimX = 0.5, aimDrag = false, aimX0 = 0, agit = 0, ringT = 0, eatFx = false, castAt = -9999, landed = true, achNew = [], target = null, inBag = true, netSave = false, st = "cast", ci = 0, mine = [], rival = [], down = false, powerT = 0, power = 0, great = false, timer = 0, biteAt = 0, msg = "", fish = null, weight = 0, F = null, rec = false, resText = "", earned = { xp: 0, coins: 0 }, btn = null, shakeT = 0, drops = [], rip = [], lastTier = null;
   const setSt = (s) => { st = s; bg.dataset.state = s; };
   setSt("cast");
   const pickFish = (rand = Math.random) => {
@@ -4408,7 +4432,7 @@ function playClash(mode, locId, lureIdIn, onExit, duel) {
   const tipPos = () => ({ x: W / 2 + 30 + (F ? -F.t * 14 : 0), y: H * 0.8 + (F ? F.t * 16 : 0) });
 
   function doCast() {
-    audio(); power = powerT; great = power > 0.6 && power < 0.9; snag = false;
+    audio(); power = flickPow != null ? flickPow : motionOn ? 0.75 : powerT; flickPow = null; great = power > 0.6 && power < 0.9; snag = false;
     if (power > SNAG) {   // way past the green: the lure flies into the weeds and the line breaks
       snag = true; target = null; fcStat("casts", 1); castAt = performance.now(); landed = false; timer = 1.2; setSt("wait"); tick(700, 0.2, 0.25, 1); rip.push({ ...bobber(), a: 1 }); return;
     }
@@ -4764,7 +4788,8 @@ function playClash(mode, locId, lureIdIn, onExit, duel) {
       text(motionOn ? "Flick your phone forward to cast." : "Tap to cast. Stop the bar in the green.", W / 2, H * 0.2, 18); text(motionOn ? "Tilt left or right to aim. Tapping works too." : "Drag left or right to pick your spot.", W / 2, H * 0.2 + 24, 14, "#d6eefc");
       { const bb = bobber(), pr = 10 + 4 * Math.sin(now / 220); ctx.strokeStyle = "rgba(255,255,255,.85)"; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(bb.x, bb.y, pr, 0, 6.2832); ctx.moveTo(bb.x - pr - 6, bb.y); ctx.lineTo(bb.x - pr + 4, bb.y); ctx.moveTo(bb.x + pr - 4, bb.y); ctx.lineTo(bb.x + pr + 6, bb.y); ctx.stroke(); }
       const bx = W * 0.15, bw = W * 0.7, by = H * 0.945;
-      ctx.fillStyle = "rgba(0,0,0,.5)"; ctx.fillRect(bx, by, bw, 14); ctx.fillStyle = "#4caf50"; ctx.fillRect(bx + bw * 0.6, by, bw * 0.3, 14); ctx.fillStyle = "#e53935"; ctx.fillRect(bx + bw * SNAG, by, bw * (1 - SNAG), 14); ctx.fillStyle = "#fff"; ctx.fillRect(bx + bw * power - 3, by - 5, 6, 24); text("SNAG", bx + bw * 0.965, by - 10, 11, "#ff8a80");
+      if (!motionOn) {   // motion mode has no bar: how hard you flick is how far you cast
+      ctx.fillStyle = "rgba(0,0,0,.5)"; ctx.fillRect(bx, by, bw, 14); ctx.fillStyle = "#4caf50"; ctx.fillRect(bx + bw * 0.6, by, bw * 0.3, 14); ctx.fillStyle = "#e53935"; ctx.fillRect(bx + bw * SNAG, by, bw * (1 - SNAG), 14); ctx.fillStyle = "#fff"; ctx.fillRect(bx + bw * power - 3, by - 5, 6, 24); text("SNAG", bx + bw * 0.965, by - 10, 11, "#ff8a80"); }
     }
     if (st === "wait") text(snag ? "Snagged in the weeds..." : "Wait for a bite...", W / 2, H * 0.2, 20, snag ? "#ff8a80" : "#fff");
     if (st === "bite") { text(motionOn ? "FLICK BACK NOW!" : "TAP NOW!", W / 2, H * 0.2, 30, "#ffd36b"); if (motionOn) text("or tap", W / 2, H * 0.2 + 24, 14, "#fff3c4"); }
