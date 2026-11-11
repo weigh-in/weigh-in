@@ -973,9 +973,12 @@ function feedPosts() {
 /* What's new. Newest first. Add a new entry on top each time the app changes. */
 /* Bump APP_VERSION every time you change the app, and add a matching entry on top of UPDATES (with v: the same number).
    Phones check app.js every few minutes and offer the new version on their own. */
-const APP_VERSION = 43;
+const APP_VERSION = 44;
 try { if ((parseInt(localStorage.getItem("weighin-appv"), 10) || 0) < APP_VERSION) localStorage.setItem("weighin-appv", String(APP_VERSION)); } catch { /* private mode */ }
 const UPDATES = [
+  { id: "2026-11-11c", v: 44, date: "Nov 11", title: "Photo slideshow and Your years", items: [
+    "Your year in fish is all photos now. Your catches fill the whole screen.",
+    "At the bottom of Me, Your years keeps every past year so you can watch them again."] },
   { id: "2026-11-11b", v: 43, date: "Nov 11", title: "Message alerts and Your year in fish", items: [
     "When a friend messages you, a banner pops up in the app. Tap it to open the chat.",
     "A red dot shows on the Me tab, and a New tag shows next to the friend, until you read the message.",
@@ -1444,20 +1447,22 @@ async function openWrapped(yr, auto) {
   const liked = [...ps].sort((a, b) => likeN(b) - likeN(a))[0];
   const totalLikes = ps.reduce((n, p) => n + likeN(p), 0);
   const withPhoto = ps.filter((p) => p.photo);
-  const stage = [...withPhoto].sort((a, b) => (+b.lb || 0) - (+a.lb || 0)).slice(0, 8).sort((a, b) => catchMs(a) - catchMs(b));
+  const stage = [...withPhoto].sort((a, b) => (+b.lb || 0) - (+a.lb || 0)).slice(0, 14).sort((a, b) => catchMs(a) - catchMs(b));
   const H = (t, sz = 28, extra = "") => el("div", { style: `font-size:${sz}px;font-weight:800;line-height:1.1;text-wrap:balance;${extra}` }, t);
   const S2 = (t) => el("div", { style: "font-size:17px;opacity:.9;max-width:320px" }, t);
-  const IMG = (p) => el("img", { src: p.photo, alt: p.species || "catch", style: "width:min(86vw,360px);max-height:46vh;object-fit:cover;border-radius:18px;box-shadow:0 10px 30px rgba(0,0,0,.45)" });
+  const pool = withPhoto.length ? [...withPhoto].sort((a, b) => (+b.lb || 0) - (+a.lb || 0)).map((p) => p.photo) : [];
+  let pi = 0; const nextPhoto = () => (pool.length ? pool[pi++ % pool.length] : "");
   const slides = [];
-  const add = (bg, ...kids) => slides.push({ bg, kids });
+  const add = (bg, ...kids) => slides.push({ bg, kids, photo: nextPhoto() });
+  const addP = (bg, photo, ...kids) => slides.push({ bg, kids, photo: photo || nextPhoto() });
   add("linear-gradient(160deg,#0b5fa5,#0a2a4a)", H("🎣", 72), H(`Your ${yr} in fish`, 38), S2(`@${S.name}, here's your year on the water.`));
   add("linear-gradient(160deg,#e8742a,#7a2a0a)", S2("You logged"), H(String(ps.length), 96), S2(ps.length === 1 ? "catch this year" : "catches this year"));
   add("linear-gradient(160deg,#1f9d6a,#0a3b2a)", S2("You caught"), H(String(spec.length), 80), S2(spec.length === 1 ? "kind of fish" : "different kinds of fish"),
     el("div", { style: "font-size:20px;font-weight:700;margin-top:6px" }, `Most often: ${nice(spec[0][0])} (${spec[0][1]})`));
-  if (byLb && byLb.lb) add("linear-gradient(160deg,#7b3fc4,#2a0f55)", S2("Your biggest fish"), byLb.photo ? IMG(byLb) : null, H(fmtLb(byLb.lb), 56), S2(`${byLb.species || "Fish"}${byLb.inches ? " · " + fmtIn(byLb.inches) : ""}`));
-  if (liked && likeN(liked) > 0) add("linear-gradient(160deg,#d6336c,#5a0f2b)", S2("Your most liked catch"), liked.photo ? IMG(liked) : null, H(`❤️ ${likeN(liked)}`, 48), S2(`${liked.species || "Fish"} · ${totalLikes} ${totalLikes === 1 ? "like" : "likes"} in all`));
+  if (byLb && byLb.lb) addP("linear-gradient(160deg,#7b3fc4,#2a0f55)", byLb.photo, S2("Your biggest fish"), H(fmtLb(byLb.lb), 56), S2(`${byLb.species || "Fish"}${byLb.inches ? " · " + fmtIn(byLb.inches) : ""}`));
+  if (liked && likeN(liked) > 0) addP("linear-gradient(160deg,#d6336c,#5a0f2b)", liked.photo, S2("Your most liked catch"), H(`❤️ ${likeN(liked)}`, 48), S2(`${liked.species || "Fish"} · ${totalLikes} ${totalLikes === 1 ? "like" : "likes"} in all`));
   if (mons.length) add("linear-gradient(160deg,#1b8fd1,#08304f)", S2("Your best month"), H(mons[0][0], 44), S2(`${mons[0][1]} ${mons[0][1] === 1 ? "catch" : "catches"}`));
-  for (const p of stage) add("linear-gradient(160deg,#222,#000)", IMG(p), H(p.species || "Fish", 26), S2([sizeText(p) !== "Size not entered" ? sizeText(p) : "", fmtDayY(p.catchDate || new Date(catchMs(p)).toISOString().slice(0, 10))].filter(Boolean).join(" · ")));
+  for (const p of stage) addP("linear-gradient(160deg,#222,#000)", p.photo, H(p.species || "Fish", 30), S2([sizeText(p) !== "Size not entered" ? sizeText(p) : "", fmtDayY(p.catchDate || new Date(catchMs(p)).toISOString().slice(0, 10))].filter(Boolean).join(" · ")));
   const shareText = `My ${yr} in fish on Weigh-In: ${ps.length} catches, ${spec.length} kinds of fish${byLb?.lb ? ", biggest " + fmtLb(byLb.lb) + " " + (byLb.species || "") : ""}. 🎣`;
   add("linear-gradient(160deg,#0b5fa5,#0a2a4a)", H("🏆", 64), H(`That's your ${yr}!`, 34), S2(`See you on the water in ${yr + 1}.`),
     el("button", { class: "btn", type: "button", id: "wrap-share", style: "margin-top:10px", onclick: async (e) => { e.stopPropagation(); try { if (navigator.share) await navigator.share({ text: shareText }); else { await navigator.clipboard.writeText(shareText); toast("Copied. Paste it anywhere."); } } catch { /* cancelled */ } } }, "Share"),
@@ -1471,7 +1476,11 @@ async function openWrapped(yr, auto) {
   const close = () => { clearTimeout(timer); ov.remove(); };
   const show = (n) => {
     clearTimeout(timer); i = Math.max(0, Math.min(slides.length - 1, n));
-    const sl = slides[i]; ov.style.background = sl.bg; body.replaceChildren(...sl.kids.filter(Boolean));
+    const sl = slides[i];
+    ov.style.background = sl.photo ? `linear-gradient(rgba(0,0,0,.35),rgba(0,0,0,.15) 40%,rgba(0,0,0,.75)), url("${sl.photo}") center/cover no-repeat, ${sl.bg}` : sl.bg;
+    body.style.justifyContent = sl.photo ? "flex-end" : "center"; body.style.paddingBottom = sl.photo ? "28px" : "10px";
+    body.style.textShadow = sl.photo ? "0 2px 12px rgba(0,0,0,.7)" : "none";
+    body.replaceChildren(...sl.kids.filter(Boolean));
     [...bars.children].forEach((b, k) => { b.style.background = k <= i ? "#fff" : "rgba(255,255,255,.3)"; });
     if (i < slides.length - 1) timer = setTimeout(() => show(i + 1), 5200);
   };
@@ -3870,8 +3879,18 @@ function viewMe(p) {
         el("span", { class: "row", style: "gap:10px" }, el("span", { class: "t" }, "Friends and chat"), S.reqIn.length + S.unread.size ? el("span", { class: "pill live" }, `${S.reqIn.length + S.unread.size} new`) : null), el("span", { class: "label" }, "›")),
       el("button", { class: "item", type: "button", id: "me-water", onclick: open("water") }, el("span", { class: "t" }, "🔍 Gate keep finder"), el("span", { class: "label" }, "›")),
       el("button", { class: "item", type: "button", onclick: open("log") }, el("span", { class: "t" }, "My fishing log"), el("span", { class: "label" }, "›")),
-      el("button", { class: "item", type: "button", onclick: open("settings") }, el("span", { class: "t" }, "Settings"), el("span", { class: "label" }, "›")))
+      el("button", { class: "item", type: "button", onclick: open("settings") }, el("span", { class: "t" }, "Settings"), el("span", { class: "label" }, "›"))),
+    yearsSection()
   );
+}
+function yearsSection() {
+  const cur = new Date().getFullYear(), by = new Map();
+  for (const x of S.mine) { const y = new Date(catchMs(x)).getFullYear(); by.set(y, (by.get(y) || 0) + 1); }
+  const ys = [...by.keys()].filter((y) => y < cur || (y === wrapYear() && wrapSeason())).sort((a, b) => b - a);
+  if (!ys.length) return null;
+  return el("div", { class: "stack", id: "me-years" }, el("h2", null, "Your years"),
+    el("div", { class: "list" }, ys.map((y) => el("button", { class: "item", type: "button", "data-year": String(y), onclick: () => openWrapped(y) },
+      el("span", { class: "t" }, `🎞️ ${y}`), el("span", { class: "label" }, `${by.get(y)} ${by.get(y) === 1 ? "catch" : "catches"} ›`)))));
 }
 
 function viewProfile(p) {
