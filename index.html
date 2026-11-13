@@ -38,6 +38,26 @@
   <div class="boot">Loading Weigh-In…</div>
   <noscript><p style="padding:24px;color:#fff">Weigh-In needs JavaScript turned on to work.</p></noscript>
 </div>
+<script>
+  // Only on the old GitHub address: tell people Weigh-In has a new home.
+  (function () {
+    if (!/\.github\.io$/.test(location.hostname)) return;
+    try { if (sessionStorage.getItem("weighin-moved-hide")) return; } catch (e) {}
+    var NEW = "https://weighin-app.pages.dev/";
+    var o = document.createElement("div");
+    o.setAttribute("role", "dialog"); o.setAttribute("aria-label", "Weigh-In has moved");
+    o.style.cssText = "position:fixed;inset:0;z-index:99999;background:#10322A;color:#fff;display:flex;align-items:center;justify-content:center;padding:24px;font-family:Barlow,system-ui,sans-serif;text-align:center";
+    o.innerHTML = '<div style="max-width:380px;display:flex;flex-direction:column;gap:16px;align-items:center">'
+      + '<img src="bobber-192.png" alt="" width="84" height="84" style="border-radius:20px">'
+      + '<h1 style="margin:0;font-size:1.9rem">We have moved!</h1>'
+      + '<p style="margin:0;font-size:1.1rem;line-height:1.5">Weigh-In has a new home. Your account, catches and friends are all there waiting.</p>'
+      + '<a id="moved-go" href="' + NEW + '" style="display:block;width:100%;box-sizing:border-box;background:#E8742A;color:#fff;font-weight:700;font-size:1.15rem;padding:16px;border-radius:12px;text-decoration:none">Go to the new Weigh-In</a>'
+      + '<p style="margin:0;font-size:.95rem;opacity:.85;word-break:break-all">' + NEW.replace("https://", "") + '</p>'
+      + '<button id="moved-stay" type="button" style="background:none;border:0;color:#fff;opacity:.8;text-decoration:underline;font:inherit;padding:8px;cursor:pointer">Stay on this page for now</button></div>';
+    function show() { document.body.appendChild(o); document.getElementById("moved-stay").onclick = function () { try { sessionStorage.setItem("weighin-moved-hide", "1"); } catch (e) {} o.remove(); }; }
+    if (document.body) show(); else document.addEventListener("DOMContentLoaded", show);
+  })();
+</script>
 <datalist id="species">
   <option>Largemouth Bass</option><option>Smallmouth Bass</option><option>Spotted Bass</option>
   <option>Striped Bass</option><option>White Bass</option><option>Hybrid Striped Bass</option>
