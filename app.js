@@ -643,6 +643,23 @@ function rivDesc(o) {
   const lvl = o.stage ? ` The water is ${o.stage.now.toFixed(1)} feet on the gauge.` : "";
   return `This gauge is on the ${rv}${place ? " at " + place : ""}. It reads like a ${sz[1]}${now}.${lvl} ${sz[3]}`;
 }
+async function rivFish(o, bar) {
+  if (typeof o.lat !== "number" || typeof o.lng !== "number") return;
+  try {
+    const u = "https://api.inaturalist.org/v1/observations?taxon_id=47178&photos=true&quality_grade=research&license=cc-by,cc-by-nc,cc0&order_by=votes&per_page=8&lat=" + o.lat.toFixed(3) + "&lng=" + o.lng.toFixed(3) + "&radius=25";
+    const r = await fetch(u); if (!r.ok) return;
+    const rows = (await r.json()).results.filter((x) => x.photos?.[0]?.url).slice(0, 8);
+    if (!rows.length || !bar.isConnected) return;
+    const strip = el("div", { class: "row", style: "gap:8px;flex-wrap:nowrap;overflow-x:auto;padding-bottom:4px" }, ...rows.map((x) => {
+      const nm = x.taxon?.preferred_common_name || x.taxon?.name || "Fish";
+      return el("a", { href: x.uri, target: "_blank", rel: "noopener", style: "flex:none;width:130px;text-decoration:none;color:inherit" },
+        el("img", { src: x.photos[0].url.replace("square", "small"), alt: nm, loading: "lazy", style: "width:130px;height:100px;object-fit:cover;border-radius:10px;display:block" }),
+        el("div", { class: "small", style: "font-weight:700" }, nm),
+        el("div", { class: "muted small" }, "📷 " + (x.user?.login || "iNaturalist")));
+    }));
+    bar.append(el("div", { class: "stack", "data-fishnear": o.code, style: "gap:4px;margin-top:6px" }, el("div", { class: "muted small", style: "font-weight:700" }, "🐟 Fish seen near here (iNaturalist)"), strip));
+  } catch { /* skip */ }
+}
 async function rivPhotos(o, pic) {
   let list = [];
   try { const sn = await getDocs(query(collection(db, "riverPhotos"), where("site", "==", o.code), limit(12))); list = sn.docs.map((d) => ({ id: d.id, ...d.data({ serverTimestamps: "estimate" }) })).sort((a, b) => (b.createdAt?.toMillis?.() || 0) - (a.createdAt?.toMillis?.() || 0)); } catch { /* the drawing stays */ }
@@ -677,6 +694,7 @@ async function rivPhotos(o, pic) {
   } else pic.innerHTML = art;
   const web = el("a", { class: "btn ghost small", href: "https://www.google.com/search?tbm=isch&q=" + encodeURIComponent(rivBase(o.name) + " " + (rivPlace(o.name) || "") + " fishing"), target: "_blank", rel: "noopener", "data-webphotos": o.code }, "🔎 See photos online");
   bar.append(el("div", { class: "row", style: "gap:8px" }, addBtn, web), input); pic.after(bar);
+  rivFish(o, bar);
 }
 function rivCard(o, loc) {
   const t = rivTrend(o), mi = loc ? km(loc, { lat: o.lat, lng: o.lng }) / 1.609 : null;
@@ -1178,9 +1196,12 @@ function feedPosts() {
 /* What's new. Newest first. Add a new entry on top each time the app changes. */
 /* Bump APP_VERSION every time you change the app, and add a matching entry on top of UPDATES (with v: the same number).
    Phones check app.js every few minutes and offer the new version on their own. */
-const APP_VERSION = 56;
+const APP_VERSION = 57;
 try { if ((parseInt(localStorage.getItem("weighin-appv"), 10) || 0) < APP_VERSION) localStorage.setItem("weighin-appv", String(APP_VERSION)); } catch { /* private mode */ }
 const UPDATES = [
+  { id: "2026-11-12k", v: 57, date: "Nov 12", title: "Fish seen near each river", items: [
+    "Each river gauge now shows real photos of fish people spotted nearby, with the photographer's name.",
+    "Tap a photo to see it on iNaturalist."] },
   { id: "2026-11-12j", v: 56, date: "Nov 12", title: "See river photos online", items: [
     "Every river gauge has a 🔎 See photos online button. It opens real photos of that river.",
     "No setup needed."] },
