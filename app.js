@@ -1080,9 +1080,13 @@ function feedPosts() {
 /* What's new. Newest first. Add a new entry on top each time the app changes. */
 /* Bump APP_VERSION every time you change the app, and add a matching entry on top of UPDATES (with v: the same number).
    Phones check app.js every few minutes and offer the new version on their own. */
-const APP_VERSION = 49;
+const APP_VERSION = 50;
 try { if ((parseInt(localStorage.getItem("weighin-appv"), 10) || 0) < APP_VERSION) localStorage.setItem("weighin-appv", String(APP_VERSION)); } catch { /* private mode */ }
 const UPDATES = [
+  { id: "2026-11-12d", v: 50, date: "Nov 12", title: "Harder school and game restart fix", items: [
+    "Fishing school ranks need 5 times more XP now. Your XP stays the same, but the ranks take a lot longer to reach.",
+    "You need more right answers to pass a lesson, a final and a regular quiz.",
+    "Fixed: when you restart your game progress, it no longer comes back from another phone or computer that still had the old progress. They get restarted too."] },
   { id: "2026-11-12c", v: 49, date: "Nov 12", title: "Search rivers", items: [
     "In Bite, the Rivers tab now has a search box. Type a river or creek name, pick a state and see its gauges.",
     "The old near-me list is still there as a Near me button."] },
@@ -3736,7 +3740,7 @@ const SCH_COURSES = [
   { id: "week7", n: "Full week", days: ["gear", "knots", "where", "weather", "lures", "rules", "care"], icon: "🏆", d: "7 days. The full beginner school." },
   { id: "expert4", n: "Expert school", days: ["rigs", "seasons", "boat", "pro"], icon: "🎖️", d: "4 days. Rigs, seasons, boats and pro habits. Harder questions." }
 ];
-const SCH_RANKS = [[0, "Minnow", "🐟"], [60, "Bluegill", "🐠"], [150, "Perch", "🐡"], [300, "Crappie", "🎣"], [500, "Bass", "🏅"], [800, "Walleye", "🥈"], [1200, "Pike", "🥇"], [1800, "Musky", "🏆"], [2600, "Master angler", "👑"], [3600, "Lake legend", "🌟"]];
+const SCH_RANKS = [[0, "Minnow", "🐟"], [300, "Bluegill", "🐠"], [750, "Perch", "🐡"], [1500, "Crappie", "🎣"], [2500, "Bass", "🏅"], [4000, "Walleye", "🥈"], [6000, "Pike", "🥇"], [9000, "Musky", "🏆"], [13000, "Master angler", "👑"], [18000, "Lake legend", "🌟"]];
 function schRank(xp) {
   let i = 0; SCH_RANKS.forEach((r, k) => { if (xp >= r[0]) i = k; });
   const cur = SCH_RANKS[i], nxt = SCH_RANKS[i + 1];
@@ -3955,17 +3959,17 @@ function schPlay(p, V, go2) {
     box.replaceChildren(el("div", { class: "row spread", style: "align-items:center" }, el("b", { class: "hint" }, title), el("span", { class: "sch-qn", id: "sch-qn" }, `Question ${qn} of ${qs.length}`, q.hard ? el("span", { class: "sch-hard" }, "Hard") : null)), bar(), el("h2", { id: "sch-q" }, q.q), el("div", { class: "stack", style: "gap:8px" }, opts), note, next);
   };
   const finish = () => {
-    const s = sch(), total = qs.length, pass = right / total >= (V.kind === "final" ? 0.8 : V.kind === "lesson" ? 0.7 : 0.6), today0 = schDayNum();
+    const s = sch(), total = qs.length, pass = right / total >= (V.kind === "final" ? 0.9 : V.kind === "lesson" ? 0.85 : 0.75), today0 = schDayNum();
     let gain = 0, extra = "", rankUp = null;
     if (V.kind === "lesson") {
       const rec = s.lessons[V.lid] || (s.lessons[V.lid] = { done: false, best: 0 });
       rec.last = today0; if (pass && !rec.done) { rec.done = true; gain += 30; }
       gain += 8 * Math.max(0, right - rec.best); rec.best = Math.max(rec.best, right);
       if (V.cid && pass) { const st = s.courses[V.cid]; if (st && !st.done.includes(V.lid)) st.done.push(V.lid); }
-      extra = pass ? "Lesson complete!" : `You need ${Math.ceil(total * 0.7)} out of ${total} to finish the lesson. Read the cards again and try tomorrow.`;
+      extra = pass ? "Lesson complete!" : `You need ${Math.ceil(total * 0.85)} out of ${total} to finish the lesson. Read the cards again and try tomorrow.`;
     } else if (V.kind === "final") {
       const st = s.courses[V.cid]; st.flast = today0; gain += 10 * Math.max(0, right - st.fbest); st.fbest = Math.max(st.fbest, right);
-      if (pass && !st.fin) { st.fin = true; gain += 50; extra = "Course finished! 🏆"; } else extra = pass ? "You passed again." : "You need 8 out of 10 to finish. Review the lessons and try again tomorrow.";
+      if (pass && !st.fin) { st.fin = true; gain += 50; extra = "Course finished! 🏆"; } else extra = pass ? "You passed again." : "You need 9 out of 10 to finish. Review the lessons and try again tomorrow.";
     } else {
       const today = schDayNum(); s.freeLast[V.topic || "all"] = today; if (s.free.day !== today) s.free = { day: today, xp: 0 };
       gain = Math.min(5 * right, Math.max(0, 100 - s.free.xp)); s.free.xp += gain;
@@ -4519,7 +4523,7 @@ async function fcCloudPush(force) {
   if (json === fcCloudLast || json === "{}") return;
   if (!force && Date.now() - fcCloudAt < 8000) return;
   fcCloudAt = Date.now(); const prev = fcCloudLast; fcCloudLast = json;
-  try { await setDoc(doc(db, "fcsave", S.user.uid), { d: json, casts: +fcStatsRaw().casts || 0, upd: serverTimestamp() }); } catch { fcCloudLast = prev; }
+  try { await setDoc(doc(db, "fcsave", S.user.uid), { d: json, casts: +fcStatsRaw().casts || 0, reset: getPref("fcreset", ""), upd: serverTimestamp() }); } catch { fcCloudLast = prev; }
 }
 async function fcCloudSync() {
   if (!S.user) return;
@@ -4527,6 +4531,9 @@ async function fcCloudSync() {
   let c = null;
   try { const snap = await getDoc(doc(db, "fcsave", uid)); if (snap.exists()) c = snap.data(); } catch { return; }   // offline: try again next time
   const owner = getPref("fcowner", ""), foreign = !!owner && owner !== uid;   // the progress on this phone belongs to someone else
+  if (c?.reset && c.reset !== getPref("fcreset", "")) {   // restarted on another device: restart here too
+    FC_SAVE_KEYS.forEach((k) => setPref(k, "")); setPref("fcreset", c.reset); toast("Your fishing game was restarted on another device.");
+  }
   const localCasts = +fcStatsRaw().casts || 0;
   if (foreign) FC_SAVE_KEYS.forEach((k) => setPref(k, ""));
   if (c && (foreign || (+c.casts || 0) > localCasts)) {
@@ -4540,7 +4547,9 @@ async function resetFcProgress(after) {
   if (!S.user) return;
   if (!confirm("Start the fishing game over?\n\nThis erases your fish, coins, gear, level and records in the game. It can't be undone.")) return;
   if (!confirm("Are you really sure? Everything in the fishing game goes back to zero.")) return;
-  try { await deleteDoc(doc(db, "fcsave", S.user.uid)); } catch { toast("Couldn't reach the server. Try again when you're online."); return; }   // otherwise your cloud save would bring it all back
+  const rid = String(Date.now());   // a restart marker in the cloud save, so your other phones and computers restart too instead of pushing their old progress back
+  try { await setDoc(doc(db, "fcsave", S.user.uid), { d: "{}", casts: 0, reset: rid, upd: serverTimestamp() }); } catch { toast("Couldn't reach the server. Try again when you're online."); return; }
+  setPref("fcreset", rid);
   deleteDoc(doc(db, "fcboard", S.user.uid)).catch(() => {});
   FC_SAVE_KEYS.forEach((k) => setPref(k, ""));
   fcCloudLast = ""; fcLastPub = "";
