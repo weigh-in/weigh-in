@@ -149,8 +149,6 @@ html[data-wtheme="black"] .field input,html[data-wtheme="black"] .field select,h
 html[data-wtheme="black"] .btn.ghost:active{background:var(--lake-soft)}
 html[data-wtheme="black"] .tab.post .bob{box-shadow:0 0 0 1.5px var(--ink),0 8px 18px rgba(225,29,46,.4)}
 html[data-wtheme="black"] nav.tabs{box-shadow:0 -6px 20px rgba(0,0,0,.6)}
-html[data-wtheme="black"] .card .shade{background:linear-gradient(to top,rgba(0,0,0,.9) 0%,rgba(0,0,0,.15) 45%,rgba(0,0,0,0) 70%)}
-html[data-wtheme="black"] .card .nophoto{color:#4A7BE8}
 html[data-wtheme="black"] .pb-pop{background:rgba(0,0,0,.8)}
 html[data-wtheme="black"] .auth{background:#000;color:#F4F4F6}
 html[data-wtheme="black"] .auth .field input{background:#0E0E12;border-color:#2B2B34;color:#F4F4F6}
