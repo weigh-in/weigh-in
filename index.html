@@ -42,7 +42,6 @@
   // Only on the old GitHub address: tell people Weigh-In has a new home.
   (function () {
     if (!/\.github\.io$/.test(location.hostname)) return;
-    try { if (sessionStorage.getItem("weighin-moved-hide")) return; } catch (e) {}
     var NEW = "https://weighin-app.pages.dev/";
     var o = document.createElement("div");
     o.setAttribute("role", "dialog"); o.setAttribute("aria-label", "Weigh-In has moved");
@@ -53,8 +52,8 @@
       + '<p style="margin:0;font-size:1.1rem;line-height:1.5">Weigh-In has a new home. Your account, catches and friends are all there waiting.</p>'
       + '<a id="moved-go" href="' + NEW + '" style="display:block;width:100%;box-sizing:border-box;background:#E8742A;color:#fff;font-weight:700;font-size:1.15rem;padding:16px;border-radius:12px;text-decoration:none">Go to the new Weigh-In</a>'
       + '<p style="margin:0;font-size:.95rem;opacity:.85;word-break:break-all">' + NEW.replace("https://", "") + '</p>'
-      + '<button id="moved-stay" type="button" style="background:none;border:0;color:#fff;opacity:.8;text-decoration:underline;font:inherit;padding:8px;cursor:pointer">Stay on this page for now</button></div>';
-    function show() { document.body.appendChild(o); document.getElementById("moved-stay").onclick = function () { try { sessionStorage.setItem("weighin-moved-hide", "1"); } catch (e) {} o.remove(); }; }
+      + '</div>';
+    function show() { document.body.appendChild(o); }
     if (document.body) show(); else document.addEventListener("DOMContentLoaded", show);
   })();
 </script>
@@ -76,6 +75,7 @@
 </datalist>
 <script>
   (function () {
+    if (/\.github\.io$/.test(location.hostname)) return; // old address: only show the "we have moved" page
     var m = document.createElement("script"); m.type = "module"; m.src = "app.js?v=" + encodeURIComponent(window.__appv || "");
     document.body.appendChild(m);
   })();
