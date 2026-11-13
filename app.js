@@ -1216,10 +1216,16 @@ function feedPosts() {
 /* What's new. Newest first. Add a new entry on top each time the app changes. */
 /* Bump APP_VERSION every time you change the app, and add a matching entry on top of UPDATES (with v: the same number).
    Phones check app.js every few minutes and offer the new version on their own. */
-const APP_VERSION = 59;
+const APP_VERSION = 60;
+// The number people see. APP_VERSION stays a plain counter so updates are detected. Big changes bump the first number (2.0), smaller ones the second (1.1, 1.2).
+const REL_NAMES = { 59: "1.0", 60: "1.0" };
+const relName = (v) => REL_NAMES[v] || (v < 59 ? `0.${v}` : `1.${v - 59}`);
 try { if ((parseInt(localStorage.getItem("weighin-appv"), 10) || 0) < APP_VERSION) localStorage.setItem("weighin-appv", String(APP_VERSION)); } catch { /* private mode */ }
 const UPDATES = [
-  { id: "2026-11-12m", v: 59, date: "Nov 12", title: "Weigh-In is out of beta", items: [
+  { id: "2026-11-12n", v: 60, date: "Nov 12", title: "New version numbers", items: [
+    "Versions now look like 1.0, 1.1 and 2.0. Big updates change the first number, smaller ones the second.",
+    "Weigh-In 1.0 was the first full release. Earlier versions show as 0.x."] },
+  { id: "2026-11-12m", v: 59, date: "Nov 12", title: "Weigh-In 1.0 is here", items: [
     "Beta is gone. Weigh-In is now a full release.",
     "New Delete my account button in Settings.",
     "The privacy page now covers rivers, fish photos, age and deleting your account."] },
@@ -1446,9 +1452,9 @@ function openWhatsNew(after) {
   const bg = el("div", { class: "sheet-bg", onclick: (e) => { if (e.target === bg) close(); } },
     el("div", { class: "sheet", role: "dialog", "aria-label": "Release notes", style: "height:auto;max-height:90%" },
       el("div", { class: "sheet-h" }, el("h2", null, "Release notes"), el("button", { class: "link", type: "button", id: "wn-close", onclick: close }, "Close")),
-      el("p", { class: "hint", id: "wn-ver", style: "margin:0 16px" }, `You have version ${APP_VERSION}`),
+      el("p", { class: "hint", id: "wn-ver", style: "margin:0 16px" }, `You have version ${relName(APP_VERSION)}`),
       el("div", { class: "msgs about", style: "overflow:auto" }, UPDATES.map((u, i) => el("div", { class: "stack", style: "gap:6px", "data-update": u.id },
-        el("div", { class: "row spread" }, el("b", null, (u.v ? `v${u.v} · ` : "") + u.title), el("span", { class: i === 0 ? "pill live" : "muted small" }, i === 0 ? "Latest" : u.date)),
+        el("div", { class: "row spread" }, el("b", null, (u.v ? `${relName(u.v)} · ` : "") + u.title), el("span", { class: i === 0 ? "pill live" : "muted small" }, i === 0 ? "Latest" : u.date)),
         el("ul", { style: "margin:0;padding-left:20px;display:flex;flex-direction:column;gap:4px" }, u.items.map((t) => el("li", null, t))))))));
   document.body.append(bg);
 }
@@ -4233,7 +4239,7 @@ async function checkUpdate() {
 function rememberUpdate() { try { if (updatePending) localStorage.setItem("weighin-appv", String(updatePending)); } catch { /* private mode */ } }   // the next time the app opens, it loads the new version
 function showUpdateBar() {
   if (document.getElementById("update-bar")) return;
-  document.body.append(el("div", { class: "update-bar", id: "update-bar", role: "status" }, el("span", null, `A new version (v${updatePending}) is ready.`),
+  document.body.append(el("div", { class: "update-bar", id: "update-bar", role: "status" }, el("span", null, `A new version (${relName(updatePending)}) is ready.`),
     el("button", { class: "btn small", type: "button", id: "update-now", onclick: applyUpdate }, "Update now")));
 }
 async function applyUpdate() {
@@ -4432,7 +4438,7 @@ function viewSettings(p) {
       el("button", { class: "btn ghost wide", type: "button", id: "s-about", onclick: openPrivacy }, "About and privacy"),
       el("button", { class: "btn wide", type: "button", onclick: () => { if (confirm("Sign out of Weigh-In?")) signOut(auth); } }, "Sign out"),
       el("button", { class: "link danger small", type: "button", id: "s-delacct", style: "align-self:center", onclick: deleteMyAccount }, "Delete my account")),
-    el("p", { class: "hint", id: "s-ver" }, `Weigh-In version ${APP_VERSION}`),
+    el("p", { class: "hint", id: "s-ver" }, `Weigh-In version ${relName(APP_VERSION)}`),
     el("p", { class: "hint" }, "Weigh-In is free. Don't post personal info like your address or school."));
 }
 
