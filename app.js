@@ -580,43 +580,91 @@ function viewBite(p) {
   S.biteChart = lureChart(); p.append(S.biteChart);
 }
 /* Real river gauges from the US Geological Survey (free, no key). */
+const RIV_STATES = { AL: "Alabama", AK: "Alaska", AZ: "Arizona", AR: "Arkansas", CA: "California", CO: "Colorado", CT: "Connecticut", DE: "Delaware", DC: "District of Columbia", FL: "Florida", GA: "Georgia", HI: "Hawaii", ID: "Idaho", IL: "Illinois", IN: "Indiana", IA: "Iowa", KS: "Kansas", KY: "Kentucky", LA: "Louisiana", ME: "Maine", MD: "Maryland", MA: "Massachusetts", MI: "Michigan", MN: "Minnesota", MS: "Mississippi", MO: "Missouri", MT: "Montana", NE: "Nebraska", NV: "Nevada", NH: "New Hampshire", NJ: "New Jersey", NM: "New Mexico", NY: "New York", NC: "North Carolina", ND: "North Dakota", OH: "Ohio", OK: "Oklahoma", OR: "Oregon", PA: "Pennsylvania", RI: "Rhode Island", SC: "South Carolina", SD: "South Dakota", TN: "Tennessee", TX: "Texas", UT: "Utah", VT: "Vermont", VA: "Virginia", WA: "Washington", WV: "West Virginia", WI: "Wisconsin", WY: "Wyoming" };
+const rivCache = {};
+async function rivStateList(st) {
+  if (rivCache[st]) return rivCache[st];
+  const r = await fetch(`https://waterservices.usgs.gov/nwis/site/?format=rdb&stateCd=${st.toLowerCase()}&siteType=ST&siteStatus=active&hasDataTypeCd=iv&parameterCd=00060,00065&siteOutput=basic`);
+  if (!r.ok) throw new Error("The river service said no (" + r.status + ").");
+  const rows = (await r.text()).split("\n").filter((l) => l && !l.startsWith("#")).slice(2).map((l) => l.split("\t")).filter((c) => c[1] && c[2]).map((c) => ({ code: c[1], name: c[2], lat: +c[4], lng: +c[5] }));
+  return (rivCache[st] = rows);
+}
+const rivPretty = (n) => n.replace(/\b(\w)(\w*)/g, (m, a, b) => a + b.toLowerCase()).replace(/\bNr\b/g, "near").replace(/\bAt\b/g, "at").replace(/\bBlw\b/g, "below").replace(/\bAbv\b/g, "above").replace(/\bR\b/g, "River").replace(/\bCk\b/g, "Creek").replace(/,\s*([A-Za-z]{2})$/, (m, c) => ", " + c.toUpperCase());
+async function rivReadings(qs, names) {
+  const r = await fetch(`https://waterservices.usgs.gov/nwis/iv/?format=json&${qs}&parameterCd=00060,00065&siteType=ST&siteStatus=active&period=PT6H`);
+  if (!r.ok) throw new Error("The river service said no (" + r.status + ").");
+  const j = await r.json(), by = new Map();
+  for (const ts of j.value?.timeSeries || []) {
+    const code = ts.sourceInfo.siteCode[0].value, g = ts.sourceInfo.geoLocation?.geographicLocation;
+    if (!g) continue;
+    const vals = (ts.values?.[0]?.value || []).filter((v) => v.value !== "" && +v.value > -999990);
+    if (!vals.length) continue;
+    if (!by.has(code)) by.set(code, { code, name: names?.get(code) || rivPretty(ts.sourceInfo.siteName), lat: g.latitude, lng: g.longitude });
+    const o = by.get(code), key = ts.variable.variableCode[0].value === "00060" ? "flow" : "stage";
+    o[key] = { now: +vals[vals.length - 1].value, then: +vals[0].value }; o.time = vals[vals.length - 1].dateTime;
+  }
+  return [...by.values()];
+}
+function rivTrend(o) {
+  const m = o.flow || o.stage; if (!m) return null; const base = Math.max(Math.abs(m.then), o.flow ? 1 : 0.5), pct = (m.now - m.then) / base;
+  return pct > 0.15 ? ["⬆️ Rising fast", "Water is climbing and getting muddy. Fish the slack water, eddies and edges, and be careful near the bank."]
+    : pct > 0.03 ? ["↗️ Rising", "A little more water often gets fish feeding. Try the edges and the mouths of creeks."]
+    : pct < -0.15 ? ["⬇️ Dropping fast", "Water is falling quickly. Fish can be spooky. Try deeper holes."]
+    : pct < -0.03 ? ["↘️ Falling", "Water is clearing up. A good time to fish."]
+    : ["➡️ Steady", "Steady water. Fish act normally."];
+}
+function rivCard(o, loc) {
+  const t = rivTrend(o), mi = loc ? km(loc, { lat: o.lat, lng: o.lng }) / 1.609 : null;
+  return el("div", { class: "card-lite stack", style: "gap:6px;padding:14px;border:2px solid var(--line, #c9d6de);border-radius:14px", "data-gauge": o.code },
+    el("div", { class: "row spread", style: "gap:8px;flex-wrap:nowrap" }, el("b", { style: "overflow-wrap:anywhere" }, o.name), mi == null ? null : el("span", { class: "muted small", style: "white-space:nowrap" }, mi.toFixed(mi < 10 ? 1 : 0) + " mi")),
+    el("div", { class: "cond-grid" },
+      o.stage ? condTile("Water level", o.stage.now.toFixed(2) + " ft", "gauge height", "") : null,
+      o.flow ? condTile("Flow", Math.round(o.flow.now).toLocaleString() + " cfs", "cubic ft per second", "") : null),
+    t ? el("p", { style: "margin:0" }, el("b", null, t[0] + ". "), t[1]) : null,
+    el("a", { href: "https://waterdata.usgs.gov/monitoring-location/" + o.code + "/", target: "_blank", rel: "noopener", class: "link small" }, "See the full gauge on USGS ›"));
+}
 async function loadGauges(box, loc) {
-  box.replaceChildren(el("p", { class: "muted" }, "Looking for river gauges near " + loc.name + "…"));
-  try {
-    const d = 0.4, bb = [loc.lng - d, loc.lat - d, loc.lng + d, loc.lat + d].map((x) => x.toFixed(4)).join(",");
-    const r = await fetch(`https://waterservices.usgs.gov/nwis/iv/?format=json&bBox=${bb}&parameterCd=00060,00065&siteType=ST&siteStatus=active&period=PT6H`);
-    if (!r.ok) throw new Error("The river service said no (" + r.status + ").");
-    const j = await r.json(), by = new Map();
-    for (const ts of j.value?.timeSeries || []) {
-      const code = ts.sourceInfo.siteCode[0].value, g = ts.sourceInfo.geoLocation?.geographicLocation;
-      if (!g) continue;
-      const vals = (ts.values?.[0]?.value || []).filter((v) => v.value !== "" && +v.value > -999990);
-      if (!vals.length) continue;
-      if (!by.has(code)) by.set(code, { code, name: ts.sourceInfo.siteName, lat: g.latitude, lng: g.longitude, mi: km(loc, { lat: g.latitude, lng: g.longitude }) / 1.609 });
-      const o = by.get(code), key = ts.variable.variableCode[0].value === "00060" ? "flow" : "stage";
-      o[key] = { now: +vals[vals.length - 1].value, then: +vals[0].value }; o.time = vals[vals.length - 1].dateTime;
-    }
-    const sites = [...by.values()].sort((a, b) => a.mi - b.mi).slice(0, 10);
-    const trend = (o) => { const m = o.flow || o.stage; if (!m) return null; const base = Math.max(Math.abs(m.then), o.flow ? 1 : 0.5), pct = (m.now - m.then) / base;
-      return pct > 0.15 ? ["⬆️ Rising fast", "Water is climbing and getting muddy. Fish the slack water, eddies and edges, and be careful near the bank."]
-        : pct > 0.03 ? ["↗️ Rising", "A little more water often gets fish feeding. Try the edges and the mouths of creeks."]
-        : pct < -0.15 ? ["⬇️ Dropping fast", "Water is falling quickly. Fish can be spooky. Try deeper holes."]
-        : pct < -0.03 ? ["↘️ Falling", "Water is clearing up. A good time to fish."]
-        : ["➡️ Steady", "Steady water. Fish act normally."]; };
-    const rows = sites.map((o) => { const t = trend(o), nm = o.name.replace(/\b(\w)(\w*)/g, (m, a, b) => a + b.toLowerCase()).replace(/\bNr\b/g, "near").replace(/\bAt\b/g, "at").replace(/\bBlw\b/g, "below").replace(/\bAbv\b/g, "above").replace(/\bR\b/g, "River").replace(/\bCk\b/g, "Creek").replace(/,\s*([A-Za-z]{2})$/, (m, c) => ", " + c.toUpperCase());
-      return el("div", { class: "card-lite stack", style: "gap:6px;padding:14px;border:2px solid var(--line, #c9d6de);border-radius:14px", "data-gauge": o.code },
-        el("div", { class: "row spread", style: "gap:8px;flex-wrap:nowrap" }, el("b", { style: "overflow-wrap:anywhere" }, nm), el("span", { class: "muted small", style: "white-space:nowrap" }, o.mi.toFixed(o.mi < 10 ? 1 : 0) + " mi")),
-        el("div", { class: "cond-grid" },
-          o.stage ? condTile("Water level", o.stage.now.toFixed(2) + " ft", "gauge height", "") : null,
-          o.flow ? condTile("Flow", Math.round(o.flow.now).toLocaleString() + " cfs", "cubic ft per second", "") : null),
-        t ? el("p", { style: "margin:0" }, el("b", null, t[0] + ". "), t[1]) : null,
-        el("a", { href: "https://waterdata.usgs.gov/monitoring-location/" + o.code + "/", target: "_blank", rel: "noopener", class: "link small" }, "See the full gauge on USGS ›")); });
-    box.replaceChildren(
-      el("p", { class: "muted small", style: "margin:0" }, "Real gauges near " + loc.name + ", updated about every 15 minutes. Rising and falling is over the last 6 hours."),
-      ...(rows.length ? rows : [el("p", { class: "muted" }, "No river gauges within about 25 miles. Try searching for a town on a river.")]),
-      el("button", { class: "btn ghost small", type: "button", id: "riv-refresh", style: "align-self:flex-start", onclick: () => loadGauges(box, loc) }, "Refresh"),
-      el("p", { class: "muted small" }, "Data from the US Geological Survey. Gauges are in the US only."));
-  } catch (e) { box.replaceChildren(el("p", { class: "muted" }, "Couldn't load river gauges. Check your internet and try again."), el("p", { class: "muted small" }, String(e.message || e)), el("button", { class: "btn ghost small", type: "button", onclick: () => loadGauges(box, loc) }, "Try again")); }
+  const guess = Object.entries(RIV_STATES).find(([c, n]) => loc && (loc.name.includes(n) || new RegExp(",\\s*" + c + "$").test(loc.name)))?.[0];
+  const q = el("input", { type: "search", id: "riv-q", placeholder: "Search a river, like Meramec", "aria-label": "River name", maxlength: 40, value: getPref("rivq", ""), style: "width:100%" });
+  const st = el("select", { id: "riv-st", "aria-label": "State" }, el("option", { value: "" }, "State…"), ...Object.entries(RIV_STATES).map(([c, n]) => el("option", { value: c }, n)));
+  st.value = getPref("rivst", "") || guess || "";
+  const res = el("div", { class: "stack", id: "riv-res" }, el("p", { class: "muted" }, "Type a river or creek name and pick its state. Try Mississippi, Current, Guadalupe or Meramec."));
+  const note = "Real gauges from the US Geological Survey, updated about every 15 minutes. Rising and falling is over the last 6 hours.";
+  const show = (rows, head) => res.replaceChildren(el("p", { class: "muted small", style: "margin:0" }, head), ...rows.map((o) => rivCard(o, loc)), el("p", { class: "muted small" }, "Data from the US Geological Survey. Gauges are in the US only."));
+  const search = async () => {
+    const words = q.value.toLowerCase().split(/\s+/).filter(Boolean);
+    if (!st.value) { res.replaceChildren(el("p", { class: "muted" }, "Pick a state first.")); return; }
+    if (!words.length) { res.replaceChildren(el("p", { class: "muted" }, "Type part of a river or creek name.")); return; }
+    setPref("rivq", q.value.trim()); setPref("rivst", st.value);
+    res.replaceChildren(el("p", { class: "muted" }, `Searching ${RIV_STATES[st.value]}…`));
+    try {
+      const all = await rivStateList(st.value);
+      const hit = all.filter((x) => words.every((w) => x.name.toLowerCase().includes(w))).sort((a, b) => (+b.name.toLowerCase().startsWith(words[0]) - +a.name.toLowerCase().startsWith(words[0])) || a.name.localeCompare(b.name)).slice(0, 12);
+      if (!hit.length) { res.replaceChildren(el("p", { class: "muted" }, `No gauges found for "${q.value.trim()}" in ${RIV_STATES[st.value]}. Try a shorter name, like Meramec instead of Meramec River.`)); return; }
+      const names = new Map(hit.map((x) => [x.code, x.name]));
+      const rows = await rivReadings("sites=" + hit.map((x) => x.code).join(","), names);
+      rows.sort((a, b) => a.name.localeCompare(b.name));
+      if (!rows.length) { res.replaceChildren(el("p", { class: "muted" }, "Found the river, but its gauges aren't sending readings right now.")); return; }
+      show(rows, note + (hit.length === 12 ? " Showing the first 12." : ""));
+    } catch (e) { res.replaceChildren(el("p", { class: "muted" }, "Couldn't load river gauges. Check your internet and try again."), el("p", { class: "muted small" }, String(e.message || e))); }
+  };
+  const near = async () => {
+    if (!loc) return;
+    res.replaceChildren(el("p", { class: "muted" }, "Looking for river gauges near " + loc.name + "…"));
+    try {
+      const d = 0.4, bb = [loc.lng - d, loc.lat - d, loc.lng + d, loc.lat + d].map((x) => x.toFixed(4)).join(",");
+      const rows = (await rivReadings("bBox=" + bb)).map((o) => ({ ...o, mi: km(loc, { lat: o.lat, lng: o.lng }) })).sort((a, b) => a.mi - b.mi).slice(0, 10);
+      if (!rows.length) { res.replaceChildren(el("p", { class: "muted" }, "No river gauges within about 25 miles. Try searching for a river by name.")); return; }
+      show(rows, "Gauges near " + loc.name + ". " + note);
+    } catch (e) { res.replaceChildren(el("p", { class: "muted" }, "Couldn't load river gauges. Check your internet and try again."), el("p", { class: "muted small" }, String(e.message || e))); }
+  };
+  q.addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); search(); } });
+  box.replaceChildren(
+    q, st,
+    el("div", { class: "row", style: "gap:8px" }, el("button", { class: "btn small", type: "button", id: "riv-go", onclick: search }, "Search"),
+      loc ? el("button", { class: "btn ghost small", type: "button", id: "riv-near", onclick: near }, "📍 Near me") : null),
+    res);
+  if (q.value.trim() && st.value) search();
 }
 function wxPicker(onPick, note) {
   const q = el("input", { type: "search", placeholder: "Search a town or lake, like Austin", "aria-label": "Search for a place", maxlength: 60 });
@@ -1032,9 +1080,12 @@ function feedPosts() {
 /* What's new. Newest first. Add a new entry on top each time the app changes. */
 /* Bump APP_VERSION every time you change the app, and add a matching entry on top of UPDATES (with v: the same number).
    Phones check app.js every few minutes and offer the new version on their own. */
-const APP_VERSION = 48;
+const APP_VERSION = 49;
 try { if ((parseInt(localStorage.getItem("weighin-appv"), 10) || 0) < APP_VERSION) localStorage.setItem("weighin-appv", String(APP_VERSION)); } catch { /* private mode */ }
 const UPDATES = [
+  { id: "2026-11-12c", v: 49, date: "Nov 12", title: "Search rivers", items: [
+    "In Bite, the Rivers tab now has a search box. Type a river or creek name, pick a state and see its gauges.",
+    "The old near-me list is still there as a Near me button."] },
   { id: "2026-11-12b", v: 48, date: "Nov 12", title: "Show password", items: [
     "When you sign in or make an account, tap Show password to see what you typed."] },
   { id: "2026-11-12a", v: 47, date: "Nov 12", title: "Color themes", items: [
