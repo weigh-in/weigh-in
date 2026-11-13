@@ -643,10 +643,45 @@ function rivDesc(o) {
   const lvl = o.stage ? ` The water is ${o.stage.now.toFixed(1)} feet on the gauge.` : "";
   return `This gauge is on the ${rv}${place ? " at " + place : ""}. It reads like a ${sz[1]}${now}.${lvl} ${sz[3]}`;
 }
+async function rivPhotos(o, pic) {
+  let list = [];
+  try { const sn = await getDocs(query(collection(db, "riverPhotos"), where("site", "==", o.code), limit(12))); list = sn.docs.map((d) => ({ id: d.id, ...d.data({ serverTimestamps: "estimate" }) })).sort((a, b) => (b.createdAt?.toMillis?.() || 0) - (a.createdAt?.toMillis?.() || 0)); } catch { /* the drawing stays */ }
+  const art = rivScene(o), box = pic.parentElement;
+  const addBtn = el("button", { class: "btn ghost small", type: "button", "data-addphoto": o.code, style: "align-self:flex-start" }, list.length ? "📷 Add yours" : "📷 Add the first photo");
+  const input = el("input", { type: "file", accept: "image/*", hidden: "", "aria-label": "River photo" });
+  addBtn.onclick = () => { if (!S.user) return; input.click(); };
+  input.onchange = async () => {
+    const f = input.files[0]; input.value = ""; if (!f) return;
+    addBtn.disabled = true; addBtn.textContent = "Adding…";
+    try {
+      const big = await shrinkPhoto(f); let photo = big ? await thumbFrom(big, 640) : "";
+      if (photo.length > 110000) photo = await thumbFrom(photo, 440);
+      if (!photo || photo.length > 118000) { toast("That photo is too big. Try another."); }
+      else { await addDoc(collection(db, "riverPhotos"), { site: o.code, uid: S.user.uid, name: S.name, photo, createdAt: serverTimestamp() }); toast("Photo added. Thanks!"); await rivPhotos(o, pic); return; }
+    } catch (e) { toast(errText(e)); }
+    addBtn.disabled = false; addBtn.textContent = list.length ? "📷 Add yours" : "📷 Add the first photo";
+  };
+  box.querySelector("[data-photobar]")?.remove();
+  const bar = el("div", { class: "stack", "data-photobar": o.code, style: "gap:6px" });
+  if (list.length) {
+    let cur = 0;
+    const main = el("img", { alt: "River photo by an angler", style: "width:100%;max-height:260px;object-fit:cover;border-radius:14px;display:block" });
+    const credit = el("div", { class: "row spread", style: "gap:8px;flex-wrap:nowrap" }), strip = el("div", { class: "row", style: "gap:6px;flex-wrap:nowrap;overflow-x:auto" });
+    const paint = () => {
+      const p = list[cur]; main.src = p.photo;
+      const canDel = p.uid === S.user.uid || S.owner || can("deletePosts");
+      credit.replaceChildren(el("span", { class: "muted small" }, "📷 @" + (p.name || "angler")), canDel ? el("button", { class: "link danger small", type: "button", "data-delphoto": p.id, onclick: async () => { try { await deleteDoc(doc(db, "riverPhotos", p.id)); toast("Photo removed."); await rivPhotos(o, pic); } catch (e) { toast(errText(e)); } } }, p.uid === S.user.uid ? "Remove mine" : "Remove") : null);
+      strip.replaceChildren(...list.map((x, i) => el("button", { type: "button", "aria-label": "Photo " + (i + 1), style: `border:2px solid ${i === cur ? "var(--lake)" : "transparent"};padding:0;border-radius:8px;background:none;flex:none`, onclick: () => { cur = i; paint(); } }, el("img", { src: x.photo, alt: "", style: "width:56px;height:56px;object-fit:cover;border-radius:6px;display:block" }))));
+    };
+    paint(); pic.replaceChildren(main); bar.append(credit, list.length > 1 ? strip : null);
+  } else pic.innerHTML = art;
+  const web = el("a", { class: "btn ghost small", href: "https://www.google.com/search?tbm=isch&q=" + encodeURIComponent(rivBase(o.name) + " " + (rivPlace(o.name) || "") + " fishing"), target: "_blank", rel: "noopener", "data-webphotos": o.code }, "🔎 See photos online");
+  bar.append(el("div", { class: "row", style: "gap:8px" }, addBtn, web), input); pic.after(bar);
+}
 function rivCard(o, loc) {
   const t = rivTrend(o), mi = loc ? km(loc, { lat: o.lat, lng: o.lng }) / 1.609 : null;
   const pic = el("div", { class: "riv-pic", "data-pic": o.code }); pic.innerHTML = rivScene(o);
-  return el("div", { class: "card-lite stack", style: "gap:6px;padding:14px;border:2px solid var(--line, #c9d6de);border-radius:14px", "data-gauge": o.code },
+  const card = el("div", { class: "card-lite stack", style: "gap:6px;padding:14px;border:2px solid var(--line, #c9d6de);border-radius:14px", "data-gauge": o.code },
     pic,
     el("div", { class: "row spread", style: "gap:8px;flex-wrap:nowrap" }, el("b", { style: "overflow-wrap:anywhere" }, o.name), mi == null ? null : el("span", { class: "muted small", style: "white-space:nowrap" }, mi.toFixed(mi < 10 ? 1 : 0) + " mi")),
     el("p", { class: "riv-desc", style: "margin:0" }, rivDesc(o)),
@@ -655,6 +690,8 @@ function rivCard(o, loc) {
       o.flow ? condTile("Flow", Math.round(o.flow.now).toLocaleString() + " cfs", "cubic ft per second", "") : null),
     t ? el("p", { style: "margin:0" }, el("b", null, t[0] + ". "), t[1]) : null,
     el("a", { href: "https://waterdata.usgs.gov/monitoring-location/" + o.code + "/", target: "_blank", rel: "noopener", class: "link small" }, "See the full gauge on USGS ›"));
+  setTimeout(() => rivPhotos(o, pic), 0);
+  return card;
 }
 async function loadGauges(box, loc) {
   const guess = Object.entries(RIV_STATES).find(([c, n]) => loc && (loc.name.includes(n) || new RegExp(",\\s*" + c + "$").test(loc.name)))?.[0];
@@ -663,7 +700,7 @@ async function loadGauges(box, loc) {
   st.value = getPref("rivst", "") || guess || "";
   const res = el("div", { class: "stack", id: "riv-res" }, el("p", { class: "muted" }, "Type a river or creek name and pick its state. Try Mississippi, Current, Guadalupe or Meramec."));
   const note = "Real gauges from the US Geological Survey, updated about every 15 minutes. Rising and falling is over the last 6 hours.";
-  const show = (rows, head) => res.replaceChildren(el("p", { class: "muted small", style: "margin:0" }, head), ...rows.map((o) => rivCard(o, loc)), el("p", { class: "muted small" }, "Data from the US Geological Survey. Pictures are drawings made by the app. Gauges are in the US only."));
+  const show = (rows, head) => res.replaceChildren(el("p", { class: "muted small", style: "margin:0" }, head), ...rows.map((o) => rivCard(o, loc)), el("p", { class: "muted small" }, "Data from the US Geological Survey. Photos are added by anglers. Without a photo you see a drawing. Gauges are in the US only."));
   const noGauge = (why, canAll) => {
     const pic = el("div", { class: "riv-pic", "data-pic": "none" }); pic.innerHTML = rivScene({ code: "none" });
     res.replaceChildren(el("div", { class: "card-lite stack", id: "riv-none", style: "gap:8px;padding:14px;border:2px solid var(--line, #c9d6de);border-radius:14px" }, pic,
@@ -1141,9 +1178,16 @@ function feedPosts() {
 /* What's new. Newest first. Add a new entry on top each time the app changes. */
 /* Bump APP_VERSION every time you change the app, and add a matching entry on top of UPDATES (with v: the same number).
    Phones check app.js every few minutes and offer the new version on their own. */
-const APP_VERSION = 54;
+const APP_VERSION = 56;
 try { if ((parseInt(localStorage.getItem("weighin-appv"), 10) || 0) < APP_VERSION) localStorage.setItem("weighin-appv", String(APP_VERSION)); } catch { /* private mode */ }
 const UPDATES = [
+  { id: "2026-11-12j", v: 56, date: "Nov 12", title: "See river photos online", items: [
+    "Every river gauge has a 🔎 See photos online button. It opens real photos of that river.",
+    "No setup needed."] },
+  { id: "2026-11-12i", v: 55, date: "Nov 12", title: "Real river photos from anglers", items: [
+    "Every river gauge now has a 📷 Add a photo button. Photos you add show up for everyone who looks at that gauge.",
+    "Until someone adds a photo, you see the drawing.",
+    "You can remove your own photos. The owner and moderators can remove any photo."] },
   { id: "2026-11-12h", v: 54, date: "Nov 12", title: "Rivers with no gauge", items: [
     "If a river or creek has no gauge, you now get a picture, fishing tips and buttons for the weather and bite forecast, rivers near you, or searching every state.",
     "New Search all states button when a name isn't found in your state."] },
