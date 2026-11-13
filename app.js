@@ -139,6 +139,25 @@ async function thumbFrom(dataUrl, max = 160) {
 /* ---------- color themes ---------- */
 const THEMES = [["auto", "Auto", "Follows your phone"], ["light", "Light", "Green and orange"], ["night", "Night", "Dark green"], ["black", "Black", "Black, red and blue"]];
 const THEME_BAR = { light: "#1F5C4D", night: "#0E1B18", black: "#000000" };
+const POLISH_CSS = `
+button,a,.chip,.tab,.card{-webkit-tap-highlight-color:transparent;touch-action:manipulation}
+button:not(:disabled){transition:transform .12s ease,filter .12s ease,background .15s ease,box-shadow .15s ease}
+button:not(:disabled):active{transform:scale(.97);filter:brightness(.96)}
+:focus-visible{outline:3px solid var(--lake);outline-offset:2px;border-radius:10px}
+.screen{overscroll-behavior:contain;scroll-behavior:smooth}
+#bite-seg{grid-template-columns:repeat(4,1fr)}
+#bite-seg button{font-size:.8rem;padding:10px 2px;white-space:nowrap}
+.seg button{white-space:nowrap}
+.empty{text-align:center;padding:28px 12px;border:2px dashed var(--line);border-radius:16px;background:var(--surface);margin-top:8px}
+.empty::before{content:"\\1F3A3";display:block;font-size:2rem;margin-bottom:6px}
+.feed-empty h2::before{content:"\\1F3A3";display:block;font-size:2.6rem;margin-bottom:8px}
+.photo-pick{min-height:190px;border-radius:18px;transition:border-color .15s,background .15s}
+.photo-pick:active{border-color:var(--lake)}
+.photo-pick .muted::before{content:"\\1F4F7";display:block;font-size:2.2rem;margin-bottom:6px;text-align:center}
+.photo-pick .muted{text-align:center;font-weight:700}
+.card .shade{will-change:auto}
+@media (prefers-reduced-motion:reduce){*{animation-duration:.01ms!important;transition-duration:.01ms!important;scroll-behavior:auto!important}}
+`;
 const THEME_CSS = `
 html[data-wtheme="light"]{--water:#E7EEEA;--surface:#FBFCF9;--line:#C9D6CF;--ink:#16302A;--muted:#5A6F67;--lake:#1F5C4D;--lake-soft:#D3E5DD;--deep:#0F2E26;--bobber:#D2452A;--bobber-ink:#FFFFFF;--gold:#B8871B;--shadow:0 1px 2px rgba(16,48,42,.06),0 6px 18px rgba(16,48,42,.07);--shadow-s:0 1px 2px rgba(16,48,42,.08);color-scheme:light}
 html[data-wtheme="night"]{--water:#0E1B18;--surface:#162723;--line:#2A403A;--ink:#E4EEE9;--muted:#93A8A0;--lake:#6FC1A6;--lake-soft:#1F3A33;--deep:#0F2E26;--bobber:#F06A4B;--bobber-ink:#1A0D09;--gold:#E2B44A;--shadow:0 1px 2px rgba(0,0,0,.3),0 6px 18px rgba(0,0,0,.28);--shadow-s:0 1px 2px rgba(0,0,0,.35);color-scheme:dark}
@@ -176,6 +195,7 @@ html[data-wtheme="black"] .feed-empty,html[data-wtheme="black"] .feed-empty *{co
 function applyTheme() {
   let t = "auto"; try { t = localStorage.getItem("weighin-theme") || "auto"; } catch { /* ok */ }
   if (!THEMES.some((x) => x[0] === t)) t = "auto";
+  if (!document.getElementById("polish-css")) { const st = document.createElement("style"); st.id = "polish-css"; st.textContent = POLISH_CSS; document.head.prepend(st); }
   if (!document.getElementById("theme-css")) { const st = document.createElement("style"); st.id = "theme-css"; st.textContent = THEME_CSS; document.head.append(st); }
   if (t === "auto") document.documentElement.removeAttribute("data-wtheme"); else document.documentElement.setAttribute("data-wtheme", t);
   const m = document.querySelector('meta[name="theme-color"]'); if (m) m.setAttribute("content", THEME_BAR[t] || (matchMedia("(prefers-color-scheme: dark)").matches ? "#0E1B18" : "#1F5C4D"));
@@ -1196,9 +1216,14 @@ function feedPosts() {
 /* What's new. Newest first. Add a new entry on top each time the app changes. */
 /* Bump APP_VERSION every time you change the app, and add a matching entry on top of UPDATES (with v: the same number).
    Phones check app.js every few minutes and offer the new version on their own. */
-const APP_VERSION = 57;
+const APP_VERSION = 58;
 try { if ((parseInt(localStorage.getItem("weighin-appv"), 10) || 0) < APP_VERSION) localStorage.setItem("weighin-appv", String(APP_VERSION)); } catch { /* private mode */ }
 const UPDATES = [
+  { id: "2026-11-12l", v: 58, date: "Nov 12", title: "Polish pass", items: [
+    "Taps feel faster and buttons press down when you touch them.",
+    "The Bite menu now fits on one line.",
+    "Empty screens and the photo box on Post look nicer.",
+    "Fixed small things so the app feels smoother."] },
   { id: "2026-11-12k", v: 57, date: "Nov 12", title: "Fish seen near each river", items: [
     "Each river gauge now shows real photos of fish people spotted nearby, with the photographer's name.",
     "Tap a photo to see it on iNaturalist."] },
