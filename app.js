@@ -613,6 +613,37 @@ function rivTrend(o) {
     : pct < -0.03 ? ["↘️ Falling", "Water is clearing up. A good time to fish."]
     : ["➡️ Steady", "Steady water. Fish act normally."];
 }
+const rivWiki = new Map();
+const rivBase = (n) => n.replace(/,\s*[A-Za-z]{2}$/, "").split(/\s+(?:near|nr|at|below|blw|bl|above|abv|ab|in|on|downstream|upstream|dwnstrm|upstrm|@)\s+/i)[0].trim();
+async function rivInfo(river, stCode) {
+  const key = river + "|" + stCode; if (rivWiki.has(key)) return rivWiki.get(key);
+  let out = null;
+  try {
+    const q = encodeURIComponent(`${river} ${RIV_STATES[stCode] || ""}`.trim());
+    const r = await fetch(`https://en.wikipedia.org/w/api.php?action=query&generator=search&gsrsearch=${q}&gsrlimit=1&prop=extracts%7Cpageimages&exintro=1&explaintext=1&exsentences=3&piprop=thumbnail&pithumbsize=600&format=json&origin=*`);
+    const p = Object.values((await r.json()).query?.pages || {})[0];
+    const first = river.toLowerCase().split(/\s+/)[0];
+    if (p && p.title.toLowerCase().includes(first) && !/disambiguation/i.test(p.title) && p.extract) {
+      let t = p.extract.replace(/\s*\([^)]*\)/g, "").replace(/\s+/g, " ").trim(); if (t.length > 420) t = t.slice(0, 420).replace(/\s+\S*$/, "") + "…";
+      out = { title: p.title, text: t, img: p.thumbnail?.source || "", url: "https://en.wikipedia.org/wiki/" + encodeURIComponent(p.title.replace(/ /g, "_")) };
+    }
+  } catch { /* no picture is fine */ }
+  rivWiki.set(key, out); return out;
+}
+function rivGroups(rows, loc) {
+  const by = new Map();
+  for (const o of rows) { const rv = rivBase(o.name), st = (o.name.match(/,\s*([A-Za-z]{2})$/) || [])[1]?.toUpperCase() || ""; const k = rv + "|" + st; if (!by.has(k)) by.set(k, { rv, st, list: [] }); by.get(k).list.push(o); }
+  return [...by.values()].map((g) => {
+    const head = el("div", { class: "riv-info stack", "data-river": g.rv, style: "gap:8px" }, el("h2", { style: "margin:0" }, g.rv));
+    rivInfo(g.rv, g.st).then((w) => {
+      if (!w) return;
+      head.append(...[w.img ? el("img", { src: w.img, alt: w.title, loading: "lazy", style: "width:100%;max-height:220px;object-fit:cover;border-radius:14px" }) : null,
+        el("p", { style: "margin:0" }, w.text),
+        el("a", { href: w.url, target: "_blank", rel: "noopener", class: "link small" }, "From Wikipedia ›")].filter(Boolean));
+    });
+    return el("section", { class: "stack", style: "gap:10px" }, head, ...g.list.map((o) => rivCard(o, loc)));
+  });
+}
 function rivCard(o, loc) {
   const t = rivTrend(o), mi = loc ? km(loc, { lat: o.lat, lng: o.lng }) / 1.609 : null;
   return el("div", { class: "card-lite stack", style: "gap:6px;padding:14px;border:2px solid var(--line, #c9d6de);border-radius:14px", "data-gauge": o.code },
@@ -630,7 +661,7 @@ async function loadGauges(box, loc) {
   st.value = getPref("rivst", "") || guess || "";
   const res = el("div", { class: "stack", id: "riv-res" }, el("p", { class: "muted" }, "Type a river or creek name and pick its state. Try Mississippi, Current, Guadalupe or Meramec."));
   const note = "Real gauges from the US Geological Survey, updated about every 15 minutes. Rising and falling is over the last 6 hours.";
-  const show = (rows, head) => res.replaceChildren(el("p", { class: "muted small", style: "margin:0" }, head), ...rows.map((o) => rivCard(o, loc)), el("p", { class: "muted small" }, "Data from the US Geological Survey. Gauges are in the US only."));
+  const show = (rows, head) => res.replaceChildren(el("p", { class: "muted small", style: "margin:0" }, head), ...rivGroups(rows, loc), el("p", { class: "muted small" }, "Gauge data from the US Geological Survey. River pictures and descriptions from Wikipedia. Gauges are in the US only."));
   const search = async () => {
     const words = q.value.toLowerCase().split(/\s+/).filter(Boolean);
     if (!st.value) { res.replaceChildren(el("p", { class: "muted" }, "Pick a state first.")); return; }
@@ -1080,9 +1111,11 @@ function feedPosts() {
 /* What's new. Newest first. Add a new entry on top each time the app changes. */
 /* Bump APP_VERSION every time you change the app, and add a matching entry on top of UPDATES (with v: the same number).
    Phones check app.js every few minutes and offer the new version on their own. */
-const APP_VERSION = 51;
+const APP_VERSION = 52;
 try { if ((parseInt(localStorage.getItem("weighin-appv"), 10) || 0) < APP_VERSION) localStorage.setItem("weighin-appv", String(APP_VERSION)); } catch { /* private mode */ }
 const UPDATES = [
+  { id: "2026-11-12f", v: 52, date: "Nov 12", title: "River pictures", items: [
+    "Rivers now show a picture and a short description above the gauges, from Wikipedia. If a river has no page, you just get the gauges."] },
   { id: "2026-11-12e", v: 51, date: "Nov 12", title: "New questions every time", items: [
     "Fishing school makes up new questions every time, with new numbers: ounces and pounds, size and bag limits, sunrise times, tournament totals, and where fish live.",
     "New Fishing math topic in Regular quiz.",
