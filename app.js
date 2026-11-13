@@ -3,7 +3,7 @@ import { firebaseConfig } from "./firebase-config.js";
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
 import {
   getAuth, onAuthStateChanged, createUserWithEmailAndPassword, signInWithEmailAndPassword,
-  signOut, sendPasswordResetEmail, GoogleAuthProvider, signInWithPopup
+  signOut, sendPasswordResetEmail, GoogleAuthProvider, signInWithPopup, deleteUser
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 import {
   getFirestore, collection, doc, setDoc, getDoc, getDocs, addDoc, deleteDoc, updateDoc, onSnapshot,
@@ -1216,9 +1216,13 @@ function feedPosts() {
 /* What's new. Newest first. Add a new entry on top each time the app changes. */
 /* Bump APP_VERSION every time you change the app, and add a matching entry on top of UPDATES (with v: the same number).
    Phones check app.js every few minutes and offer the new version on their own. */
-const APP_VERSION = 58;
+const APP_VERSION = 59;
 try { if ((parseInt(localStorage.getItem("weighin-appv"), 10) || 0) < APP_VERSION) localStorage.setItem("weighin-appv", String(APP_VERSION)); } catch { /* private mode */ }
 const UPDATES = [
+  { id: "2026-11-12m", v: 59, date: "Nov 12", title: "Weigh-In is out of beta", items: [
+    "Beta is gone. Weigh-In is now a full release.",
+    "New Delete my account button in Settings.",
+    "The privacy page now covers rivers, fish photos, age and deleting your account."] },
   { id: "2026-11-12l", v: 58, date: "Nov 12", title: "Polish pass", items: [
     "Taps feel faster and buttons press down when you touch them.",
     "The Bite menu now fits on one line.",
@@ -1442,9 +1446,9 @@ function openWhatsNew(after) {
   const bg = el("div", { class: "sheet-bg", onclick: (e) => { if (e.target === bg) close(); } },
     el("div", { class: "sheet", role: "dialog", "aria-label": "Release notes", style: "height:auto;max-height:90%" },
       el("div", { class: "sheet-h" }, el("h2", null, "Release notes"), el("button", { class: "link", type: "button", id: "wn-close", onclick: close }, "Close")),
-      el("p", { class: "hint", id: "wn-ver", style: "margin:0 16px" }, `You have beta version ${APP_VERSION}`),
+      el("p", { class: "hint", id: "wn-ver", style: "margin:0 16px" }, `You have version ${APP_VERSION}`),
       el("div", { class: "msgs about", style: "overflow:auto" }, UPDATES.map((u, i) => el("div", { class: "stack", style: "gap:6px", "data-update": u.id },
-        el("div", { class: "row spread" }, el("b", null, (u.v ? `Beta v${u.v} · ` : "") + u.title), el("span", { class: i === 0 ? "pill live" : "muted small" }, i === 0 ? "Latest" : u.date)),
+        el("div", { class: "row spread" }, el("b", null, (u.v ? `v${u.v} · ` : "") + u.title), el("span", { class: i === 0 ? "pill live" : "muted small" }, i === 0 ? "Latest" : u.date)),
         el("ul", { style: "margin:0;padding-left:20px;display:flex;flex-direction:column;gap:4px" }, u.items.map((t) => el("li", null, t))))))));
   document.body.append(bg);
 }
@@ -4229,7 +4233,7 @@ async function checkUpdate() {
 function rememberUpdate() { try { if (updatePending) localStorage.setItem("weighin-appv", String(updatePending)); } catch { /* private mode */ } }   // the next time the app opens, it loads the new version
 function showUpdateBar() {
   if (document.getElementById("update-bar")) return;
-  document.body.append(el("div", { class: "update-bar", id: "update-bar", role: "status" }, el("span", null, `A new beta version (v${updatePending}) is ready.`),
+  document.body.append(el("div", { class: "update-bar", id: "update-bar", role: "status" }, el("span", null, `A new version (v${updatePending}) is ready.`),
     el("button", { class: "btn small", type: "button", id: "update-now", onclick: applyUpdate }, "Update now")));
 }
 async function applyUpdate() {
@@ -4366,6 +4370,34 @@ function viewProfile(p) {
     el("button", { class: "link danger small", type: "button", onclick: () => deletePost(c) }, "Delete")))));
 }
 
+async function deleteMyAccount() {
+  const u = auth.currentUser; if (!u || !S.user) return;
+  const last = Date.parse(u.metadata?.lastSignInTime || "") || 0;
+  if (Date.now() - last > 5 * 60 * 1000) { toast("For safety, sign out and sign back in, then try again."); return; }
+  const uid = S.user.uid;
+  if (prompt("This deletes your account, catches, photos, chats and game progress for good. Type DELETE to confirm.") !== "DELETE") return;
+  toast("Deleting your account…");
+  const wipe = async (q) => { try { const sn = await getDocs(q); for (const d of sn.docs) { await deleteDoc(d.ref).catch(() => {}); } return sn.docs; } catch { return []; } };
+  try {
+    stopAll();
+    const posts = await wipe(query(collection(db, "posts"), where("uid", "==", uid)));
+    for (const d of posts) { const p = d.data(); if (p.vid) await vidDelete(d.id, p.vid.n); await deleteDoc(doc(db, "spots", d.id)).catch(() => {}); }
+    await wipe(query(collection(db, "likes"), where("uid", "==", uid)));
+    await wipe(query(collection(db, "recaps"), where("uid", "==", uid)));
+    await wipe(query(collection(db, "riverPhotos"), where("uid", "==", uid)));
+    await wipe(query(collection(db, "trades"), where("uid", "==", uid)));
+    const fr = await getDocs(query(collection(db, "friendships"), where("members", "array-contains", uid))).catch(() => ({ docs: [] }));
+    for (const f of fr.docs) { await wipe(collection(db, "friendships", f.id, "messages")); await deleteDoc(f.ref).catch(() => {}); }
+    await wipe(collection(db, "users", uid, "log"));
+    await deleteDoc(doc(db, "fcboard", uid)).catch(() => {});
+    await deleteDoc(doc(db, "fcsave", uid)).catch(() => {});
+    const nm = (S.name || "").toLowerCase(); if (nm) await deleteDoc(doc(db, "usernames", nm)).catch(() => {});
+    await deleteDoc(doc(db, "users", uid)).catch(() => {});
+    await deleteUser(u);
+    try { localStorage.clear(); } catch { /* ok */ }
+    location.reload();
+  } catch (e) { toast(e?.code === "auth/requires-recent-login" ? "Sign out and sign back in, then try again." : errText(e)); }
+}
 function viewSettings(p) {
   const prec = el("select", { id: "s-prec", onchange: () => setPref("prec", prec.value) },
     el("option", { value: "approx" }, "Approximate area (about 1 km)"), el("option", { value: "exact" }, "Exact spot"));
@@ -4398,8 +4430,9 @@ function viewSettings(p) {
       el("span", { class: "hint" }, "Everyone using Weigh-In can see map pins. Skip the location for your home or a secret spot.")),
     el("section", { class: "stack" },
       el("button", { class: "btn ghost wide", type: "button", id: "s-about", onclick: openPrivacy }, "About and privacy"),
-      el("button", { class: "btn wide", type: "button", onclick: () => { if (confirm("Sign out of Weigh-In?")) signOut(auth); } }, "Sign out")),
-    el("p", { class: "hint", id: "s-ver" }, `Weigh-In beta version ${APP_VERSION}`),
+      el("button", { class: "btn wide", type: "button", onclick: () => { if (confirm("Sign out of Weigh-In?")) signOut(auth); } }, "Sign out"),
+      el("button", { class: "link danger small", type: "button", id: "s-delacct", style: "align-self:center", onclick: deleteMyAccount }, "Delete my account")),
+    el("p", { class: "hint", id: "s-ver" }, `Weigh-In version ${APP_VERSION}`),
     el("p", { class: "hint" }, "Weigh-In is free. Don't post personal info like your address or school."));
 }
 
@@ -5756,6 +5789,9 @@ function openPrivacy() {
         item("What the app doesn't do", "No ads, no tracking, no selling your info, no payments."),
         item("House rules", "Fishing photos only. No slurs, hate, or bullying. The person who runs the app, and moderators they choose, can delete posts or comments and can ban accounts. Tap the flag on a catch to report it."),
         item("Staying safe", "Don't post your address, school, or a spot you want to keep secret. Skip the location on catches near your home."),
-        item("Deleting things", "You can delete any of your catches or comments yourself. To remove your whole account, ask the person who runs the app.")))); 
+        item("Rivers and fish photos", "The Rivers tab reads free water levels from the US Geological Survey. Fish photos near a river come from iNaturalist and keep the photographer's credit. Photos anglers add to a river are visible to everyone."),
+        item("Who can use it", "You need to be 13 or older. If you are under 18, ask a parent or guardian first."),
+        item("Deleting things", "You can delete any of your catches or comments yourself. To remove your whole account, go to Settings and tap Delete my account. It removes your profile, catches, photos, chats, log and game progress. Comments you left on other people's catches may stay until someone removes them."),
+        item("Questions or problems", "Tap the flag on anything that breaks the rules, or message the person who runs the app.")))); 
   document.body.append(bg);
 }
