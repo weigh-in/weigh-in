@@ -1080,9 +1080,13 @@ function feedPosts() {
 /* What's new. Newest first. Add a new entry on top each time the app changes. */
 /* Bump APP_VERSION every time you change the app, and add a matching entry on top of UPDATES (with v: the same number).
    Phones check app.js every few minutes and offer the new version on their own. */
-const APP_VERSION = 50;
+const APP_VERSION = 51;
 try { if ((parseInt(localStorage.getItem("weighin-appv"), 10) || 0) < APP_VERSION) localStorage.setItem("weighin-appv", String(APP_VERSION)); } catch { /* private mode */ }
 const UPDATES = [
+  { id: "2026-11-12e", v: 51, date: "Nov 12", title: "New questions every time", items: [
+    "Fishing school makes up new questions every time, with new numbers: ounces and pounds, size and bag limits, sunrise times, tournament totals, and where fish live.",
+    "New Fishing math topic in Regular quiz.",
+    "Lessons, finals and regular quizzes all mix in made up questions with the written ones."] },
   { id: "2026-11-12d", v: 50, date: "Nov 12", title: "Harder school and game restart fix", items: [
     "Fishing school ranks need 5 times more XP now. Your XP stays the same, but the ranks take a lot longer to reach.",
     "You need more right answers to pass a lesson, a final and a regular quiz.",
@@ -3779,12 +3783,68 @@ function schAward(n) { const s = sch(), before = schRank(s.xp).i; schTouch(); s.
 const schShuffle = (a) => { const r = a.slice(); for (let i = r.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [r[i], r[j]] = [r[j], r[i]]; } return r; };
 const schPrep = (q) => { const o = schShuffle([q.right, ...q.wrong]); return { q: q.q, opts: o, c: o.indexOf(q.right), why: q.why, hard: !!q.hard }; };
 /* Draws n questions. Ones you haven't seen come first, and harder ones are favored, so every quiz is a new mix. */
-function schDraw(pool, n, key) {
+/* ---------- made-up questions: new numbers every time ---------- */
+const rI = (a, b) => a + Math.floor(Math.random() * (b - a + 1));
+const rPick = (a) => a[Math.floor(Math.random() * a.length)];
+const f1 = (x) => (Math.round(x * 10) / 10).toFixed(1);
+function genOpts(right, cands, fmt) {
+  const out = [];
+  for (const c of cands) { const v = fmt(c); if (v !== right && !out.includes(v)) out.push(v); if (out.length === 3) break; }
+  return out;
+}
+const SCH_HAB = [
+  { n: "Smallmouth bass", t: "over rocks and gravel in clear, cooler water" },
+  { n: "Crappie", t: "around brush piles and sunken trees" },
+  { n: "Channel catfish", t: "in deep holes and river bends" },
+  { n: "Rainbow trout", t: "in cold, clear, moving water" },
+  { n: "Common carp", t: "over muddy flats where they root for food" },
+  { n: "Northern pike", t: "in weedy shallows" }];
+const SCH_GENS = {
+  oz() {
+    const a = rI(1, 9), b = rI(1, 15), r = 16 * a + b, fm = (v) => v + " oz";
+    return Q(`A fish weighs ${a} lb ${b} oz. How many ounces is that?`, fm(r), genOpts(fm(r), [10 * a + b, 16 * a, r + 4, r - 3, r + 16, a + b + 16], fm), `There are 16 ounces in a pound. ${a} × 16 = ${16 * a}, plus ${b} = ${r}.`);
+  },
+  sum() {
+    const w = [0, 0, 0].map(() => rI(10, 99) / 10), t = w[0] + w[1] + w[2], fm = (v) => f1(v) + " lb";
+    return Q(`You catch three fish that weigh ${w.map(f1).join(" lb, ")} lb. What is the total weight?`, fm(t), genOpts(fm(t), [t + 0.5, t - 0.5, t + 1, t - 1, t + 2], fm), `Add them up: ${w.map(f1).join(" + ")} = ${f1(t)} lb.`);
+  },
+  limit() {
+    const L = rI(3, 10), k = rI(0, L - 1), r = L - k, fm = (v) => v + (v === 1 ? " fish" : " fish");
+    return Q(`The daily limit is ${L} fish. You have kept ${k} already. How many more can you keep today?`, fm(r), genOpts(fm(r), [r + 1, r - 1, L, k, L + k, r + 2].filter((v) => v >= 0), fm), `${L} minus ${k} is ${r}. Always check your local rules for the real limit.`);
+  },
+  minsize() {
+    const m = rI(12, 22), A = m - 0.5, B = m, C = m + rI(1, 3) + 0.5, right = "B and C";
+    return Q(`The minimum length for keeping a fish is ${m} inches. Fish A is ${f1(A)} in, fish B is ${f1(B)} in and fish C is ${f1(C)} in. Which can you keep?`, right, ["Only C", "A and B", "All three"], "A minimum length means the fish must be at least that long. Check your local rules, because sizes and limits change by water.");
+  },
+  sunrise() {
+    const h = rI(5, 7), m = rI(0, 5) * 10, x = rPick([30, 45, 60, 90]), t = h * 60 + m - x;
+    const fm = (v) => `${Math.floor(v / 60)}:${String(v % 60).padStart(2, "0")} AM`;
+    return Q(`Sunrise is at ${h}:${String(m).padStart(2, "0")} AM. You want to be fishing ${x} minutes before sunrise. What time do you start?`, fm(t), genOpts(fm(t), [t + 15, t - 15, t + 30, t - 30, t + x, t - 60].filter((v) => v > 0), fm), `${h}:${String(m).padStart(2, "0")} minus ${x} minutes is ${fm(t)}. Dawn is a great time to fish.`);
+  },
+  top3() {
+    const w = [0, 0, 0, 0, 0].map(() => rI(15, 89) / 10).sort((a, b) => b - a), t = w[0] + w[1] + w[2], fm = (v) => f1(v) + " lb";
+    return Q(`In a tournament only your 3 biggest fish count. You caught fish of ${[...w].sort(() => Math.random() - 0.5).map(f1).join(", ")} lb. What is your score?`, fm(t), genOpts(fm(t), [w[0] + w[1] + w[2] + w[3], w[2] + w[3] + w[4], w[0] + w[1], t + 0.5, t - 0.5, w.reduce((a, b) => a + b, 0)], fm), `Take the three biggest (${f1(w[0])}, ${f1(w[1])}, ${f1(w[2])}) and add them: ${f1(t)} lb.`);
+  },
+  habitat() {
+    const f = rPick(SCH_HAB), o = SCH_HAB.filter((x) => x !== f).sort(() => Math.random() - 0.5).slice(0, 3);
+    return Math.random() < 0.5
+      ? Q(`Where would you most likely find ${f.n}?`, f.t, o.map((x) => x.t), `${f.n} like to be ${f.t}.`)
+      : Q(`Which fish do you usually find ${f.t}?`, f.n, o.map((x) => x.n), `${f.n} like to be ${f.t}.`);
+  }
+};
+const SCH_MATH = ["oz", "sum", "limit", "minsize", "sunrise", "top3"];
+const SCH_GEN = { gear: ["oz", "sum"], care: ["oz", "limit"], weather: ["sunrise"], sky: ["sunrise"], rules: ["limit", "minsize"], species: ["habitat"], where: ["habitat"], water: ["habitat"], pro: ["top3"], seasons: ["sunrise"], boat: ["sum"], rigs: ["sum"], lures: ["habitat"], bait: ["habitat"] };
+const SCH_GEN_ALL = [...SCH_MATH, "habitat"];
+function schDraw(pool, n, key, gens) {
   const s = sch(), seen = new Set(s.seen[key] || []);
+  const g = gens && gens.length ? [...new Set(gens)] : null, nd = !pool.length ? n : g ? Math.max(1, Math.round(n / 3)) : 0;
+  const dyn = [], dq = new Set();
+  for (let t = 0; g && dyn.length < nd && t < nd * 10; t++) { const q = SCH_GENS[rPick(g)](); if (!dq.has(q.q)) { dq.add(q.q); dyn.push(q); } }
+  n -= dyn.length;
   const pick = pool.map((q) => ({ q, k: Math.random() + (seen.has(q.q) ? 0 : 2) + (q.hard ? 0.8 : 0) })).sort((a, b) => b.k - a.k).slice(0, Math.min(n, pool.length)).map((x) => x.q);
   let ns = [...seen, ...pick.map((q) => q.q)]; if (pool.every((q) => ns.includes(q.q))) ns = pick.map((q) => q.q);      // once you've seen them all, start the cycle again
   s.seen[key] = ns.slice(-80); schSave();
-  return schShuffle(pick).map(schPrep);
+  return schShuffle([...pick, ...dyn]).map(schPrep);
 }
 const SCH_LQ = 6;                                              // questions in a lesson quiz
 const schWait = (rec) => !!rec && rec.last === schDayNum();    // you took this quiz today, so it opens again tomorrow
@@ -3842,7 +3902,7 @@ function schHome(p, V, go2) {
     el("button", { class: "btn ghost wide", type: "button", id: "sch-knots", onclick: () => go2("knots") }, "🪢 Knot book (step by step pictures)"),
     el("details", { class: "sch-lib" }, el("summary", null, "Lesson library"),
       el("div", { class: "stack", style: "gap:6px;margin-top:8px" }, Object.entries(SCH_LESSONS).map(([id, L]) => el("button", { class: "item", type: "button", "data-lesson": id,
-        onclick: () => { if (schWait(s.lessons[id])) return schLockMsg(); go2("play", { kind: "lesson", lid: id, cid: "", qs: schDraw(L.q, SCH_LQ, "l:" + id), back: "home" }); } }, el("span", { class: "t" }, `${L.icon} ${L.n}`), el("span", { class: "label" }, schWait(s.lessons[id]) ? "Tomorrow" : s.lessons[id]?.done ? `Best ${s.lessons[id].best}/${SCH_LQ}` : "›"))))),
+        onclick: () => { if (schWait(s.lessons[id])) return schLockMsg(); go2("play", { kind: "lesson", lid: id, cid: "", qs: schDraw(L.q, SCH_LQ, "l:" + id, SCH_GEN[id]), back: "home" }); } }, el("span", { class: "t" }, `${L.icon} ${L.n}`), el("span", { class: "label" }, schWait(s.lessons[id]) ? "Tomorrow" : s.lessons[id]?.done ? `Best ${s.lessons[id].best}/${SCH_LQ}` : "›"))))),
     el("button", { class: "btn ghost wide", type: "button", id: "sch-board", onclick: () => go2("board") }, "🏅 Top anglers"),
     el("p", { class: "hint" }, "This is beginner knowledge. Fishing rules are different in every state and country, so always check your local wildlife agency. It isn't legal advice."));
 }
@@ -3905,7 +3965,7 @@ function schCourse(p, V, go2) {
     return; }
   const { st, items, allDone, finUnlocked } = cs, st0 = sch();
   p.append(el("div", { class: "stack", id: "sch-days" }, items.map((x) => {
-    const L = SCH_LESSONS[x.lid], wait = schWait(st0.lessons[x.lid]), play = () => { if (wait) return schLockMsg(); go2("play", { kind: "lesson", lid: x.lid, cid: c.id, qs: schDraw(L.q, SCH_LQ, "l:" + x.lid), back: "course" }); };
+    const L = SCH_LESSONS[x.lid], wait = schWait(st0.lessons[x.lid]), play = () => { if (wait) return schLockMsg(); go2("play", { kind: "lesson", lid: x.lid, cid: c.id, qs: schDraw(L.q, SCH_LQ, "l:" + x.lid, SCH_GEN[x.lid]), back: "course" }); };
     return el("div", { class: "sch-day" + (x.done ? " done" : x.unlocked ? " open" : ""), "data-day": x.i + 1 },
       el("span", { class: "sch-dot" }, x.done ? "✅" : x.unlocked ? "▶" : "🔒"),
       el("div", { class: "stack", style: "gap:2px;flex:1;min-width:0" }, el("b", null, `Day ${x.i + 1}: ${L.n}`), el("span", { class: "hint" }, L.sum),
@@ -3913,7 +3973,7 @@ function schCourse(p, V, go2) {
       x.unlocked ? el("button", { class: "btn small" + (x.done || wait ? " ghost" : ""), type: "button", "data-play": x.i + 1, disabled: wait ? "" : null, onclick: play }, wait ? "Tomorrow" : x.done ? "Again" : "Start")
         : x.open ? el("button", { class: "btn small ghost", type: "button", "data-skip": x.i + 1, onclick: () => { st.skip.push(x.i); schSave(); renderTab(); } }, "Do it now") : null);
   })));
-  const ids = c.days, finQs = () => schDraw(schAllQs(ids), 10, "f:" + c.id), finWait = st.flast === schDayNum();
+  const ids = c.days, finQs = () => schDraw(schAllQs(ids), 10, "f:" + c.id, ids.flatMap((l) => SCH_GEN[l] || [])), finWait = st.flast === schDayNum();
   p.append(el("div", { class: "sch-day" + (st.fin ? " done" : finUnlocked ? " open" : ""), id: "sch-final" },
     el("span", { class: "sch-dot" }, st.fin ? "🏆" : finUnlocked ? "▶" : "🔒"),
     el("div", { class: "stack", style: "gap:2px;flex:1" }, el("b", null, "Final quiz"), el("span", { class: "hint" }, st.fbest ? `Best ${st.fbest}/10. Get 8 or more to finish the course.` : "10 hard questions from every lesson. Get 8 or more to finish the course."),
@@ -3926,9 +3986,9 @@ function schQuizPick(p, V, go2) {
   const q = V.pick || (V.pick = { topic: "all", n: 10 });
   const paint = () => { const box = document.getElementById("sch-pick"); if (!box) return renderTab(); renderTab(); };
   p.append(el("h1", null, "Regular quiz"), el("p", { class: "muted" }, "Pick a topic and how many questions. Your best scores earn rank points, up to 100 XP a day."),
-    el("b", null, "Topic"), el("div", { class: "chips", id: "sch-topics" }, [["all", "Everything"], ...Object.entries(SCH_LESSONS).map(([id, L]) => [id, L.n])].map(([id, n]) => el("button", { class: "chip", type: "button", "data-topic": id, "aria-pressed": String(q.topic === id), onclick: () => { q.topic = id; paint(); } }, n))),
+    el("b", null, "Topic"), el("div", { class: "chips", id: "sch-topics" }, [["all", "Everything"], ["math", "🧮 Fishing math"], ...Object.entries(SCH_LESSONS).map(([id, L]) => [id, L.n])].map(([id, n]) => el("button", { class: "chip", type: "button", "data-topic": id, "aria-pressed": String(q.topic === id), onclick: () => { q.topic = id; paint(); } }, n))),
     el("b", null, "Questions"), el("div", { class: "chips", id: "sch-count" }, [5, 10, 15].map((n) => el("button", { class: "chip", type: "button", "data-n": n, "aria-pressed": String(q.n === n), onclick: () => { q.n = n; paint(); } }, String(n)))),
-    el("button", { class: "btn wide", type: "button", id: "sch-quiz-go", onclick: () => { if (sch().freeLast[q.topic] === schDayNum()) return schLockMsg(); const pool = q.topic === "all" ? schAllQs(Object.keys(SCH_LESSONS)) : SCH_LESSONS[q.topic].q; go2("play", { kind: "free", cid: "", topic: q.topic, qs: schDraw(pool, q.n, "q:" + q.topic), back: "quizpick" }); } }, "Start quiz"),
+    el("button", { class: "btn wide", type: "button", id: "sch-quiz-go", onclick: () => { if (sch().freeLast[q.topic] === schDayNum()) return schLockMsg(); const pool = q.topic === "all" ? schAllQs(Object.keys(SCH_LESSONS)) : q.topic === "math" ? [] : SCH_LESSONS[q.topic].q, gens = q.topic === "all" ? SCH_GEN_ALL : q.topic === "math" ? SCH_MATH : SCH_GEN[q.topic]; go2("play", { kind: "free", cid: "", topic: q.topic, qs: schDraw(pool, q.n, "q:" + q.topic, gens), back: "quizpick" }); } }, "Start quiz"),
     el("p", { class: "hint" }, "Each quiz is a new mix of questions. Once you take a quiz, you can take it again tomorrow."));
 }
 function schPlay(p, V, go2) {
