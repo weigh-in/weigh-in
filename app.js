@@ -142,10 +142,38 @@ const THEME_BAR = { light: "#1F5C4D", night: "#0E1B18", black: "#000000" };
 const THEME_CSS = `
 html[data-wtheme="light"]{--water:#E7EEEA;--surface:#FBFCF9;--line:#C9D6CF;--ink:#16302A;--muted:#5A6F67;--lake:#1F5C4D;--lake-soft:#D3E5DD;--deep:#0F2E26;--bobber:#D2452A;--bobber-ink:#FFFFFF;--gold:#B8871B;--shadow:0 1px 2px rgba(16,48,42,.06),0 6px 18px rgba(16,48,42,.07);--shadow-s:0 1px 2px rgba(16,48,42,.08);color-scheme:light}
 html[data-wtheme="night"]{--water:#0E1B18;--surface:#162723;--line:#2A403A;--ink:#E4EEE9;--muted:#93A8A0;--lake:#6FC1A6;--lake-soft:#1F3A33;--deep:#0F2E26;--bobber:#F06A4B;--bobber-ink:#1A0D09;--gold:#E2B44A;--shadow:0 1px 2px rgba(0,0,0,.3),0 6px 18px rgba(0,0,0,.28);--shadow-s:0 1px 2px rgba(0,0,0,.35);color-scheme:dark}
-html[data-wtheme="black"]{--water:#000000;--surface:#0E0E12;--line:#2B2B34;--ink:#F4F4F6;--muted:#9C9CAA;--lake:#4A7BE8;--lake-soft:#0F1B3D;--deep:#0A1230;--bobber:#E11D2E;--bobber-ink:#FFFFFF;--gold:#E2B44A;--shadow:0 1px 2px rgba(0,0,0,.6),0 6px 18px rgba(0,0,0,.5);--shadow-s:0 1px 2px rgba(0,0,0,.6);color-scheme:dark}
+html[data-wtheme="black"]{--water:#000000;--surface:#0E0E12;--line:#2B2B34;--ink:#F4F4F6;--muted:#9C9CAA;--lake:#4A7BE8;--lake-soft:#0F1B3D;--deep:#0A1230;--bobber:#E11D2E;--bobber-ink:#FFFFFF;--gold:#7FA2F5;--shadow:0 1px 2px rgba(0,0,0,.6),0 6px 18px rgba(0,0,0,.5);--shadow-s:0 1px 2px rgba(0,0,0,.6);color-scheme:dark}
 html[data-wtheme="black"] .btn{box-shadow:0 2px 0 rgba(0,0,0,.5),0 6px 14px rgba(225,29,46,.3)}
 html[data-wtheme="black"] .btn.ghost{box-shadow:none}
 html[data-wtheme="black"] .field input,html[data-wtheme="black"] .field select,html[data-wtheme="black"] .field textarea{box-shadow:none}
+html[data-wtheme="black"] .btn.ghost:active{background:var(--lake-soft)}
+html[data-wtheme="black"] .tab.post .bob{box-shadow:0 0 0 1.5px var(--ink),0 8px 18px rgba(225,29,46,.4)}
+html[data-wtheme="black"] nav.tabs{box-shadow:0 -6px 20px rgba(0,0,0,.6)}
+html[data-wtheme="black"] .card .shade{background:linear-gradient(to top,rgba(0,0,0,.9) 0%,rgba(0,0,0,.15) 45%,rgba(0,0,0,0) 70%)}
+html[data-wtheme="black"] .card .nophoto{color:#4A7BE8}
+html[data-wtheme="black"] .pb-pop{background:rgba(0,0,0,.8)}
+html[data-wtheme="black"] .auth{background:#000;color:#F4F4F6}
+html[data-wtheme="black"] .auth .field input{background:#0E0E12;border-color:#2B2B34;color:#F4F4F6}
+html[data-wtheme="black"] .auth .hint,html[data-wtheme="black"] .or,html[data-wtheme="black"] .timer .label,html[data-wtheme="black"] .timer .hint{color:#9C9CAA}
+html[data-wtheme="black"] .or::before,html[data-wtheme="black"] .or::after{background:#2B2B34}
+html[data-wtheme="black"] .auth .link{color:#4A7BE8}
+html[data-wtheme="black"] .auth .btn.ghost{color:#4A7BE8;border-color:#4A7BE8}
+html[data-wtheme="black"] .timer{background:#0A1230;color:#F4F4F6}
+html[data-wtheme="black"] .fc-card.hero{background:linear-gradient(135deg,#1E3A8A,#0A1230);color:#fff}
+html[data-wtheme="black"] .update-bar{background:#1E3A8A}
+html[data-wtheme="black"] .adv-hot{background:rgba(225,29,46,.18)}
+html[data-wtheme="black"] .adv-feature{border-color:#4A7BE8;background:rgba(74,123,232,.1)}
+html[data-wtheme="black"] .sch-bar i{background:#4A7BE8}
+html[data-wtheme="black"] .sch-day.open{border-color:#4A7BE8}
+html[data-wtheme="black"] .sch-rankup{background:#E11D2E}
+html[data-wtheme="black"] .sch-opt.right{border-color:#4A7BE8;background:rgba(74,123,232,.18)}
+html[data-wtheme="black"] .sch-opt.wrong{border-color:#E11D2E;background:rgba(225,29,46,.15)}
+html[data-wtheme="black"] .sch-why.ok{background:rgba(74,123,232,.15);border-left-color:#4A7BE8}
+html[data-wtheme="black"] .sch-why.bad{background:rgba(225,29,46,.12);border-left-color:#E11D2E}
+html[data-wtheme="black"] .sch-opt.right .sch-let{background:#4A7BE8}
+html[data-wtheme="black"] .sch-opt.wrong .sch-let{background:#E11D2E}
+html[data-wtheme="black"] .pop .link{color:#4A7BE8}
+html[data-wtheme="black"] .feed-empty,html[data-wtheme="black"] .feed-empty *{color:#F4F4F6}
 `;
 function applyTheme() {
   let t = "auto"; try { t = localStorage.getItem("weighin-theme") || "auto"; } catch { /* ok */ }
@@ -1509,8 +1537,10 @@ function playWrap(d, own) {
   const pool = photos.map((x) => x.p);
   let pi = 0; const nextPhoto = () => (pool.length ? pool[pi++ % pool.length] : "");
   const slides = [];
-  const add = (bg, ...kids) => slides.push({ bg, kids, photo: nextPhoto() });
-  const addP = (bg, photo, ...kids) => slides.push({ bg, kids, photo: photo || nextPhoto() });
+  const bk = getPref("theme", "auto") === "black";
+  const tint = (g) => (bk ? g.replace("#e8742a,#7a2a0a", "#e11d2e,#4a0710").replace("#1f9d6a,#0a3b2a", "#2a5fd0,#0a1a4a").replace("#d6336c,#5a0f2b", "#c4182a,#3a050b").replace("#7b3fc4,#2a0f55", "#1e3a8a,#0a1230").replace("#1b8fd1,#08304f", "#2a5fd0,#0a1230") : g);
+  const add = (bg, ...kids) => slides.push({ bg: tint(bg), kids, photo: nextPhoto() });
+  const addP = (bg, photo, ...kids) => slides.push({ bg: tint(bg), kids, photo: photo || nextPhoto() });
   add("linear-gradient(160deg,#0b5fa5,#0a2a4a)", H("🎣", 72), H(`${own ? "Your" : "@" + d.name + "'s"} ${yr} in fish`, 38), S2(own ? `@${d.name}, here's your year on the water.` : "A year on the water."));
   add("linear-gradient(160deg,#e8742a,#7a2a0a)", S2(own ? "You logged" : "Logged"), H(String(d.n), 96), S2(d.n === 1 ? "catch this year" : "catches this year"));
   add("linear-gradient(160deg,#1f9d6a,#0a3b2a)", S2(own ? "You caught" : "Caught"), H(String(d.kinds), 80), S2(d.kinds === 1 ? "kind of fish" : "different kinds of fish"),
@@ -2987,7 +3017,7 @@ function renderMap() {
       const L = window.L; if (!L || !S.map) return;
       const ll = [o.lat, o.lng];
       S.map.setView(ll, 13);
-      if (S.me) S.me.setLatLng(ll); else S.me = L.circleMarker(ll, { radius: 8, color: "#fff", weight: 3, fillColor: "#1F5C4D", fillOpacity: 1 }).addTo(S.map);
+      if (S.me) S.me.setLatLng(ll); else S.me = L.circleMarker(ll, { radius: 8, color: "#fff", weight: 3, fillColor: getPref("theme", "auto") === "black" ? "#4A7BE8" : "#1F5C4D", fillOpacity: 1 }).addTo(S.map);
     }).catch((e) => toast(e.message));
   } }, "📍");
   function paintBar() {
