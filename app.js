@@ -613,41 +613,43 @@ function rivTrend(o) {
     : pct < -0.03 ? ["↘️ Falling", "Water is clearing up. A good time to fish."]
     : ["➡️ Steady", "Steady water. Fish act normally."];
 }
-const rivWiki = new Map();
 const rivBase = (n) => n.replace(/,\s*[A-Za-z]{2}$/, "").split(/\s+(?:near|nr|at|below|blw|bl|above|abv|ab|in|on|downstream|upstream|dwnstrm|upstrm|@)\s+/i)[0].trim();
-async function rivInfo(river, stCode) {
-  const key = river + "|" + stCode; if (rivWiki.has(key)) return rivWiki.get(key);
-  let out = null;
-  try {
-    const q = encodeURIComponent(`${river} ${RIV_STATES[stCode] || ""}`.trim());
-    const r = await fetch(`https://en.wikipedia.org/w/api.php?action=query&generator=search&gsrsearch=${q}&gsrlimit=1&prop=extracts%7Cpageimages&exintro=1&explaintext=1&exsentences=3&piprop=thumbnail&pithumbsize=600&format=json&origin=*`);
-    const p = Object.values((await r.json()).query?.pages || {})[0];
-    const first = river.toLowerCase().split(/\s+/)[0];
-    if (p && p.title.toLowerCase().includes(first) && !/disambiguation/i.test(p.title) && p.extract) {
-      let t = p.extract.replace(/\s*\([^)]*\)/g, "").replace(/\s+/g, " ").trim(); if (t.length > 420) t = t.slice(0, 420).replace(/\s+\S*$/, "") + "…";
-      out = { title: p.title, text: t, img: p.thumbnail?.source || "", url: "https://en.wikipedia.org/wiki/" + encodeURIComponent(p.title.replace(/ /g, "_")) };
-    }
-  } catch { /* no picture is fine */ }
-  rivWiki.set(key, out); return out;
+const rivPlace = (n) => (n.replace(/,\s*[A-Za-z]{2}$/, "").match(/\s(?:near|nr|at|below|blw|above|abv)\s+(.+)$/i) || [])[1] || "";
+const RIV_SIZES = [
+  [50, "tiny creek", 90, "Small creeks are best fished by wading with light line and tiny lures. Look for pools below little riffles and shade under the banks."],
+  [300, "creek", 150, "Fish the deeper pools, the bends and the shade under the banks. Walk slowly so you don't spook the fish."],
+  [3000, "small river", 230, "Try the eddies, the edges of the current and the spots behind rocks and logs, where fish rest out of the flow."],
+  [30000, "river", 340, "Fish the slack water behind points and bends. Bridges and boat ramps are good starting spots. Be careful of strong current."],
+  [1e12, "big river", 480, "Big rivers are powerful and can rise fast. Fish the eddies, the mouths of creeks and the slow water along the banks, and wear a life jacket."]];
+function rivSize(o) { const f = o.flow ? o.flow.now : 800; return RIV_SIZES.find((x) => f < x[0]) || RIV_SIZES[4]; }
+function rivScene(o) {
+  const sz = rivSize(o), w = sz[2], L = 300 - w / 2, R = 300 + w / 2, t = rivTrend(o), tag = t ? t[0] : "";
+  const muddy = /fast/.test(tag) && /Rising/.test(tag), water = muddy ? "#8D7350" : "#3A8CC4", light = muddy ? "#B39B76" : "#8EC5E8";
+  const ripples = Array.from({ length: Math.min(8, 2 + Math.round(w / 70)) }, (_, k) => { const y = 150 + k * 9, x = L + 14 + ((k * 53) % Math.max(20, w - 60)); return `<path d="M${x} ${y} q10 -5 20 0 t20 0" fill="none" stroke="${light}" stroke-width="2" opacity=".8"/>`; }).join("");
+  const trees = [[28, 128], [70, 118], [118, 130], [490, 126], [535, 116], [575, 130]].map(([x, y]) => `<path d="M${x} ${y} l-14 34 h28 z M${x} ${y - 16} l-11 30 h22 z" fill="#3E6B4E"/>`).join("");
+  const arrow = /Rising/.test(tag) ? "▲" : /Dropping|Falling/.test(tag) ? "▼" : "●";
+  return `<svg viewBox="0 0 600 220" role="img" aria-label="Picture of a ${sz[1]}" style="width:100%;height:auto;display:block;border-radius:14px">
+<defs><linearGradient id="sk${o.code}" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#9CCBEA"/><stop offset="1" stop-color="#E6F3FB"/></linearGradient></defs>
+<rect width="600" height="220" fill="url(#sk${o.code})"/><circle cx="500" cy="42" r="20" fill="#FFF3C4"/>
+<path d="M0 120 Q90 70 190 110 T380 100 T600 112 V220 H0Z" fill="#7A9BB8"/><path d="M0 140 Q120 100 250 134 T600 130 V220 H0Z" fill="#5F8466"/>
+${trees}<path d="M0 220 V150 H${L} Q${L + 10} 190 ${L - 20} 220Z" fill="#6E8B5C"/><path d="M600 220 V150 H${R} Q${R - 10} 190 ${R + 20} 220Z" fill="#6E8B5C"/>
+<path d="M${L - 20} 220 Q${L + 10} 190 ${L} 150 H${R} Q${R - 10} 190 ${R + 20} 220Z" fill="${water}"/>${ripples}
+<g transform="translate(${300 - 22} 182)" opacity=".85"><path d="M0 14 q22 -22 44 0 q-22 14 -44 0z M44 14 l12 -9 v18z" fill="#E8EEF2"/><circle cx="9" cy="11" r="2" fill="#26384A"/></g>
+<rect x="14" y="14" rx="10" width="${12 + sz[1].length * 9 + 24}" height="28" fill="rgba(10,20,30,.62)"/><text x="26" y="33" font-size="15" font-family="system-ui,sans-serif" fill="#fff" font-weight="700">${arrow} ${sz[1]}</text></svg>`;
 }
-function rivGroups(rows, loc) {
-  const by = new Map();
-  for (const o of rows) { const rv = rivBase(o.name), st = (o.name.match(/,\s*([A-Za-z]{2})$/) || [])[1]?.toUpperCase() || ""; const k = rv + "|" + st; if (!by.has(k)) by.set(k, { rv, st, list: [] }); by.get(k).list.push(o); }
-  return [...by.values()].map((g) => {
-    const head = el("div", { class: "riv-info stack", "data-river": g.rv, style: "gap:8px" }, el("h2", { style: "margin:0" }, g.rv));
-    rivInfo(g.rv, g.st).then((w) => {
-      if (!w) return;
-      head.append(...[w.img ? el("img", { src: w.img, alt: w.title, loading: "lazy", style: "width:100%;max-height:220px;object-fit:cover;border-radius:14px" }) : null,
-        el("p", { style: "margin:0" }, w.text),
-        el("a", { href: w.url, target: "_blank", rel: "noopener", class: "link small" }, "From Wikipedia ›")].filter(Boolean));
-    });
-    return el("section", { class: "stack", style: "gap:10px" }, head, ...g.list.map((o) => rivCard(o, loc)));
-  });
+function rivDesc(o) {
+  const sz = rivSize(o), place = rivPlace(o.name), rv = rivBase(o.name);
+  const now = o.flow ? ` carrying about ${Math.round(o.flow.now).toLocaleString()} cubic feet of water every second` : "";
+  const lvl = o.stage ? ` The water is ${o.stage.now.toFixed(1)} feet on the gauge.` : "";
+  return `This gauge is on the ${rv}${place ? " at " + place : ""}. It reads like a ${sz[1]}${now}.${lvl} ${sz[3]}`;
 }
 function rivCard(o, loc) {
   const t = rivTrend(o), mi = loc ? km(loc, { lat: o.lat, lng: o.lng }) / 1.609 : null;
+  const pic = el("div", { class: "riv-pic", "data-pic": o.code }); pic.innerHTML = rivScene(o);
   return el("div", { class: "card-lite stack", style: "gap:6px;padding:14px;border:2px solid var(--line, #c9d6de);border-radius:14px", "data-gauge": o.code },
+    pic,
     el("div", { class: "row spread", style: "gap:8px;flex-wrap:nowrap" }, el("b", { style: "overflow-wrap:anywhere" }, o.name), mi == null ? null : el("span", { class: "muted small", style: "white-space:nowrap" }, mi.toFixed(mi < 10 ? 1 : 0) + " mi")),
+    el("p", { class: "riv-desc", style: "margin:0" }, rivDesc(o)),
     el("div", { class: "cond-grid" },
       o.stage ? condTile("Water level", o.stage.now.toFixed(2) + " ft", "gauge height", "") : null,
       o.flow ? condTile("Flow", Math.round(o.flow.now).toLocaleString() + " cfs", "cubic ft per second", "") : null),
@@ -661,7 +663,7 @@ async function loadGauges(box, loc) {
   st.value = getPref("rivst", "") || guess || "";
   const res = el("div", { class: "stack", id: "riv-res" }, el("p", { class: "muted" }, "Type a river or creek name and pick its state. Try Mississippi, Current, Guadalupe or Meramec."));
   const note = "Real gauges from the US Geological Survey, updated about every 15 minutes. Rising and falling is over the last 6 hours.";
-  const show = (rows, head) => res.replaceChildren(el("p", { class: "muted small", style: "margin:0" }, head), ...rivGroups(rows, loc), el("p", { class: "muted small" }, "Gauge data from the US Geological Survey. River pictures and descriptions from Wikipedia. Gauges are in the US only."));
+  const show = (rows, head) => res.replaceChildren(el("p", { class: "muted small", style: "margin:0" }, head), ...rows.map((o) => rivCard(o, loc)), el("p", { class: "muted small" }, "Data from the US Geological Survey. Pictures are drawings made by the app. Gauges are in the US only."));
   const search = async () => {
     const words = q.value.toLowerCase().split(/\s+/).filter(Boolean);
     if (!st.value) { res.replaceChildren(el("p", { class: "muted" }, "Pick a state first.")); return; }
@@ -1111,11 +1113,12 @@ function feedPosts() {
 /* What's new. Newest first. Add a new entry on top each time the app changes. */
 /* Bump APP_VERSION every time you change the app, and add a matching entry on top of UPDATES (with v: the same number).
    Phones check app.js every few minutes and offer the new version on their own. */
-const APP_VERSION = 52;
+const APP_VERSION = 53;
 try { if ((parseInt(localStorage.getItem("weighin-appv"), 10) || 0) < APP_VERSION) localStorage.setItem("weighin-appv", String(APP_VERSION)); } catch { /* private mode */ }
 const UPDATES = [
-  { id: "2026-11-12f", v: 52, date: "Nov 12", title: "River pictures", items: [
-    "Rivers now show a picture and a short description above the gauges, from Wikipedia. If a river has no page, you just get the gauges."] },
+  { id: "2026-11-12g", v: 53, date: "Nov 12", title: "River pictures, no Wikipedia", items: [
+    "Each river gauge now has its own picture and a short description, made right in the app from the gauge numbers. Wikipedia is not used.",
+    "The picture shows how big the river is and if the water is rising or falling."] },
   { id: "2026-11-12e", v: 51, date: "Nov 12", title: "New questions every time", items: [
     "Fishing school makes up new questions every time, with new numbers: ounces and pounds, size and bag limits, sunrise times, tournament totals, and where fish live.",
     "New Fishing math topic in Regular quiz.",
