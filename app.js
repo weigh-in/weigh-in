@@ -664,8 +664,36 @@ async function loadGauges(box, loc) {
   const res = el("div", { class: "stack", id: "riv-res" }, el("p", { class: "muted" }, "Type a river or creek name and pick its state. Try Mississippi, Current, Guadalupe or Meramec."));
   const note = "Real gauges from the US Geological Survey, updated about every 15 minutes. Rising and falling is over the last 6 hours.";
   const show = (rows, head) => res.replaceChildren(el("p", { class: "muted small", style: "margin:0" }, head), ...rows.map((o) => rivCard(o, loc)), el("p", { class: "muted small" }, "Data from the US Geological Survey. Pictures are drawings made by the app. Gauges are in the US only."));
-  const search = async () => {
+  const noGauge = (why, canAll) => {
+    const pic = el("div", { class: "riv-pic", "data-pic": "none" }); pic.innerHTML = rivScene({ code: "none" });
+    res.replaceChildren(el("div", { class: "card-lite stack", id: "riv-none", style: "gap:8px;padding:14px;border:2px solid var(--line, #c9d6de);border-radius:14px" }, pic,
+      el("b", null, q.value.trim() ? `"${q.value.trim()}"` : "No gauge"),
+      el("p", { style: "margin:0" }, why),
+      el("p", { style: "margin:0" }, "Not every river or creek has a gauge. You can still plan a trip: " + RIV_SIZES[2][3] + " Early morning and evening are usually the best times, and a rising river after rain can turn the fish on or make the water too muddy to fish."),
+      el("div", { class: "row", style: "gap:8px" },
+        el("button", { class: "btn small", type: "button", id: "riv-bite", onclick: () => document.querySelector("#bite-seg-fore")?.click() }, "⛅ Weather and bite"),
+        canAll ? el("button", { class: "btn small ghost", type: "button", id: "riv-all", onclick: () => search(true) }, "🔎 Search all states") : null,
+        loc ? el("button", { class: "btn small ghost", type: "button", onclick: near }, "📍 Gauges near me") : null)));
+  };
+  const search = async (everywhere) => {
     const words = q.value.toLowerCase().split(/\s+/).filter(Boolean);
+    if (everywhere === true) {
+      if (!words.length) return;
+      res.replaceChildren(el("p", { class: "muted", id: "riv-prog" }, "Searching every state…"));
+      try {
+        const codes = Object.keys(RIV_STATES); let done = 0; const hit = [];
+        const work = async () => { while (codes.length) { const c = codes.shift(); try { const all = await rivStateList(c); hit.push(...all.filter((x) => words.every((w) => x.name.toLowerCase().includes(w)))); } catch { /* skip a state that fails */ } done++; const p = document.getElementById("riv-prog"); if (p) p.textContent = `Searching every state… ${done} of ${Object.keys(RIV_STATES).length}`; } };
+        await Promise.all([work(), work(), work(), work(), work(), work()]);
+        const seenC = new Set(); for (let i = hit.length - 1; i >= 0; i--) { if (seenC.has(hit[i].code)) hit.splice(i, 1); else seenC.add(hit[i].code); }
+        hit.sort((a, b) => (+b.name.toLowerCase().startsWith(words[0]) - +a.name.toLowerCase().startsWith(words[0])) || a.name.localeCompare(b.name));
+        const top = hit.slice(0, 12);
+        if (!top.length) { noGauge(`No gauges found for that name in any state.`, false); return; }
+        const rows = await rivReadings("sites=" + top.map((x) => x.code).join(","), new Map(top.map((x) => [x.code, x.name])));
+        if (!rows.length) { noGauge("Found gauges with that name, but none are sending readings right now.", false); return; }
+        rows.sort((a, b) => a.name.localeCompare(b.name)); show(rows, note + " Searched every state.");
+      } catch (e) { res.replaceChildren(el("p", { class: "muted" }, "Couldn't load river gauges. Check your internet and try again."), el("p", { class: "muted small" }, String(e.message || e))); }
+      return;
+    }
     if (!st.value) { res.replaceChildren(el("p", { class: "muted" }, "Pick a state first.")); return; }
     if (!words.length) { res.replaceChildren(el("p", { class: "muted" }, "Type part of a river or creek name.")); return; }
     setPref("rivq", q.value.trim()); setPref("rivst", st.value);
@@ -673,11 +701,11 @@ async function loadGauges(box, loc) {
     try {
       const all = await rivStateList(st.value);
       const hit = all.filter((x) => words.every((w) => x.name.toLowerCase().includes(w))).sort((a, b) => (+b.name.toLowerCase().startsWith(words[0]) - +a.name.toLowerCase().startsWith(words[0])) || a.name.localeCompare(b.name)).slice(0, 12);
-      if (!hit.length) { res.replaceChildren(el("p", { class: "muted" }, `No gauges found for "${q.value.trim()}" in ${RIV_STATES[st.value]}. Try a shorter name, like Meramec instead of Meramec River.`)); return; }
+      if (!hit.length) { noGauge(`No gauges found in ${RIV_STATES[st.value]}. Try a shorter name, like Meramec instead of Meramec River, or search every state.`, true); return; }
       const names = new Map(hit.map((x) => [x.code, x.name]));
       const rows = await rivReadings("sites=" + hit.map((x) => x.code).join(","), names);
       rows.sort((a, b) => a.name.localeCompare(b.name));
-      if (!rows.length) { res.replaceChildren(el("p", { class: "muted" }, "Found the river, but its gauges aren't sending readings right now.")); return; }
+      if (!rows.length) { noGauge("Found the river, but its gauges aren't sending readings right now.", true); return; }
       show(rows, note + (hit.length === 12 ? " Showing the first 12." : ""));
     } catch (e) { res.replaceChildren(el("p", { class: "muted" }, "Couldn't load river gauges. Check your internet and try again."), el("p", { class: "muted small" }, String(e.message || e))); }
   };
@@ -687,14 +715,14 @@ async function loadGauges(box, loc) {
     try {
       const d = 0.4, bb = [loc.lng - d, loc.lat - d, loc.lng + d, loc.lat + d].map((x) => x.toFixed(4)).join(",");
       const rows = (await rivReadings("bBox=" + bb)).map((o) => ({ ...o, mi: km(loc, { lat: o.lat, lng: o.lng }) })).sort((a, b) => a.mi - b.mi).slice(0, 10);
-      if (!rows.length) { res.replaceChildren(el("p", { class: "muted" }, "No river gauges within about 25 miles. Try searching for a river by name.")); return; }
+      if (!rows.length) { noGauge("No river gauges within about 25 miles of " + loc.name + ". Try searching for a river by name.", true); return; }
       show(rows, "Gauges near " + loc.name + ". " + note);
     } catch (e) { res.replaceChildren(el("p", { class: "muted" }, "Couldn't load river gauges. Check your internet and try again."), el("p", { class: "muted small" }, String(e.message || e))); }
   };
   q.addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); search(); } });
   box.replaceChildren(
     q, st,
-    el("div", { class: "row", style: "gap:8px" }, el("button", { class: "btn small", type: "button", id: "riv-go", onclick: search }, "Search"),
+    el("div", { class: "row", style: "gap:8px" }, el("button", { class: "btn small", type: "button", id: "riv-go", onclick: () => search() }, "Search"),
       loc ? el("button", { class: "btn ghost small", type: "button", id: "riv-near", onclick: near }, "📍 Near me") : null),
     res);
   if (q.value.trim() && st.value) search();
@@ -1113,9 +1141,12 @@ function feedPosts() {
 /* What's new. Newest first. Add a new entry on top each time the app changes. */
 /* Bump APP_VERSION every time you change the app, and add a matching entry on top of UPDATES (with v: the same number).
    Phones check app.js every few minutes and offer the new version on their own. */
-const APP_VERSION = 53;
+const APP_VERSION = 54;
 try { if ((parseInt(localStorage.getItem("weighin-appv"), 10) || 0) < APP_VERSION) localStorage.setItem("weighin-appv", String(APP_VERSION)); } catch { /* private mode */ }
 const UPDATES = [
+  { id: "2026-11-12h", v: 54, date: "Nov 12", title: "Rivers with no gauge", items: [
+    "If a river or creek has no gauge, you now get a picture, fishing tips and buttons for the weather and bite forecast, rivers near you, or searching every state.",
+    "New Search all states button when a name isn't found in your state."] },
   { id: "2026-11-12g", v: 53, date: "Nov 12", title: "River pictures, no Wikipedia", items: [
     "Each river gauge now has its own picture and a short description, made right in the app from the gauge numbers. Wikipedia is not used.",
     "The picture shows how big the river is and if the water is rising or falling."] },
