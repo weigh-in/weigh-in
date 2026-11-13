@@ -236,6 +236,8 @@ function renderAuth(mode = "signin") {
       el("input", { name: "email", id: "a-email", type: "email", autocomplete: "email", required: true })),
     el("label", { class: "field" }, el("span", null, "Password"),
       el("input", { name: "pw", id: "a-pw", type: "password", autocomplete: isNew ? "new-password" : "current-password", minlength: 6, required: true })),
+    el("label", { class: "row", style: "gap:8px;flex-wrap:nowrap;cursor:pointer;align-self:flex-start;font-size:.95rem" },
+      el("input", { type: "checkbox", id: "a-showpw", style: "width:20px;height:20px", onchange: (e) => { document.querySelector("#a-pw").type = e.target.checked ? "text" : "password"; } }), "Show password"),
     msg,
     el("button", { class: "btn wide", type: "submit" }, isNew ? "Create account" : "Sign in"));
   f.addEventListener("submit", async (e) => {
@@ -1030,9 +1032,11 @@ function feedPosts() {
 /* What's new. Newest first. Add a new entry on top each time the app changes. */
 /* Bump APP_VERSION every time you change the app, and add a matching entry on top of UPDATES (with v: the same number).
    Phones check app.js every few minutes and offer the new version on their own. */
-const APP_VERSION = 47;
+const APP_VERSION = 48;
 try { if ((parseInt(localStorage.getItem("weighin-appv"), 10) || 0) < APP_VERSION) localStorage.setItem("weighin-appv", String(APP_VERSION)); } catch { /* private mode */ }
 const UPDATES = [
+  { id: "2026-11-12b", v: 48, date: "Nov 12", title: "Show password", items: [
+    "When you sign in or make an account, tap Show password to see what you typed."] },
   { id: "2026-11-12a", v: 47, date: "Nov 12", title: "Color themes", items: [
     "New Appearance setting (Me, then Settings). Pick Auto, Light, Night or Black.",
     "Black is a black screen with red buttons and blue accents. You can switch back any time.",
