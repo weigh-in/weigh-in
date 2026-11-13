@@ -136,6 +136,25 @@ async function thumbFrom(dataUrl, max = 160) {
     return c.toDataURL("image/jpeg", 0.6);
   } catch { return ""; }
 }
+/* ---------- color themes ---------- */
+const THEMES = [["auto", "Auto", "Follows your phone"], ["light", "Light", "Green and orange"], ["night", "Night", "Dark green"], ["black", "Black", "Black, red and blue"]];
+const THEME_BAR = { light: "#1F5C4D", night: "#0E1B18", black: "#000000" };
+const THEME_CSS = `
+html[data-wtheme="light"]{--water:#E7EEEA;--surface:#FBFCF9;--line:#C9D6CF;--ink:#16302A;--muted:#5A6F67;--lake:#1F5C4D;--lake-soft:#D3E5DD;--deep:#0F2E26;--bobber:#D2452A;--bobber-ink:#FFFFFF;--gold:#B8871B;--shadow:0 1px 2px rgba(16,48,42,.06),0 6px 18px rgba(16,48,42,.07);--shadow-s:0 1px 2px rgba(16,48,42,.08);color-scheme:light}
+html[data-wtheme="night"]{--water:#0E1B18;--surface:#162723;--line:#2A403A;--ink:#E4EEE9;--muted:#93A8A0;--lake:#6FC1A6;--lake-soft:#1F3A33;--deep:#0F2E26;--bobber:#F06A4B;--bobber-ink:#1A0D09;--gold:#E2B44A;--shadow:0 1px 2px rgba(0,0,0,.3),0 6px 18px rgba(0,0,0,.28);--shadow-s:0 1px 2px rgba(0,0,0,.35);color-scheme:dark}
+html[data-wtheme="black"]{--water:#000000;--surface:#0E0E12;--line:#2B2B34;--ink:#F4F4F6;--muted:#9C9CAA;--lake:#4A7BE8;--lake-soft:#0F1B3D;--deep:#0A1230;--bobber:#E11D2E;--bobber-ink:#FFFFFF;--gold:#E2B44A;--shadow:0 1px 2px rgba(0,0,0,.6),0 6px 18px rgba(0,0,0,.5);--shadow-s:0 1px 2px rgba(0,0,0,.6);color-scheme:dark}
+html[data-wtheme="black"] .btn{box-shadow:0 2px 0 rgba(0,0,0,.5),0 6px 14px rgba(225,29,46,.3)}
+html[data-wtheme="black"] .btn.ghost{box-shadow:none}
+html[data-wtheme="black"] .field input,html[data-wtheme="black"] .field select,html[data-wtheme="black"] .field textarea{box-shadow:none}
+`;
+function applyTheme() {
+  let t = "auto"; try { t = localStorage.getItem("weighin-theme") || "auto"; } catch { /* ok */ }
+  if (!THEMES.some((x) => x[0] === t)) t = "auto";
+  if (!document.getElementById("theme-css")) { const st = document.createElement("style"); st.id = "theme-css"; st.textContent = THEME_CSS; document.head.append(st); }
+  if (t === "auto") document.documentElement.removeAttribute("data-wtheme"); else document.documentElement.setAttribute("data-wtheme", t);
+  const m = document.querySelector('meta[name="theme-color"]'); if (m) m.setAttribute("content", THEME_BAR[t] || (matchMedia("(prefers-color-scheme: dark)").matches ? "#0E1B18" : "#1F5C4D"));
+}
+applyTheme();
 function getPref(k, d) { try { return localStorage.getItem("weighin-" + k) || d; } catch { return d; } }
 function setPref(k, v) { try { localStorage.setItem("weighin-" + k, v); } catch { /* private mode */ } }
 
@@ -175,6 +194,7 @@ const placeLabel = (x) => [x.city, x.state].filter(Boolean).join(", ");
 const OWNER_UID = "whNN0b8nbhdQiK8osrBa48SEtm82"; // moderators can't delete or ban this account
 const canOn = (perm, ownerUid) => !!(S.owner || (S.mod && S.mod[perm] && ownerUid !== OWNER_UID));
 const can = (perm) => !!(S.owner || (S.mod && S.mod[perm]));
+const canPubTour = () => !!(S.owner || S.tourAcc);
 const isStaff = () => !!(S.owner || S.mod);
 const editOn = () => isStaff() && !!S.editMode;   // owner buttons only show while Edit mode is on
 const isBad = (...parts) => parts.some((x) => badText(x));
@@ -270,7 +290,7 @@ onAuthStateChanged(auth, async (user) => {
   stopAll();
   S.user = user;
   S.owner = !!(user && user.emailVerified && String(user.email || "").toLowerCase() === OWNER_EMAIL);
-  S.banned = false; S.mod = null; S.editMode = false;
+  S.banned = false; S.mod = null; S.editMode = false; S.tourAcc = false;
   if (!user) { renderAuth(); return; }
   $app.replaceChildren(el("div", { class: "boot" }, "Loading…"));
   try {
@@ -368,6 +388,10 @@ function startApp() {
     if (S.tab === "feed") renderFeedCards(); else if (S.tab === "me") renderTab();
   }, () => {}));
   unsubs.push(onSnapshot(doc(db, "bans", uid), (d) => { if (d.exists() && !S.owner) showBanned(); }, () => {}));
+  unsubs.push(onSnapshot(doc(db, "tourAccess", uid), (d) => {
+    if (d.exists() === S.tourAcc) return;
+    S.tourAcc = d.exists(); if (S.tab === "tours" && !S.creatingTour && !S.openTournament) renderTab();
+  }, () => {}));
   buildShell();
 }
 function showBanned() {
@@ -980,9 +1004,13 @@ function feedPosts() {
 /* What's new. Newest first. Add a new entry on top each time the app changes. */
 /* Bump APP_VERSION every time you change the app, and add a matching entry on top of UPDATES (with v: the same number).
    Phones check app.js every few minutes and offer the new version on their own. */
-const APP_VERSION = 46;
+const APP_VERSION = 47;
 try { if ((parseInt(localStorage.getItem("weighin-appv"), 10) || 0) < APP_VERSION) localStorage.setItem("weighin-appv", String(APP_VERSION)); } catch { /* private mode */ }
 const UPDATES = [
+  { id: "2026-11-12a", v: 47, date: "Nov 12", title: "Color themes", items: [
+    "New Appearance setting (Me, then Settings). Pick Auto, Light, Night or Black.",
+    "Black is a black screen with red buttons and blue accents. You can switch back any time.",
+    "The owner can give people access to start public tournaments in Owner tools."] },
   { id: "2026-11-11e", v: 46, date: "Nov 11", title: "Warnings", items: [
     "The owner and moderators can now send a warning to an angler. It shows up as a pop-up they have to read and tap I understand.",
     "Moderators need the new Warn anglers permission. The owner turns it on in Make mod."] },
@@ -1656,6 +1684,13 @@ function showWarnings(list) {
       } }, "I understand"))));
   document.body.append(bg);
 }
+async function toggleTourAccess(uid, name, has) {
+  if (!S.owner) return;
+  try {
+    if (has) { await deleteDoc(doc(db, "tourAccess", uid)); toast(`@${name} can't start public tournaments anymore.`); }
+    else { await setDoc(doc(db, "tourAccess", uid), { name: String(name).slice(0, 30), by: S.user.uid, createdAt: serverTimestamp() }); toast(`@${name} can now start public tournaments.`); }
+  } catch (e) { toast(errText(e)); }
+}
 async function banUser(uid, name) {
   if (!can("ban")) return;
   if (uid === S.user.uid) { toast("You can't ban yourself."); return; }
@@ -1704,7 +1739,7 @@ function viewOwner(p) {
   stopOwner();
   const reportsBox = el("div", { class: "list" }, el("p", { class: "muted" }, "Loading…"));
   const membersBox = el("div", { class: "list" }, el("p", { class: "muted" }, "Loading…"));
-  let bans = new Set(), users = [], reports = [], mods = new Map();
+  let bans = new Set(), users = [], reports = [], mods = new Map(), tacc = new Set();
   const paintReports = () => reportsBox.replaceChildren(...(reports.length ? reports.map((r) => el("div", { class: "item", style: "cursor:default;align-items:flex-start" },
     el("div", { class: "row", style: "gap:12px;flex-wrap:nowrap;min-width:0" },
       r.thumb ? el("img", { src: r.thumb, alt: "", style: "width:64px;height:64px;object-fit:cover;border-radius:8px;flex:none" }) : null,
@@ -1718,15 +1753,17 @@ function viewOwner(p) {
   const paintMembers = () => { const rows = users.filter((u) => u.id !== S.user.uid);
     membersBox.replaceChildren(...(rows.length ? rows.map((u) => el("div", { class: "item", style: "cursor:default;flex-wrap:wrap" },
       el("span", { class: "row", style: "gap:8px;flex-wrap:nowrap;min-width:0" }, avatar(u.id, u.name, 28), el("span", { class: "t" }, "@" + u.name),
-        bans.has(u.id) ? el("span", { class: "pill final" }, "Banned") : null, mods.has(u.id) ? el("span", { class: "pill soon" }, "Mod") : null),
+        bans.has(u.id) ? el("span", { class: "pill final" }, "Banned") : null, mods.has(u.id) ? el("span", { class: "pill soon" }, "Mod") : null, tacc.has(u.id) ? el("span", { class: "pill live" }, "Tourneys") : null),
       el("span", { class: "row", style: "gap:8px" },
         S.owner ? el("button", { class: "btn ghost small", type: "button", "data-rename": u.id, onclick: () => openOwnerRename(u.id, u.name) }, "Rename") : null,
+        S.owner && u.id !== OWNER_UID ? el("button", { class: "btn ghost small", type: "button", "data-tacc": u.id, onclick: () => toggleTourAccess(u.id, u.name, tacc.has(u.id)) }, tacc.has(u.id) ? "Take away tourneys" : "Allow tourneys") : null,
         S.owner ? el("button", { class: "btn ghost small", type: "button", onclick: () => openModEditor(u.id, u.name, mods.get(u.id)) }, mods.has(u.id) ? "Edit mod" : "Make mod") : null,
         can("warn") && u.id !== OWNER_UID && u.id !== S.user.uid ? el("button", { class: "btn ghost small", type: "button", "data-warn": u.id, onclick: () => warnUser(u.id, u.name) }, "Warn") : null,
         can("ban") ? (bans.has(u.id) ? el("button", { class: "btn ghost small", type: "button", onclick: () => unbanUser(u.id, u.name) }, "Unban")
           : el("button", { class: "btn small", type: "button", onclick: () => banUser(u.id, u.name) }, "Ban")) : null))) : [el("p", { class: "empty" }, "No other anglers yet.")])); };
   if (can("reports")) ownerUns.push(onSnapshot(query(collection(db, "reports"), orderBy("createdAt", "desc"), limit(50)), (s) => { reports = s.docs.map((d) => ({ id: d.id, ...d.data({ serverTimestamps: "estimate" }) })); paintReports(); }, () => reportsBox.replaceChildren(el("p", { class: "muted" }, "Couldn't load reports."))));
   if (can("ban")) ownerUns.push(onSnapshot(collection(db, "bans"), (s) => { bans = new Set(s.docs.map((d) => d.id)); paintMembers(); }, () => {}));
+  if (S.owner) ownerUns.push(onSnapshot(collection(db, "tourAccess"), (s) => { tacc = new Set(s.docs.map((d) => d.id)); paintMembers(); }, () => {}));
   if (S.owner) ownerUns.push(onSnapshot(collection(db, "mods"), (s) => { mods = new Map(s.docs.map((d) => [d.id, d.data().perms || {}])); paintMembers(); }, () => {}));
   if (can("ban") || S.owner) ownerUns.push(onSnapshot(query(collection(db, "users"), limit(300)), (s) => { users = s.docs.map((d) => ({ id: d.id, ...d.data() })).sort((a, b) => String(a.name).localeCompare(String(b.name))); paintMembers(); }, () => {}));
   const mine = PERMS.filter(([k]) => can(k)).map(([, l]) => l);
@@ -2445,10 +2482,10 @@ function viewTours(p) {
   p.append(el("div", { class: "row spread" }, el("h1", null, "Tourneys"),
     el("div", { class: "row", style: "gap:8px;flex-wrap:nowrap" },
       el("button", { class: "btn ghost small", type: "button", id: "t-new-priv", onclick: () => { S.creatingTour = "private"; renderTab(); } }, "🔒 Private"),
-      el("button", { class: "btn small", type: "button", id: "t-new", onclick: () => { S.creatingTour = "public"; renderTab(); } }, S.owner ? "New" : "Request one"))));
+      el("button", { class: "btn small", type: "button", id: "t-new", onclick: () => { S.creatingTour = "public"; renderTab(); } }, canPubTour() ? "New" : "Request one"))));
   const joinPanel = tourJoinPanel(); if (joinPanel) p.append(joinPanel);
   const reqPanel = tourRequestsPanel(); if (reqPanel) p.append(reqPanel);
-  if (!ts.length) { p.append(el("p", { class: "empty" }, S.owner ? "No tournaments yet. Tap New to start one." : "No tournaments yet. Tap Request one to ask the owner to start one.")); return; }
+  if (!ts.length) { p.append(el("p", { class: "empty" }, canPubTour() ? "No tournaments yet. Tap New to start one." : "No tournaments yet. Tap Request one to ask the owner to start one.")); return; }
   p.append(el("div", { class: "list" }, ts.map((t) => {
     const st = tourStatus(t), n = (t.members || []).length;
     return el("button", { class: "item", type: "button", onclick: () => openTour(t.id) },
@@ -2521,7 +2558,7 @@ function viewCreateTour(p) {
       feeWrap,
       el("label", { class: "field" }, el("span", { class: "hint" }, "Prize (optional)"), prizeIn),
       el("span", { class: "hint" }, "Weigh-In never takes or sends money. You collect any fee yourself (cash, Venmo and so on), tick people off as paid on the tournament page, and give out the prize yourself. Rules for contests with fees and cash prizes are different in each place, so check yours.")),
-    el("button", { class: "btn wide", type: "submit" }, priv || S.owner ? "Create tournament" : "Send request to the owner"));
+    el("button", { class: "btn wide", type: "submit" }, priv || canPubTour() ? "Create tournament" : "Send request to the owner"));
   f.addEventListener("submit", async (e) => {
     e.preventDefault();
     const fd = new FormData(f);
@@ -2559,7 +2596,7 @@ function viewCreateTour(p) {
       if (phases.length) data.phases = phases;
       if (spNames.length) data.species = spNames;
       if (priv) data.private = true;
-      if (!S.owner && !priv) {   // only the owner makes public tournaments, so everyone else asks first
+      if (!canPubTour() && !priv) {   // only the owner makes public tournaments, so everyone else asks first
         const { createdBy, createdByName, members, createdAt, paid, ...spec } = data;
         await addDoc(collection(db, "tourRequests"), { uid: S.user.uid, name: S.name, tname: name, spec, status: "pending", createdAt: serverTimestamp() });
         S.creatingTour = false; toast("Request sent. The owner will take a look."); renderTab(); return;
@@ -2569,8 +2606,8 @@ function viewCreateTour(p) {
     } catch (err) { toast(errText(err)); }
   });
   p.append(el("button", { class: "link", type: "button", style: "align-self:flex-start", onclick: () => { S.creatingTour = false; renderTab(); } }, "‹ Back"),
-    el("h1", null, priv ? "New private tournament" : S.owner ? "New tournament" : "Request a tournament"),
-    priv ? el("p", { class: "muted", style: "margin:0" }, "Invite only. Everyone can see it in the list, but people have to ask to join and you say yes or no. You run it.") : S.owner ? null : el("p", { class: "muted", style: "margin:0" }, "Public tournaments are set up by the owner. Fill this in and send it. If the owner says yes, it goes live and you run it."), f);
+    el("h1", null, priv ? "New private tournament" : canPubTour() ? "New tournament" : "Request a tournament"),
+    priv ? el("p", { class: "muted", style: "margin:0" }, "Invite only. Everyone can see it in the list, but people have to ask to join and you say yes or no. You run it.") : canPubTour() ? null : el("p", { class: "muted", style: "margin:0" }, "Public tournaments are set up by the owner. Fill this in and send it. If the owner says yes, it goes live and you run it."), f);
 }
 let phaseFilter = null;
 function openTour(id) {
@@ -4032,6 +4069,10 @@ function viewSettings(p) {
   p.append(backBtn("‹ Me"), el("h1", null, "Settings"),
     isStaff() ? el("section", { class: "stack" }, el("h2", null, S.owner ? "Owner" : "Moderator"),
       el("button", { class: "item", type: "button", id: "me-owner", onclick: () => { S.meView = "owner"; renderTab(); } }, el("span", { class: "t" }, S.owner ? "Owner tools" : "Moderator tools"), el("span", { class: "label" }, S.editMode ? "Edit mode ON" : "›"))) : null,
+    el("section", { class: "stack", id: "s-theme" }, el("h2", null, "Appearance"),
+      el("div", { class: "list" }, THEMES.map(([k, name, sub]) => el("button", { class: "item", type: "button", "data-theme": k, onclick: () => { setPref("theme", k); applyTheme(); renderTab(); } },
+        el("span", { class: "stack", style: "gap:0;text-align:left" }, el("span", { class: "t" }, name), el("span", { class: "hint" }, sub)),
+        el("span", { class: "label" }, (getPref("theme", "auto") === k ? "✓ On" : "")))))),
     el("section", { class: "stack" }, el("h2", null, "Install the app"),
       isInstalled() ? el("p", { class: "muted" }, "You're using the installed app.")
         : el("button", { class: "btn wide", type: "button", id: "s-install", onclick: installApp }, "Install Weigh-In on this device"),
