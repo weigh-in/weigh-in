@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Weigh-In has moved</title>
+<meta name="robots" content="noindex">
+<style>
+  html,body{margin:0;height:100%;background:#10322A;color:#fff;font-family:Barlow,system-ui,sans-serif;text-align:center}
+  main{min-height:100%;box-sizing:border-box;display:flex;flex-direction:column;gap:16px;align-items:center;justify-content:center;padding:24px;max-width:380px;margin:0 auto}
+  h1{margin:0;font-size:1.9rem}
+  p{margin:0;font-size:1.1rem;line-height:1.5}
+  a.go{display:block;width:100%;box-sizing:border-box;background:#E8742A;color:#fff;font-weight:700;font-size:1.15rem;padding:16px;border-radius:12px;text-decoration:none}
+  .url{font-size:.95rem;opacity:.85;word-break:break-all}
+</style>
+</head>
+<body>
+<main>
+  <h1>We have moved!</h1>
+  <p id="msg">Weigh-In has a new home. Your account, catches and friends are all there waiting.</p>
+  <a class="go" href="https://weighin-app.pages.dev/">Go to Weigh-In</a>
+  <p class="url">weighin-app.pages.dev</p>
+</main>
+<script>
+  // On the new address a missing page just points people home.
+  if (!/\.github\.io$/.test(location.hostname)) {
+    document.getElementById("msg").textContent = "That page isn't here. Tap below to go to Weigh-In.";
+    document.querySelector("a.go").href = "/";
+    document.querySelector(".url").textContent = "";
+  }
+</script>
+</body>
+</html>
