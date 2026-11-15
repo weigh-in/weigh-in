@@ -1147,12 +1147,18 @@ function feedPosts() {
 /* What's new. Newest first. Add a new entry on top each time the app changes. */
 /* Bump APP_VERSION every time you change the app, and add a matching entry on top of UPDATES (with v: the same number).
    Phones check app.js every few minutes and offer the new version on their own. */
-const APP_VERSION = 61;
+const APP_VERSION = 62;
 // The number people see. APP_VERSION stays a plain counter so updates are detected. Big changes bump the first number (2.0), smaller ones the second (1.1, 1.2).
-const REL_NAMES = { 59: "1.0", 60: "1.0", 61: "1.1" };
+const REL_NAMES = { 59: "1.0", 60: "1.0", 61: "1.1", 62: "1.2" };
 const relName = (v) => REL_NAMES[v] || (v < 59 ? `0.${v}` : `1.${v - 59}`);
 try { if ((parseInt(localStorage.getItem("weighin-appv"), 10) || 0) < APP_VERSION) localStorage.setItem("weighin-appv", String(APP_VERSION)); } catch { /* private mode */ }
 const UPDATES = [
+  { id: "2026-11-15a", v: 62, date: "Nov 15", title: "Cleaner profile and owner tabs", items: [
+    "Fishing log, Spot saver, Gate keep finder and Friends and chat are now big cards like School and the Game.",
+    "The 🔔 for release notes moved next to your name and picture.",
+    "Share Weigh-In is now right under your stats.",
+    "Owner tools has tabs: Reports, Catches, Anglers and Banned.",
+    "Fishing school length questions are random and harder. Answers move around."] },
   { id: "2026-11-14a", v: 61, date: "Nov 14", title: "Spot saver", items: [
     "New 📍 Spot saver in your Profile. Save your favorite fishing spots with notes and your location.",
     "Only you can see your spots. Nobody else can, not even the owner.",
@@ -1933,7 +1939,8 @@ function viewOwner(p) {
   stopOwner();
   const reportsBox = el("div", { class: "list" }, el("p", { class: "muted" }, "Loading…"));
   const membersBox = el("div", { class: "list" }, el("p", { class: "muted" }, "Loading…"));
-  let bans = new Set(), users = [], reports = [], mods = new Map(), tacc = new Set();
+  let bans = new Set(), banInfo = new Map(), users = [], reports = [], mods = new Map(), tacc = new Set();
+  const bannedBox = el("div", { class: "list", id: "own-banned" });
   const paintReports = () => reportsBox.replaceChildren(...(reports.length ? reports.map((r) => el("div", { class: "item", style: "cursor:default;align-items:flex-start" },
     el("div", { class: "row", style: "gap:12px;flex-wrap:nowrap;min-width:0" },
       r.thumb ? el("img", { src: r.thumb, alt: "", style: "width:64px;height:64px;object-fit:cover;border-radius:8px;flex:none" }) : null,
@@ -1955,26 +1962,43 @@ function viewOwner(p) {
         can("warn") && u.id !== OWNER_UID && u.id !== S.user.uid ? el("button", { class: "btn ghost small", type: "button", "data-warn": u.id, onclick: () => warnUser(u.id, u.name) }, "Warn") : null,
         can("ban") ? (bans.has(u.id) ? el("button", { class: "btn ghost small", type: "button", onclick: () => unbanUser(u.id, u.name) }, "Unban")
           : el("button", { class: "btn small", type: "button", onclick: () => banUser(u.id, u.name) }, "Ban")) : null))) : [el("p", { class: "empty" }, "No other anglers yet.")])); };
+  const paintBanned = () => bannedBox.replaceChildren(...(bans.size ? [...bans].map((id) => {
+    const u = users.find((x) => x.id === id), nm = banInfo.get(id)?.name || u?.name || "angler";
+    return el("div", { class: "item", style: "cursor:default;flex-wrap:wrap" },
+      el("span", { class: "row", style: "gap:8px;flex-wrap:nowrap;min-width:0" }, avatar(id, nm, 28), el("span", { class: "stack", style: "gap:0;min-width:0" }, el("span", { class: "t" }, "@" + nm), banInfo.get(id)?.createdAt?.toMillis ? el("span", { class: "s" }, "Banned " + ago(banInfo.get(id).createdAt)) : null)),
+      can("ban") ? el("button", { class: "btn ghost small", type: "button", "data-unban": id, onclick: () => unbanUser(id, nm) }, "Unban") : null);
+  }) : [el("p", { class: "empty" }, "Nobody is banned.")]));
   if (can("reports")) ownerUns.push(onSnapshot(query(collection(db, "reports"), orderBy("createdAt", "desc"), limit(50)), (s) => { reports = s.docs.map((d) => ({ id: d.id, ...d.data({ serverTimestamps: "estimate" }) })); paintReports(); }, () => reportsBox.replaceChildren(el("p", { class: "muted" }, "Couldn't load reports."))));
-  if (can("ban")) ownerUns.push(onSnapshot(collection(db, "bans"), (s) => { bans = new Set(s.docs.map((d) => d.id)); paintMembers(); }, () => {}));
+  if (can("ban")) ownerUns.push(onSnapshot(collection(db, "bans"), (s) => { bans = new Set(s.docs.map((d) => d.id)); banInfo = new Map(s.docs.map((d) => [d.id, d.data({ serverTimestamps: "estimate" })])); paintMembers(); paintBanned(); }, () => {}));
   if (S.owner) ownerUns.push(onSnapshot(collection(db, "tourAccess"), (s) => { tacc = new Set(s.docs.map((d) => d.id)); paintMembers(); }, () => {}));
   if (S.owner) ownerUns.push(onSnapshot(collection(db, "mods"), (s) => { mods = new Map(s.docs.map((d) => [d.id, d.data().perms || {}])); paintMembers(); }, () => {}));
-  if (can("ban") || S.owner) ownerUns.push(onSnapshot(query(collection(db, "users"), limit(300)), (s) => { users = s.docs.map((d) => ({ id: d.id, ...d.data() })).sort((a, b) => String(a.name).localeCompare(String(b.name))); paintMembers(); }, () => {}));
+  if (can("ban") || S.owner) ownerUns.push(onSnapshot(query(collection(db, "users"), limit(300)), (s) => { users = s.docs.map((d) => ({ id: d.id, ...d.data() })).sort((a, b) => String(a.name).localeCompare(String(b.name))); paintMembers(); paintBanned(); }, () => {}));
   const mine = PERMS.filter(([k]) => can(k)).map(([, l]) => l);
   const editBox = el("input", { type: "checkbox", id: "edit-mode", checked: S.editMode ? "" : null, style: "width:22px;height:22px;flex:none", onchange: (e) => { S.editMode = e.target.checked; cardCache.clear(); try { renderFeedCards(); } catch { /* feed not built yet */ } toast(S.editMode ? "Edit mode on. Buttons show on the feed." : "Edit mode off."); } });
+  const catchRows = S.posts.slice(0, 60);
+  const catchesBox = el("div", { class: "list", id: "own-catches" }, ...(catchRows.length ? catchRows.map((x) => el("div", { class: "item", style: "cursor:default;flex-wrap:wrap" },
+    el("div", { class: "stack", style: "gap:0;min-width:0" }, el("span", { class: "t" }, x.species), el("span", { class: "s" }, "@" + x.name)),
+    el("span", { class: "row", style: "gap:8px" },
+      S.owner ? el("button", { class: "btn ghost small", type: "button", "data-edit": x.id, onclick: () => openPostEdit(x.id, x.species) }, "Edit name") : null,
+      can("warn") && x.uid !== S.user.uid && x.uid !== OWNER_UID ? el("button", { class: "btn ghost small", type: "button", onclick: () => warnUser(x.uid, x.name) }, "Warn") : null,
+      can("deletePosts") ? el("button", { class: "btn small", type: "button", "data-del": x.id, onclick: async () => { await deletePost(x); S.tab === "me" && renderTab(); } }, "Delete") : null))) : [el("p", { class: "empty" }, "No catches loaded yet.")]));
+  const ownDefs = [["reports", "Reports", can("reports"), el("section", { class: "stack", id: "own-p-reports" }, el("h2", null, "Reports"), reportsBox)],
+    ["catches", "Catches", S.owner || can("deletePosts"), el("section", { class: "stack", id: "own-p-catches" }, el("h2", null, "Catches"), el("p", { class: "muted small", style: "margin:0" }, "The newest catches. Edit a name or delete one."), catchesBox)],
+    ["anglers", "Anglers", can("ban") || S.owner, el("section", { class: "stack", id: "own-p-anglers" }, el("h2", null, S.owner ? "Anglers and moderators" : "Anglers"), membersBox)],
+    ["banned", "Banned", can("ban") || S.owner, el("section", { class: "stack", id: "own-p-banned" }, el("h2", null, "Banned people"), bannedBox)]].filter((d) => d[2]);
+  const ownSecs = ownDefs.map((d) => d[3]);
+  const ownBar = el("div", { class: "seg", id: "own-tabs", role: "tablist", style: `grid-template-columns:repeat(${Math.max(1, ownDefs.length)},1fr)` });
+  const ownShow = (k) => { S.ownTab = k; ownDefs.forEach((d) => { d[3].hidden = d[0] !== k; }); [...ownBar.children].forEach((x) => x.setAttribute("aria-selected", String(x.dataset.k === k))); };
+  ownDefs.forEach((d) => ownBar.append(el("button", { type: "button", role: "tab", id: "own-tab-" + d[0], "data-k": d[0], onclick: () => ownShow(d[0]) }, d[1])));
+  paintBanned();
   p.append(backBtn("‹ Profile"), el("h1", null, S.owner ? "Owner tools" : "Moderator tools"),
     el("label", { class: "row", style: "gap:12px;flex-wrap:nowrap;padding:12px 14px;border:2px solid var(--line, #c9d6de);border-radius:12px" }, editBox,
       el("span", { class: "stack", style: "gap:2px" }, el("b", null, "✏️ Edit mode"), el("span", { class: "hint" }, "Turn on to see Delete, Ban and Rename on the feed. It turns itself off when you close the app."))),
     el("p", { class: "muted small" }, S.owner
       ? "You can delete anyone's catch or comment with the Delete button, ban from the feed or the list below, and make moderators with the permissions you choose."
       : "You're a moderator. You can: " + (mine.join(", ") || "nothing yet") + ". Delete buttons show up right on catches and comments."),
-    can("reports") ? el("section", { class: "stack" }, el("h2", null, "Reports"), reportsBox) : null,
-    S.owner ? el("section", { class: "stack", id: "own-edit" }, el("h2", null, "Edit catch names"),
-      el("p", { class: "muted small", style: "margin:0" }, "Change the name of any recent catch."),
-      el("div", { class: "list" }, S.posts.slice(0, 40).map((x) => el("div", { class: "item", style: "cursor:default" },
-        el("div", { class: "stack", style: "gap:0;min-width:0" }, el("span", { class: "t" }, x.species), el("span", { class: "s" }, "@" + x.name)),
-        el("button", { class: "btn ghost small", type: "button", "data-edit": x.id, onclick: () => openPostEdit(x.id, x.species) }, "Edit"))))) : null,
-    can("ban") || S.owner ? el("section", { class: "stack" }, el("h2", null, S.owner ? "Anglers and moderators" : "Anglers"), membersBox) : null);
+    ownBar, ...ownSecs);
+  if (ownDefs.length) ownShow(ownDefs.some((d) => d[0] === S.ownTab) ? S.ownTab : ownDefs[0][0]);
 }
 
 /* ======================= someone's profile + their catches ======================= */
@@ -3956,8 +3980,19 @@ const SCH_GENS = {
     return Q(`The daily limit is ${L} fish. You have kept ${k} already. How many more can you keep today?`, fm(r), genOpts(fm(r), [r + 1, r - 1, L, k, L + k, r + 2].filter((v) => v >= 0), fm), `${L} minus ${k} is ${r}. Always check your local rules for the real limit.`);
   },
   minsize() {
-    const m = rI(12, 22), A = m - 0.5, B = m, C = m + rI(1, 3) + 0.5, right = "B and C";
-    return Q(`The minimum length for keeping a fish is ${m} inches. Fish A is ${f1(A)} in, fish B is ${f1(B)} in and fish C is ${f1(C)} in. Which can you keep?`, right, ["Only C", "A and B", "All three"], "A minimum length means the fish must be at least that long. Check your local rules, because sizes and limits change by water.");
+    const slot = Math.random() < 0.5, m = rI(12, 20), hi = m + rI(3, 6), L = ["A", "B", "C", "D"];
+    const lens = L.map(() => m + rI(-7, slot ? (hi - m) * 2 + 3 : 6) / 2);
+    const keep = (v) => v >= m && (!slot || v <= hi), flags = lens.map(keep);
+    const fmt = (fl) => { const k = L.filter((_, i) => fl[i]); return !k.length ? "None of them" : k.length === 4 ? "All four" : k.length === 1 ? "Only " + k[0] : k.length === 2 ? k.join(" and ") : k.slice(0, -1).join(", ") + " and " + k[k.length - 1]; };
+    const right = fmt(flags), cands = [];
+    for (let i = 0; i < 4; i++) { const f2 = flags.slice(); f2[i] = !f2[i]; cands.push(fmt(f2)); }
+    cands.push(fmt(lens.map((v) => v > m && (!slot || v < hi))), fmt(flags.map((f) => !f)), fmt([true, true, true, true]), fmt([false, false, false, false]));
+    const wrong = [...new Set(cands.filter((c) => c !== right))].sort(() => Math.random() - 0.5).slice(0, 3);
+    const list = L.map((c, i) => `${c} is ${f1(lens[i])} in`).join(", ");
+    return Q(slot
+      ? `A slot limit says you may keep fish from ${m} to ${hi} inches. Fish that are exactly ${m} or ${hi} count as legal. ${list}. Which can you keep?`
+      : `The minimum length for keeping a fish is ${m} inches. A fish that is exactly ${m} inches is legal. ${list}. Which can you keep?`,
+      right, wrong, slot ? `Keep fish that are at least ${m} and no more than ${hi} inches. Check your local rules, because sizes and limits change by water.` : `A minimum length means the fish must be at least ${m} inches long. Check your local rules, because sizes and limits change by water.`);
   },
   sunrise() {
     const h = rI(5, 7), m = rI(0, 5) * 10, x = rPick([30, 45, 60, 90]), t = h * 60 + m - x;
@@ -4288,32 +4323,32 @@ function viewMe(p) {
   const biggest = Math.max(0, ...mine.map((x) => x.lb || 0));
   const pins = S.spots.filter((s) => s.uid === S.user.uid).length;
   const open = (v) => () => { S.meView = v; renderTab(); };
+  const card = (id, icon, title, hint, fn, hot) => el("button", { class: "sch-me", type: "button", id, onclick: fn },
+    el("span", { class: "sch-badge" }, icon), el("span", { class: "stack", style: "gap:2px;text-align:left;flex:1;min-width:0" }, el("b", null, title), el("span", { class: "hint" }, hint)),
+    hot ? el("span", { class: "pill live" }, "New") : null, el("span", { class: "label" }, "›"));
   p.append(
-    el("button", { class: "profile-head", type: "button", id: "me-profile", "aria-label": "Open your profile", style: "background:none;border:0;padding:0;text-align:left;font:inherit;color:inherit;cursor:pointer;width:100%", onclick: open("profile") },
-      el("div", { class: "av-edit" }, avatar(S.user.uid, S.name, 96)),
-      el("div", { class: "stack", style: "gap:2px;min-width:0" }, el("h1", { style: "overflow-wrap:anywhere" }, "@" + S.name),
-        el("span", { class: "hint" }, "Tap your picture for your profile"))),
+    el("div", { class: "row", style: "gap:10px;flex-wrap:nowrap;align-items:center" },
+      el("button", { class: "profile-head", type: "button", id: "me-profile", "aria-label": "Open your profile", style: "background:none;border:0;padding:0;text-align:left;font:inherit;color:inherit;cursor:pointer;flex:1;min-width:0", onclick: open("profile") },
+        el("div", { class: "av-edit" }, avatar(S.user.uid, S.name, 96)),
+        el("div", { class: "stack", style: "gap:2px;min-width:0" }, el("h1", { style: "overflow-wrap:anywhere" }, "@" + S.name),
+          el("span", { class: "hint" }, "Tap your picture for your profile"))),
+      el("button", { class: "bell-btn", type: "button", id: "me-new", "aria-label": unseenUpdate() ? "Release notes, new" : "Release notes", style: "flex:none;position:relative;background:var(--surface, #fff);border:2px solid var(--line, #c9d6de);border-radius:50%;width:48px;height:48px;font-size:1.4rem;line-height:1;cursor:pointer", onclick: () => openWhatsNew(renderTab) },
+        "🔔", unseenUpdate() ? el("span", { class: "dot", style: "position:absolute;top:2px;right:2px;width:12px;height:12px;border-radius:50%;background:#d4452a" }) : null)),
     el("div", { class: "stats four" },
       el("div", null, el("b", null, String(mine.length)), el("span", null, "Catches")),
       el("div", null, el("b", null, String(mine.reduce((n, x) => n + (S.likes.get(x.id)?.size || 0), 0))), el("span", null, "Likes")),
       el("div", null, el("b", null, biggest ? fmtLb(biggest) : "–"), el("span", null, "Biggest")),
       el("div", null, el("b", null, String(pins)), el("span", null, "Map pins"))),
-    (() => { const r = schRank(sch().xp), nx = schNext(); return el("button", { class: "sch-me", type: "button", id: "me-school", onclick: () => { S.sch = { v: "home" }; S.meView = "school"; renderTab(); } },
-      el("span", { class: "sch-badge" }, r.icon), el("span", { class: "stack", style: "gap:2px;text-align:left;flex:1;min-width:0" }, el("b", null, "🎓 Fishing school"), el("span", { class: "hint" }, `${r.title} · ${sch().xp} XP${nx ? " · " + nx.text : ""}`)), el("span", { class: "label" }, "›")); })(),
-    el("button", { class: "sch-me", type: "button", id: "me-game", onclick: openFishGame },
-      el("span", { class: "sch-badge" }, "🎣"), el("span", { class: "stack", style: "gap:2px;text-align:left;flex:1;min-width:0" }, el("b", null, "Fishing game"), el("span", { class: "hint" }, `Level ${fcLevel()} · 🪙 ${fcCoins()} · cast, hook and reel`)), el("span", { class: "label" }, "›")),
-    wrapSeason() ? el("button", { class: "sch-me", type: "button", id: "me-wrap", onclick: () => openWrapped(wrapYear()) },
-      el("span", { class: "sch-badge" }, "🎞️"), el("span", { class: "stack", style: "gap:2px;text-align:left;flex:1;min-width:0" }, el("b", null, "Your year in fish"), el("span", { class: "hint" }, `${wrapYear()} recap · tap to watch`)), el("span", { class: "label" }, "›")) : null,
     el("button", { class: "btn wide share-btn", type: "button", id: "me-share", onclick: shareApp }, "📤 Share Weigh-In with friends"),
+    (() => { const r = schRank(sch().xp), nx = schNext(); return card("me-school", r.icon, "🎓 Fishing school", `${r.title} · ${sch().xp} XP${nx ? " · " + nx.text : ""}`, () => { S.sch = { v: "home" }; S.meView = "school"; renderTab(); }); })(),
+    card("me-game", "🎣", "Fishing game", `Level ${fcLevel()} · 🪙 ${fcCoins()} · cast, hook and reel`, openFishGame),
+    card("me-friends", "💬", "Friends and chat", S.reqIn.length + S.unread.size ? `${S.reqIn.length + S.unread.size} new` : "Chat, requests and duels", open("friends"), S.reqIn.length + S.unread.size > 0),
+    card("me-log", "📓", "Fishing log", S.log.length ? `${S.log.length} trip${S.log.length === 1 ? "" : "s"} saved. Only you see it` : "Your private trip notes", open("log")),
+    card("me-spots", "📍", "Spot saver", S.saved.length ? `${S.saved.length} spot${S.saved.length === 1 ? "" : "s"} saved. Only you see them` : "Save your secret spots", open("spots")),
+    card("me-water", "🔍", "Gate keep finder", "Find where you can get to the water", open("water")),
+    wrapSeason() ? card("me-wrap", "🎞️", "Your year in fish", `${wrapYear()} recap · tap to watch`, () => openWrapped(wrapYear())) : null,
     el("div", { class: "list" },
-      el("button", { class: "item", type: "button", id: "me-new", onclick: () => openWhatsNew(renderTab) },
-        el("span", { class: "row", style: "gap:10px" }, el("span", { class: "t" }, "🔔 Release notes"), unseenUpdate() ? el("span", { class: "pill live" }, "New") : null), el("span", { class: "label" }, "›")),
-      el("button", { class: "item", type: "button", onclick: open("friends") },
-        el("span", { class: "row", style: "gap:10px" }, el("span", { class: "t" }, "Friends and chat"), S.reqIn.length + S.unread.size ? el("span", { class: "pill live" }, `${S.reqIn.length + S.unread.size} new`) : null), el("span", { class: "label" }, "›")),
-      el("button", { class: "item", type: "button", id: "me-water", onclick: open("water") }, el("span", { class: "t" }, "🔍 Gate keep finder"), el("span", { class: "label" }, "›")),
-      el("button", { class: "item", type: "button", id: "me-spots", onclick: open("spots") }, el("span", { class: "t" }, "📍 Spot saver"), el("span", { class: "label" }, S.saved.length ? String(S.saved.length) + " ›" : "›")),
-      el("button", { class: "item", type: "button", onclick: open("log") }, el("span", { class: "t" }, "My fishing log"), el("span", { class: "label" }, "›")),
-      el("button", { class: "item", type: "button", onclick: open("settings") }, el("span", { class: "t" }, "Settings"), el("span", { class: "label" }, "›"))),
+      el("button", { class: "item", type: "button", id: "me-settings", onclick: open("settings") }, el("span", { class: "t" }, "Settings"), el("span", { class: "label" }, "›"))),
     yearsSection()
   );
 }
