@@ -1147,12 +1147,14 @@ function feedPosts() {
 /* What's new. Newest first. Add a new entry on top each time the app changes. */
 /* Bump APP_VERSION every time you change the app, and add a matching entry on top of UPDATES (with v: the same number).
    Phones check app.js every few minutes and offer the new version on their own. */
-const APP_VERSION = 63;
+const APP_VERSION = 64;
 // The number people see. APP_VERSION stays a plain counter so updates are detected. Big changes bump the first number (2.0), smaller ones the second (1.1, 1.2).
-const REL_NAMES = { 59: "1.0", 60: "1.0", 61: "1.1", 62: "1.2", 63: "1.2" };
+const REL_NAMES = { 59: "1.0", 60: "1.0", 61: "1.1", 62: "1.2", 63: "1.2", 64: "1.2" };
 const relName = (v) => REL_NAMES[v] || (v < 59 ? `0.${v}` : `1.${v - 59}`);
 try { if ((parseInt(localStorage.getItem("weighin-appv"), 10) || 0) < APP_VERSION) localStorage.setItem("weighin-appv", String(APP_VERSION)); } catch { /* private mode */ }
 const UPDATES = [
+  { id: "2026-11-15c", v: 64, date: "Nov 15", title: "Your years button", items: [
+    "Your years is now a 🎞️ button next to the 🔔 and ⚙️. It shows up once you have a past year of catches."] },
   { id: "2026-11-15b", v: 63, date: "Nov 15", title: "Settings gear", items: [
     "Settings is now a ⚙️ button next to the 🔔 at the top of your profile."] },
   { id: "2026-11-15a", v: 62, date: "Nov 15", title: "Cleaner profile and owner tabs", items: [
@@ -4336,7 +4338,8 @@ function viewMe(p) {
           el("span", { class: "hint" }, "Tap your picture for your profile"))),
       el("button", { class: "bell-btn", type: "button", id: "me-new", "aria-label": unseenUpdate() ? "Release notes, new" : "Release notes", style: "flex:none;position:relative;background:var(--surface, #fff);border:2px solid var(--line, #c9d6de);border-radius:50%;width:48px;height:48px;font-size:1.4rem;line-height:1;cursor:pointer", onclick: () => openWhatsNew(renderTab) },
         "🔔", unseenUpdate() ? el("span", { class: "dot", style: "position:absolute;top:2px;right:2px;width:12px;height:12px;border-radius:50%;background:#d4452a" }) : null),
-      el("button", { class: "bell-btn", type: "button", id: "me-settings", "aria-label": "Settings", style: "flex:none;background:var(--surface, #fff);border:2px solid var(--line, #c9d6de);border-radius:50%;width:48px;height:48px;font-size:1.4rem;line-height:1;cursor:pointer", onclick: open("settings") }, "⚙️")),
+      el("button", { class: "bell-btn", type: "button", id: "me-settings", "aria-label": "Settings", style: "flex:none;background:var(--surface, #fff);border:2px solid var(--line, #c9d6de);border-radius:50%;width:48px;height:48px;font-size:1.4rem;line-height:1;cursor:pointer", onclick: open("settings") }, "⚙️"),
+      yearsList().ys.length ? el("button", { class: "bell-btn", type: "button", id: "me-yearsbtn", "aria-label": "Your years", style: "flex:none;background:var(--surface, #fff);border:2px solid var(--line, #c9d6de);border-radius:50%;width:48px;height:48px;font-size:1.4rem;line-height:1;cursor:pointer", onclick: openYears }, "🎞️") : null),
     el("div", { class: "stats four" },
       el("div", null, el("b", null, String(mine.length)), el("span", null, "Catches")),
       el("div", null, el("b", null, String(mine.reduce((n, x) => n + (S.likes.get(x.id)?.size || 0), 0))), el("span", null, "Likes")),
@@ -4350,17 +4353,21 @@ function viewMe(p) {
     card("me-spots", "📍", "Spot saver", S.saved.length ? `${S.saved.length} spot${S.saved.length === 1 ? "" : "s"} saved. Only you see them` : "Save your secret spots", open("spots")),
     card("me-water", "🔍", "Gate keep finder", "Find where you can get to the water", open("water")),
     wrapSeason() ? card("me-wrap", "🎞️", "Your year in fish", `${wrapYear()} recap · tap to watch`, () => openWrapped(wrapYear())) : null,
-    yearsSection()
   );
 }
-function yearsSection() {
+function yearsList() {
   const cur = new Date().getFullYear(), by = new Map();
   for (const x of S.mine) { const y = new Date(catchMs(x)).getFullYear(); by.set(y, (by.get(y) || 0) + 1); }
-  const ys = [...by.keys()].filter((y) => y < cur || (y === wrapYear() && wrapSeason())).sort((a, b) => b - a);
-  if (!ys.length) return null;
-  return el("div", { class: "stack", id: "me-years" }, el("h2", null, "Your years"),
-    el("div", { class: "list" }, ys.map((y) => el("button", { class: "item", type: "button", "data-year": String(y), onclick: () => openWrapped(y) },
-      el("span", { class: "t" }, `🎞️ ${y}`), el("span", { class: "label" }, `${by.get(y)} ${by.get(y) === 1 ? "catch" : "catches"} ›`)))));
+  return { by, ys: [...by.keys()].filter((y) => y < cur || (y === wrapYear() && wrapSeason())).sort((a, b) => b - a) };
+}
+function openYears() {
+  const { by, ys } = yearsList(), close = () => bg.remove();
+  const bg = el("div", { class: "sheet-bg", id: "years-sheet", onclick: (e) => { if (e.target === bg) close(); } },
+    el("div", { class: "sheet", role: "dialog", "aria-label": "Your years" },
+      el("div", { class: "sheet-h" }, el("h2", null, "Your years"), el("button", { class: "link", type: "button", onclick: close }, "Close")),
+      el("div", { class: "list", id: "me-years", style: "padding:12px 16px 20px" }, ys.map((y) => el("button", { class: "item", type: "button", "data-year": String(y), onclick: () => { close(); openWrapped(y); } },
+        el("span", { class: "t" }, `🎞️ ${y}`), el("span", { class: "label" }, `${by.get(y)} ${by.get(y) === 1 ? "catch" : "catches"} ›`))))));
+  document.body.append(bg);
 }
 
 function viewProfile(p) {
