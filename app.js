@@ -1147,12 +1147,14 @@ function feedPosts() {
 /* What's new. Newest first. Add a new entry on top each time the app changes. */
 /* Bump APP_VERSION every time you change the app, and add a matching entry on top of UPDATES (with v: the same number).
    Phones check app.js every few minutes and offer the new version on their own. */
-const APP_VERSION = 62;
+const APP_VERSION = 63;
 // The number people see. APP_VERSION stays a plain counter so updates are detected. Big changes bump the first number (2.0), smaller ones the second (1.1, 1.2).
-const REL_NAMES = { 59: "1.0", 60: "1.0", 61: "1.1", 62: "1.2" };
+const REL_NAMES = { 59: "1.0", 60: "1.0", 61: "1.1", 62: "1.2", 63: "1.2" };
 const relName = (v) => REL_NAMES[v] || (v < 59 ? `0.${v}` : `1.${v - 59}`);
 try { if ((parseInt(localStorage.getItem("weighin-appv"), 10) || 0) < APP_VERSION) localStorage.setItem("weighin-appv", String(APP_VERSION)); } catch { /* private mode */ }
 const UPDATES = [
+  { id: "2026-11-15b", v: 63, date: "Nov 15", title: "Settings gear", items: [
+    "Settings is now a ⚙️ button next to the 🔔 at the top of your profile."] },
   { id: "2026-11-15a", v: 62, date: "Nov 15", title: "Cleaner profile and owner tabs", items: [
     "Fishing log, Spot saver, Gate keep finder and Friends and chat are now big cards like School and the Game.",
     "The 🔔 for release notes moved next to your name and picture.",
@@ -4327,13 +4329,14 @@ function viewMe(p) {
     el("span", { class: "sch-badge" }, icon), el("span", { class: "stack", style: "gap:2px;text-align:left;flex:1;min-width:0" }, el("b", null, title), el("span", { class: "hint" }, hint)),
     hot ? el("span", { class: "pill live" }, "New") : null, el("span", { class: "label" }, "›"));
   p.append(
-    el("div", { class: "row", style: "gap:10px;flex-wrap:nowrap;align-items:center" },
+    el("div", { class: "row", style: "gap:8px;flex-wrap:nowrap;align-items:center" },
       el("button", { class: "profile-head", type: "button", id: "me-profile", "aria-label": "Open your profile", style: "background:none;border:0;padding:0;text-align:left;font:inherit;color:inherit;cursor:pointer;flex:1;min-width:0", onclick: open("profile") },
         el("div", { class: "av-edit" }, avatar(S.user.uid, S.name, 96)),
         el("div", { class: "stack", style: "gap:2px;min-width:0" }, el("h1", { style: "overflow-wrap:anywhere" }, "@" + S.name),
           el("span", { class: "hint" }, "Tap your picture for your profile"))),
       el("button", { class: "bell-btn", type: "button", id: "me-new", "aria-label": unseenUpdate() ? "Release notes, new" : "Release notes", style: "flex:none;position:relative;background:var(--surface, #fff);border:2px solid var(--line, #c9d6de);border-radius:50%;width:48px;height:48px;font-size:1.4rem;line-height:1;cursor:pointer", onclick: () => openWhatsNew(renderTab) },
-        "🔔", unseenUpdate() ? el("span", { class: "dot", style: "position:absolute;top:2px;right:2px;width:12px;height:12px;border-radius:50%;background:#d4452a" }) : null)),
+        "🔔", unseenUpdate() ? el("span", { class: "dot", style: "position:absolute;top:2px;right:2px;width:12px;height:12px;border-radius:50%;background:#d4452a" }) : null),
+      el("button", { class: "bell-btn", type: "button", id: "me-settings", "aria-label": "Settings", style: "flex:none;background:var(--surface, #fff);border:2px solid var(--line, #c9d6de);border-radius:50%;width:48px;height:48px;font-size:1.4rem;line-height:1;cursor:pointer", onclick: open("settings") }, "⚙️")),
     el("div", { class: "stats four" },
       el("div", null, el("b", null, String(mine.length)), el("span", null, "Catches")),
       el("div", null, el("b", null, String(mine.reduce((n, x) => n + (S.likes.get(x.id)?.size || 0), 0))), el("span", null, "Likes")),
@@ -4347,8 +4350,6 @@ function viewMe(p) {
     card("me-spots", "📍", "Spot saver", S.saved.length ? `${S.saved.length} spot${S.saved.length === 1 ? "" : "s"} saved. Only you see them` : "Save your secret spots", open("spots")),
     card("me-water", "🔍", "Gate keep finder", "Find where you can get to the water", open("water")),
     wrapSeason() ? card("me-wrap", "🎞️", "Your year in fish", `${wrapYear()} recap · tap to watch`, () => openWrapped(wrapYear())) : null,
-    el("div", { class: "list" },
-      el("button", { class: "item", type: "button", id: "me-settings", onclick: open("settings") }, el("span", { class: "t" }, "Settings"), el("span", { class: "label" }, "›"))),
     yearsSection()
   );
 }
