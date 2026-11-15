@@ -207,7 +207,7 @@ function setPref(k, v) { try { localStorage.setItem("weighin-" + k, v); } catch 
 /* ======================= app state ======================= */
 const S = {
   user: null, name: "", tab: "feed",
-  posts: [], tournaments: [], log: [],
+  posts: [], tournaments: [], log: [], saved: [],
   reqIn: [], reqOut: [], friendships: [], unread: new Set(), chatOpen: null, recaps: [], offIn: [], offOut: [], tradeAll: [], tradeMine: [], tourReqs: [], joinIn: [], joinOut: [],
   openTournament: null, tourPosts: [], viewing: null, creatingTour: false,
   meView: "main", mine: [], spots: [], map: null, markers: null, likes: new Map(), mod: null,
@@ -220,7 +220,6 @@ function stopAll() { unsubs.splice(0).forEach((u) => u()); stopTrade(); tourUnsu
 const NAME_RE = /^[A-Za-z0-9_]{2,20}$/;
 
 /* ---------- house rules: keep slurs out of names, posts, comments and chat ---------- */
-const OWNER_EMAIL = "teokosuge8@gmail.com"; // the person who runs the app (must sign in with a verified Google account)
 const BLOCK_PATTERNS = [/n+i+g{2,}[ea]+/, /f+a+g{2,}o+t/, /t+r+a+n+n+y+/, /w+e+t+b+a+c+k/];  // always bad, even inside other words
 const BLOCK_WORDS = new Set(["kike", "kikes", "spic", "spics", "chink", "chinks", "gook", "gooks", "coon", "coons", "beaner", "beaners", "dyke", "dykes", "paki", "retard", "retards", "retarded", "fag", "fags"]);
 function badText(text) {
@@ -337,7 +336,7 @@ async function claimName(name) {
 onAuthStateChanged(auth, async (user) => {
   stopAll();
   S.user = user;
-  S.owner = !!(user && user.emailVerified && String(user.email || "").toLowerCase() === OWNER_EMAIL);
+  S.owner = !!(user && user.uid === OWNER_UID);
   S.banned = false; S.mod = null; S.editMode = false; S.tourAcc = false;
   if (!user) { renderAuth(); return; }
   $app.replaceChildren(el("div", { class: "boot" }, "Loading…"));
@@ -405,6 +404,10 @@ function startApp() {
   unsubs.push(onSnapshot(query(collection(db, "users", uid, "log"), orderBy("date", "desc")), (s) => {
     S.log = s.docs.map((d) => ({ id: d.id, ...d.data() }));
     refreshMe("log");
+  }, () => {}));
+  unsubs.push(onSnapshot(collection(db, "users", uid, "saved"), (s) => {
+    S.saved = s.docs.map((d) => ({ id: d.id, ...d.data({ serverTimestamps: "estimate" }) })).sort((a, b) => (b.createdAt?.toMillis?.() || 0) - (a.createdAt?.toMillis?.() || 0));
+    refreshMe("spots");
   }, () => {}));
   unsubs.push(onSnapshot(query(collection(db, "requests"), where("to", "==", uid)), (s) => {
     S.reqIn = s.docs.map((d) => ({ id: d.id, ...d.data() }));
@@ -642,85 +645,15 @@ const RIV_SIZES = [
   [30000, "river", 340, "Fish the slack water behind points and bends. Bridges and boat ramps are good starting spots. Be careful of strong current."],
   [1e12, "big river", 480, "Big rivers are powerful and can rise fast. Fish the eddies, the mouths of creeks and the slow water along the banks, and wear a life jacket."]];
 function rivSize(o) { const f = o.flow ? o.flow.now : 800; return RIV_SIZES.find((x) => f < x[0]) || RIV_SIZES[4]; }
-function rivScene(o) {
-  const sz = rivSize(o), w = sz[2], L = 300 - w / 2, R = 300 + w / 2, t = rivTrend(o), tag = t ? t[0] : "";
-  const muddy = /fast/.test(tag) && /Rising/.test(tag), water = muddy ? "#8D7350" : "#3A8CC4", light = muddy ? "#B39B76" : "#8EC5E8";
-  const ripples = Array.from({ length: Math.min(8, 2 + Math.round(w / 70)) }, (_, k) => { const y = 150 + k * 9, x = L + 14 + ((k * 53) % Math.max(20, w - 60)); return `<path d="M${x} ${y} q10 -5 20 0 t20 0" fill="none" stroke="${light}" stroke-width="2" opacity=".8"/>`; }).join("");
-  const trees = [[28, 128], [70, 118], [118, 130], [490, 126], [535, 116], [575, 130]].map(([x, y]) => `<path d="M${x} ${y} l-14 34 h28 z M${x} ${y - 16} l-11 30 h22 z" fill="#3E6B4E"/>`).join("");
-  const arrow = /Rising/.test(tag) ? "▲" : /Dropping|Falling/.test(tag) ? "▼" : "●";
-  return `<svg viewBox="0 0 600 220" role="img" aria-label="Picture of a ${sz[1]}" style="width:100%;height:auto;display:block;border-radius:14px">
-<defs><linearGradient id="sk${o.code}" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#9CCBEA"/><stop offset="1" stop-color="#E6F3FB"/></linearGradient></defs>
-<rect width="600" height="220" fill="url(#sk${o.code})"/><circle cx="500" cy="42" r="20" fill="#FFF3C4"/>
-<path d="M0 120 Q90 70 190 110 T380 100 T600 112 V220 H0Z" fill="#7A9BB8"/><path d="M0 140 Q120 100 250 134 T600 130 V220 H0Z" fill="#5F8466"/>
-${trees}<path d="M0 220 V150 H${L} Q${L + 10} 190 ${L - 20} 220Z" fill="#6E8B5C"/><path d="M600 220 V150 H${R} Q${R - 10} 190 ${R + 20} 220Z" fill="#6E8B5C"/>
-<path d="M${L - 20} 220 Q${L + 10} 190 ${L} 150 H${R} Q${R - 10} 190 ${R + 20} 220Z" fill="${water}"/>${ripples}
-<g transform="translate(${300 - 22} 182)" opacity=".85"><path d="M0 14 q22 -22 44 0 q-22 14 -44 0z M44 14 l12 -9 v18z" fill="#E8EEF2"/><circle cx="9" cy="11" r="2" fill="#26384A"/></g>
-<rect x="14" y="14" rx="10" width="${12 + sz[1].length * 9 + 24}" height="28" fill="rgba(10,20,30,.62)"/><text x="26" y="33" font-size="15" font-family="system-ui,sans-serif" fill="#fff" font-weight="700">${arrow} ${sz[1]}</text></svg>`;
-}
 function rivDesc(o) {
   const sz = rivSize(o), place = rivPlace(o.name), rv = rivBase(o.name);
   const now = o.flow ? ` carrying about ${Math.round(o.flow.now).toLocaleString()} cubic feet of water every second` : "";
   const lvl = o.stage ? ` The water is ${o.stage.now.toFixed(1)} feet on the gauge.` : "";
   return `This gauge is on the ${rv}${place ? " at " + place : ""}. It reads like a ${sz[1]}${now}.${lvl} ${sz[3]}`;
 }
-async function rivFish(o, bar) {
-  if (typeof o.lat !== "number" || typeof o.lng !== "number") return;
-  try {
-    const u = "https://api.inaturalist.org/v1/observations?taxon_id=47178&photos=true&quality_grade=research&license=cc-by,cc-by-nc,cc0&order_by=votes&per_page=8&lat=" + o.lat.toFixed(3) + "&lng=" + o.lng.toFixed(3) + "&radius=25";
-    const r = await fetch(u); if (!r.ok) return;
-    const rows = (await r.json()).results.filter((x) => x.photos?.[0]?.url).slice(0, 8);
-    if (!rows.length || !bar.isConnected) return;
-    const strip = el("div", { class: "row", style: "gap:8px;flex-wrap:nowrap;overflow-x:auto;padding-bottom:4px" }, ...rows.map((x) => {
-      const nm = x.taxon?.preferred_common_name || x.taxon?.name || "Fish";
-      return el("a", { href: x.uri, target: "_blank", rel: "noopener", style: "flex:none;width:130px;text-decoration:none;color:inherit" },
-        el("img", { src: x.photos[0].url.replace("square", "small"), alt: nm, loading: "lazy", style: "width:130px;height:100px;object-fit:cover;border-radius:10px;display:block" }),
-        el("div", { class: "small", style: "font-weight:700" }, nm),
-        el("div", { class: "muted small" }, "📷 " + (x.user?.login || "iNaturalist")));
-    }));
-    bar.append(el("div", { class: "stack", "data-fishnear": o.code, style: "gap:4px;margin-top:6px" }, el("div", { class: "muted small", style: "font-weight:700" }, "🐟 Fish seen near here (iNaturalist)"), strip));
-  } catch { /* skip */ }
-}
-async function rivPhotos(o, pic) {
-  let list = [];
-  try { const sn = await getDocs(query(collection(db, "riverPhotos"), where("site", "==", o.code), limit(12))); list = sn.docs.map((d) => ({ id: d.id, ...d.data({ serverTimestamps: "estimate" }) })).sort((a, b) => (b.createdAt?.toMillis?.() || 0) - (a.createdAt?.toMillis?.() || 0)); } catch { /* the drawing stays */ }
-  const art = rivScene(o), box = pic.parentElement;
-  const addBtn = el("button", { class: "btn ghost small", type: "button", "data-addphoto": o.code, style: "align-self:flex-start" }, list.length ? "📷 Add yours" : "📷 Add the first photo");
-  const input = el("input", { type: "file", accept: "image/*", hidden: "", "aria-label": "River photo" });
-  addBtn.onclick = () => { if (!S.user) return; input.click(); };
-  input.onchange = async () => {
-    const f = input.files[0]; input.value = ""; if (!f) return;
-    addBtn.disabled = true; addBtn.textContent = "Adding…";
-    try {
-      const big = await shrinkPhoto(f); let photo = big ? await thumbFrom(big, 640) : "";
-      if (photo.length > 110000) photo = await thumbFrom(photo, 440);
-      if (!photo || photo.length > 118000) { toast("That photo is too big. Try another."); }
-      else { await addDoc(collection(db, "riverPhotos"), { site: o.code, uid: S.user.uid, name: S.name, photo, createdAt: serverTimestamp() }); toast("Photo added. Thanks!"); await rivPhotos(o, pic); return; }
-    } catch (e) { toast(errText(e)); }
-    addBtn.disabled = false; addBtn.textContent = list.length ? "📷 Add yours" : "📷 Add the first photo";
-  };
-  box.querySelector("[data-photobar]")?.remove();
-  const bar = el("div", { class: "stack", "data-photobar": o.code, style: "gap:6px" });
-  if (list.length) {
-    let cur = 0;
-    const main = el("img", { alt: "River photo by an angler", style: "width:100%;max-height:260px;object-fit:cover;border-radius:14px;display:block" });
-    const credit = el("div", { class: "row spread", style: "gap:8px;flex-wrap:nowrap" }), strip = el("div", { class: "row", style: "gap:6px;flex-wrap:nowrap;overflow-x:auto" });
-    const paint = () => {
-      const p = list[cur]; main.src = p.photo;
-      const canDel = p.uid === S.user.uid || S.owner || can("deletePosts");
-      credit.replaceChildren(el("span", { class: "muted small" }, "📷 @" + (p.name || "angler")), canDel ? el("button", { class: "link danger small", type: "button", "data-delphoto": p.id, onclick: async () => { try { await deleteDoc(doc(db, "riverPhotos", p.id)); toast("Photo removed."); await rivPhotos(o, pic); } catch (e) { toast(errText(e)); } } }, p.uid === S.user.uid ? "Remove mine" : "Remove") : null);
-      strip.replaceChildren(...list.map((x, i) => el("button", { type: "button", "aria-label": "Photo " + (i + 1), style: `border:2px solid ${i === cur ? "var(--lake)" : "transparent"};padding:0;border-radius:8px;background:none;flex:none`, onclick: () => { cur = i; paint(); } }, el("img", { src: x.photo, alt: "", style: "width:56px;height:56px;object-fit:cover;border-radius:6px;display:block" }))));
-    };
-    paint(); pic.replaceChildren(main); bar.append(credit, list.length > 1 ? strip : null);
-  } else pic.innerHTML = art;
-  const web = el("a", { class: "btn ghost small", href: "https://www.google.com/search?tbm=isch&q=" + encodeURIComponent(rivBase(o.name) + " " + (rivPlace(o.name) || "") + " fishing"), target: "_blank", rel: "noopener", "data-webphotos": o.code }, "🔎 See photos online");
-  bar.append(el("div", { class: "row", style: "gap:8px" }, addBtn, web), input); pic.after(bar);
-  rivFish(o, bar);
-}
 function rivCard(o, loc) {
   const t = rivTrend(o), mi = loc ? km(loc, { lat: o.lat, lng: o.lng }) / 1.609 : null;
-  const pic = el("div", { class: "riv-pic", "data-pic": o.code }); pic.innerHTML = rivScene(o);
   const card = el("div", { class: "card-lite stack", style: "gap:6px;padding:14px;border:2px solid var(--line, #c9d6de);border-radius:14px", "data-gauge": o.code },
-    pic,
     el("div", { class: "row spread", style: "gap:8px;flex-wrap:nowrap" }, el("b", { style: "overflow-wrap:anywhere" }, o.name), mi == null ? null : el("span", { class: "muted small", style: "white-space:nowrap" }, mi.toFixed(mi < 10 ? 1 : 0) + " mi")),
     el("p", { class: "riv-desc", style: "margin:0" }, rivDesc(o)),
     el("div", { class: "cond-grid" },
@@ -728,7 +661,6 @@ function rivCard(o, loc) {
       o.flow ? condTile("Flow", Math.round(o.flow.now).toLocaleString() + " cfs", "cubic ft per second", "") : null),
     t ? el("p", { style: "margin:0" }, el("b", null, t[0] + ". "), t[1]) : null,
     el("a", { href: "https://waterdata.usgs.gov/monitoring-location/" + o.code + "/", target: "_blank", rel: "noopener", class: "link small" }, "See the full gauge on USGS ›"));
-  setTimeout(() => rivPhotos(o, pic), 0);
   return card;
 }
 async function loadGauges(box, loc) {
@@ -738,10 +670,9 @@ async function loadGauges(box, loc) {
   st.value = getPref("rivst", "") || guess || "";
   const res = el("div", { class: "stack", id: "riv-res" }, el("p", { class: "muted" }, "Type a river or creek name and pick its state. Try Mississippi, Current, Guadalupe or Meramec."));
   const note = "Real gauges from the US Geological Survey, updated about every 15 minutes. Rising and falling is over the last 6 hours.";
-  const show = (rows, head) => res.replaceChildren(el("p", { class: "muted small", style: "margin:0" }, head), ...rows.map((o) => rivCard(o, loc)), el("p", { class: "muted small" }, "Data from the US Geological Survey. Photos are added by anglers. Without a photo you see a drawing. Gauges are in the US only."));
+  const show = (rows, head) => res.replaceChildren(el("p", { class: "muted small", style: "margin:0" }, head), ...rows.map((o) => rivCard(o, loc)), el("p", { class: "muted small" }, "Data from the US Geological Survey. Gauges are in the US only."));
   const noGauge = (why, canAll) => {
-    const pic = el("div", { class: "riv-pic", "data-pic": "none" }); pic.innerHTML = rivScene({ code: "none" });
-    res.replaceChildren(el("div", { class: "card-lite stack", id: "riv-none", style: "gap:8px;padding:14px;border:2px solid var(--line, #c9d6de);border-radius:14px" }, pic,
+    res.replaceChildren(el("div", { class: "card-lite stack", id: "riv-none", style: "gap:8px;padding:14px;border:2px solid var(--line, #c9d6de);border-radius:14px" },
       el("b", null, q.value.trim() ? `"${q.value.trim()}"` : "No gauge"),
       el("p", { style: "margin:0" }, why),
       el("p", { style: "margin:0" }, "Not every river or creek has a gauge. You can still plan a trip: " + RIV_SIZES[2][3] + " Early morning and evening are usually the best times, and a rising river after rain can turn the fish on or make the water too muddy to fish."),
@@ -1216,12 +1147,17 @@ function feedPosts() {
 /* What's new. Newest first. Add a new entry on top each time the app changes. */
 /* Bump APP_VERSION every time you change the app, and add a matching entry on top of UPDATES (with v: the same number).
    Phones check app.js every few minutes and offer the new version on their own. */
-const APP_VERSION = 60;
+const APP_VERSION = 61;
 // The number people see. APP_VERSION stays a plain counter so updates are detected. Big changes bump the first number (2.0), smaller ones the second (1.1, 1.2).
-const REL_NAMES = { 59: "1.0", 60: "1.0" };
+const REL_NAMES = { 59: "1.0", 60: "1.0", 61: "1.1" };
 const relName = (v) => REL_NAMES[v] || (v < 59 ? `0.${v}` : `1.${v - 59}`);
 try { if ((parseInt(localStorage.getItem("weighin-appv"), 10) || 0) < APP_VERSION) localStorage.setItem("weighin-appv", String(APP_VERSION)); } catch { /* private mode */ }
 const UPDATES = [
+  { id: "2026-11-14a", v: 61, date: "Nov 14", title: "Spot saver", items: [
+    "New 📍 Spot saver in your Profile. Save your favorite fishing spots with notes and your location.",
+    "Only you can see your spots. Nobody else can, not even the owner.",
+    "Tap Open in Maps to drive to a saved spot.",
+    "River pictures are gone. Rivers now show just the numbers and tips."] },
   { id: "2026-11-12n", v: 60, date: "Nov 12", title: "New version numbers", items: [
     "Versions now look like 1.0, 1.1 and 2.0. Big updates change the first number, smaller ones the second.",
     "Weigh-In 1.0 was the first full release. Earlier versions show as 0.x."] },
@@ -3040,6 +2976,46 @@ function viewLog(p) {
     } }, "Delete")))));
 }
 
+function viewSpots(p) {
+  let here = null;
+  const f = el("form", { novalidate: true },
+    el("label", { class: "field" }, el("span", null, "Spot name"), el("input", { id: "sp-name", name: "name", maxlength: 60, placeholder: "Secret cove, bridge pilings, back pond" })),
+    el("label", { class: "field" }, el("span", null, "Notes (optional)"), el("textarea", { id: "sp-note", name: "note", maxlength: 300, placeholder: "What bites here, best time, how to get there" })),
+    el("button", { class: "btn wide ghost", type: "button", id: "sp-here" }, "📍 Use where I am now"),
+    el("p", { class: "hint", id: "sp-got", style: "margin:0" }, "No location added. You can still save the name and notes."),
+    el("button", { class: "btn wide", type: "submit", id: "sp-save" }, "Save spot"));
+  const got = f.querySelector("#sp-got"), hb = f.querySelector("#sp-here");
+  hb.onclick = () => {
+    if (!navigator.geolocation) { toast("This phone can't share its location here."); return; }
+    hb.disabled = true; hb.textContent = "Finding you…";
+    navigator.geolocation.getCurrentPosition((pos) => {
+      here = { lat: Math.round(pos.coords.latitude * 1e5) / 1e5, lng: Math.round(pos.coords.longitude * 1e5) / 1e5 };
+      got.textContent = `Got it: ${here.lat}, ${here.lng} ✓`; hb.disabled = false; hb.textContent = "📍 Use where I am now";
+    }, () => { toast("Couldn't get your location. Check that location is allowed."); hb.disabled = false; hb.textContent = "📍 Use where I am now"; }, { enableHighAccuracy: true, timeout: 15000, maximumAge: 30000 });
+  };
+  f.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const fd = new FormData(f), name = String(fd.get("name") || "").trim();
+    if (!name) { toast("Give the spot a name."); return; }
+    if (S.saved.length >= 200) { toast("You have 200 spots. Delete one to add more."); return; }
+    const spot = { name, note: String(fd.get("note") || "").trim(), createdAt: serverTimestamp() };
+    if (here) { spot.lat = here.lat; spot.lng = here.lng; }
+    try { await addDoc(collection(db, "users", S.user.uid, "saved"), spot); toast("Spot saved."); f.reset(); here = null; got.textContent = "No location added. You can still save the name and notes."; }
+    catch (err) { toast(errText(err)); }
+  });
+  p.append(el("h1", null, "Spot saver"), el("p", { class: "muted", style: "margin:0" }, "Only you can see your spots. Nobody else can, not even the owner."), f, el("h2", null, "Your spots"));
+  if (!S.saved.length) { p.append(el("p", { class: "empty" }, "No spots yet. Save your first one above.")); return; }
+  p.append(el("div", { class: "list" }, S.saved.map((sp) => el("div", { class: "item", style: "display:block;cursor:default", "data-spot": sp.id },
+    el("div", { class: "row spread" }, el("span", { class: "t", style: "overflow-wrap:anywhere" }, sp.name), el("span", { class: "label" }, sp.createdAt?.toMillis ? fmtDay(localDate(sp.createdAt.toDate())) : "")),
+    sp.note ? el("p", { style: "margin:6px 0 0;white-space:pre-wrap" }, sp.note) : null,
+    el("div", { class: "row", style: "gap:14px;margin-top:8px" },
+      typeof sp.lat === "number" ? el("a", { class: "link small", href: `https://www.google.com/maps/search/?api=1&query=${sp.lat},${sp.lng}`, target: "_blank", rel: "noopener" }, "🗺️ Open in Maps") : el("span", { class: "muted small" }, "No location"),
+      el("button", { class: "link danger small", type: "button", onclick: async () => {
+        if (!confirm("Delete this spot?")) return;
+        try { await deleteDoc(doc(db, "users", S.user.uid, "saved", sp.id)); } catch (err) { toast(errText(err)); }
+      } }, "Delete"))))));
+}
+
 /* ======================= FRIENDS + CHAT ======================= */
 const pairId = (a, b) => (a < b ? `${a}_${b}` : `${b}_${a}`);
 const friendOf = (fs) => { const other = fs.members.find((m) => m !== S.user.uid); return { uid: other, name: fs.names?.[other] || "friend" }; };
@@ -4301,6 +4277,7 @@ async function shareApp() {
 }
 function viewMe(p) {
   if (S.meView === "log") { p.append(backBtn("‹ Profile")); return viewLog(p); }
+  if (S.meView === "spots") { p.append(backBtn("‹ Profile")); return viewSpots(p); }
   if (S.meView === "friends") { p.append(backBtn("‹ Profile")); return viewFriends(p); }
   if (S.meView === "water") { p.append(backBtn("‹ Profile")); return viewWater(p); }
   if (S.meView === "school") return viewSchool(p);
@@ -4334,6 +4311,7 @@ function viewMe(p) {
       el("button", { class: "item", type: "button", onclick: open("friends") },
         el("span", { class: "row", style: "gap:10px" }, el("span", { class: "t" }, "Friends and chat"), S.reqIn.length + S.unread.size ? el("span", { class: "pill live" }, `${S.reqIn.length + S.unread.size} new`) : null), el("span", { class: "label" }, "›")),
       el("button", { class: "item", type: "button", id: "me-water", onclick: open("water") }, el("span", { class: "t" }, "🔍 Gate keep finder"), el("span", { class: "label" }, "›")),
+      el("button", { class: "item", type: "button", id: "me-spots", onclick: open("spots") }, el("span", { class: "t" }, "📍 Spot saver"), el("span", { class: "label" }, S.saved.length ? String(S.saved.length) + " ›" : "›")),
       el("button", { class: "item", type: "button", onclick: open("log") }, el("span", { class: "t" }, "My fishing log"), el("span", { class: "label" }, "›")),
       el("button", { class: "item", type: "button", onclick: open("settings") }, el("span", { class: "t" }, "Settings"), el("span", { class: "label" }, "›"))),
     yearsSection()
@@ -4390,7 +4368,7 @@ async function deleteMyAccount() {
     for (const d of posts) { const p = d.data(); if (p.vid) await vidDelete(d.id, p.vid.n); await deleteDoc(doc(db, "spots", d.id)).catch(() => {}); }
     await wipe(query(collection(db, "likes"), where("uid", "==", uid)));
     await wipe(query(collection(db, "recaps"), where("uid", "==", uid)));
-    await wipe(query(collection(db, "riverPhotos"), where("uid", "==", uid)));
+    await wipe(collection(db, "users", uid, "saved"));
     await wipe(query(collection(db, "trades"), where("uid", "==", uid)));
     const fr = await getDocs(query(collection(db, "friendships"), where("members", "array-contains", uid))).catch(() => ({ docs: [] }));
     for (const f of fr.docs) { await wipe(collection(db, "friendships", f.id, "messages")); await deleteDoc(f.ref).catch(() => {}); }
@@ -5795,7 +5773,8 @@ function openPrivacy() {
         item("What the app doesn't do", "No ads, no tracking, no selling your info, no payments."),
         item("House rules", "Fishing photos only. No slurs, hate, or bullying. The person who runs the app, and moderators they choose, can delete posts or comments and can ban accounts. Tap the flag on a catch to report it."),
         item("Staying safe", "Don't post your address, school, or a spot you want to keep secret. Skip the location on catches near your home."),
-        item("Rivers and fish photos", "The Rivers tab reads free water levels from the US Geological Survey. Fish photos near a river come from iNaturalist and keep the photographer's credit. Photos anglers add to a river are visible to everyone."),
+        item("Rivers", "The Rivers tab reads free water levels from the US Geological Survey."),
+        item("Your saved spots", "Spots you save in Spot saver are private. Only you can see them. Nobody else can, not even the owner. They are deleted with your account."),
         item("Who can use it", "You need to be 13 or older. If you are under 18, ask a parent or guardian first."),
         item("Deleting things", "You can delete any of your catches or comments yourself. To remove your whole account, go to Settings and tap Delete my account. It removes your profile, catches, photos, chats, log and game progress. Comments you left on other people's catches may stay until someone removes them."),
         item("Questions or problems", "Tap the flag on anything that breaks the rules, or message the person who runs the app.")))); 
