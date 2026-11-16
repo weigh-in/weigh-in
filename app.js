@@ -3,7 +3,7 @@ import { firebaseConfig } from "./firebase-config.js";
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
 import {
   getAuth, onAuthStateChanged, createUserWithEmailAndPassword, signInWithEmailAndPassword,
-  signOut, sendPasswordResetEmail, GoogleAuthProvider, signInWithPopup, deleteUser
+  signOut, sendPasswordResetEmail, GoogleAuthProvider, signInWithPopup, deleteUser, sendEmailVerification
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 import {
   getFirestore, collection, doc, setDoc, getDoc, getDocs, addDoc, deleteDoc, updateDoc, onSnapshot,
@@ -270,7 +270,8 @@ function renderAuth(mode = "signin") {
         if (!NAME_RE.test(name)) { msg.textContent = "Angler name must be 2 to 20 letters, numbers or _."; return; }
         if (badText(name)) { msg.textContent = "That name isn't allowed. Pick another one."; return; }
         pendingName = name;
-        await createUserWithEmailAndPassword(auth, email, pw);
+        const cred = await createUserWithEmailAndPassword(auth, email, pw);
+        try { await sendEmailVerification(cred.user); } catch (e2) { /* the verify screen has a Resend button */ }
       } else {
         await signInWithEmailAndPassword(auth, email, pw);
       }
@@ -346,6 +347,45 @@ onAuthStateChanged(auth, async (user) => {
   S.owner = !!(user && user.uid === OWNER_UID);
   S.banned = false; S.mod = null; S.editMode = false; S.tourAcc = false;
   if (!user) { renderAuth(); return; }
+  if (needsVerify(user)) { renderVerify(user); return; }
+  await authedEntry(user);
+});
+
+// New email-and-password accounts must confirm their email before using the app (accounts made before this rule are not affected).
+const VERIFY_FROM = Date.parse("2026-11-16T22:00:00Z");
+function needsVerify(u) {
+  try {
+    const made = Date.parse(u.metadata?.creationTime || "");
+    return !!made && made > VERIFY_FROM && !u.emailVerified && (u.providerData || []).some((p) => p.providerId === "password");
+  } catch (e) { return false; }
+}
+function renderVerify(u) {
+  const msg = el("p", { class: "hint", role: "alert" }, "");
+  let wait = 0, tm = null;
+  const resend = el("button", { class: "btn wide ghost", type: "button", id: "v-resend" }, "Send the email again");
+  const tick = () => { if (wait > 0) { resend.disabled = true; resend.textContent = `Send again in ${wait}s`; wait--; tm = setTimeout(tick, 1000); } else { resend.disabled = false; resend.textContent = "Send the email again"; } };
+  resend.onclick = async () => {
+    try { await sendEmailVerification(u); msg.textContent = "Sent. Check your inbox and your spam folder."; wait = 45; tick(); }
+    catch (e) { msg.textContent = errText(e); }
+  };
+  $app.replaceChildren(el("div", { class: "auth compact" }, el("div", { class: "box" },
+    el("h1", null, "Check your email"),
+    el("p", null, `We sent a link to ${u.email}. Tap it to confirm that it is really your email, then come back here.`),
+    el("button", { class: "btn wide", type: "button", id: "v-done", onclick: async () => {
+      msg.textContent = "";
+      try { await u.reload(); } catch (e) { msg.textContent = errText(e); return; }
+      if (u.emailVerified) { clearTimeout(tm); $app.replaceChildren(el("div", { class: "boot" }, "Loading…")); await authedEntry(u); }
+      else msg.textContent = "Not confirmed yet. Open the link in the email first.";
+    } }, "I confirmed my email"),
+    resend, msg,
+    el("button", { class: "link", type: "button", id: "v-wrong", onclick: async () => {
+      if (!confirm("Start over with a different email? This removes the account you just made.")) return;
+      try { await deleteUser(u); } catch (e) { /* fall through to sign out */ }
+      signOut(auth);
+    } }, "Wrong email? Start over"),
+    el("button", { class: "link", type: "button", onclick: () => signOut(auth) }, "Sign out"))));
+}
+async function authedEntry(user) {
   if (!document.getElementById("boot-cast")) $app.replaceChildren(el("div", { class: "boot" }, "Loading…"));
   try {
     const snap = await getDoc(doc(db, "users", user.uid));
@@ -362,7 +402,7 @@ onAuthStateChanged(auth, async (user) => {
       el("h1", null, "Can't connect"), el("p", null, "Check that Firestore is turned on and the security rules are published (README steps 2 and 3)."),
       el("button", { class: "btn", type: "button", onclick: () => location.reload() }, "Try again"))));
   }
-});
+}
 
 /* ======================= main app ======================= */
 function startApp() {
@@ -1154,7 +1194,7 @@ function feedPosts() {
 /* What's new. Newest first. Add a new entry on top each time the app changes. */
 /* Bump APP_VERSION every time you change the app, and add a matching entry on top of UPDATES (with v: the same number).
    Phones check app.js every few minutes and offer the new version on their own. */
-const APP_VERSION = 72;
+const APP_VERSION = 73;
 // The number people see. APP_VERSION stays a plain counter so updates are detected. Big changes bump the first number (2.0), smaller ones the second (1.1, 1.2).
 const REL_NAMES = { 59: "1.0", 60: "1.0", 61: "1.1", 62: "1.2", 63: "1.2", 64: "1.2", 65: "1.2", 66: "1.2", 67: "1.2" };
 const relName = (v) => REL_NAMES[v] || (v < 59 ? `0.${v}` : `1.${v - 59}`);
