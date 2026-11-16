@@ -133,8 +133,8 @@
     var R = hang(REL);
     function frame(ms) {
       if (!$("bs-rod")) return;
-      var t = still ? .9 : (ms % LOOP) / LOOP, s = ms / 1000;
-      var p = rodPose(t), lean = (p.a + 60) * .07 + Math.sin(t * 12.566) * .5;
+      var tf = ms / LOOP, t = Math.min(tf, .9), ph = tf % 1, s = ms / 1000; // casts once, then the bobber keeps floating
+      var p = rodPose(t), lean = (p.a + 60) * .07 + Math.sin(ph * 12.566) * .5;
       up.setAttribute("transform", "rotate(" + lean.toFixed(2) + " 85 122)");
       var lr = lean * Math.PI / 180, sx0 = 88 - 85, sy0 = 99 - 122;
       var sx = 85 + sx0 * Math.cos(lr) - sy0 * Math.sin(lr), sy = 122 + sx0 * Math.sin(lr) + sy0 * Math.cos(lr);
@@ -152,13 +152,9 @@
       else if (t < LAND) {
         var u = (t - REL) / (LAND - REL);
         var e = 1 - Math.pow(1 - u, 1.7); bx = R.x + (LX - R.x) * e; by = R.y + (LY - R.y) * u - 82 * 4 * u * (1 - u); sag = 14 * u; rot = (u - .5) * 120;
-      } else if (t < .90) {
-        var k = t - LAND, tug = Math.exp(-Math.pow((t - .85) / .012, 2));
-        bx = LX + Math.sin(k * 90) * .6; by = LY - 1.2 + Math.sin(k * 120) * 1.5 * Math.exp(-k * 9) + Math.sin(t * 12.566) * .5 + tug * 3.4; sag = 13; rot = Math.sin(k * 80) * 6 * Math.exp(-k * 8);
       } else {
-        // Reel in: the bobber lifts and slides back along the line to hang from the rod, ready for the next cast.
-        var ru = sm((t - .90) / .10), h0 = hang(0), fx0 = LX, fy0 = LY - 1.2;
-        bx = fx0 + (h0.x - fx0) * ru; by = fy0 + (h0.y - fy0) * ru - 16 * 4 * ru * (1 - ru); sag = 13 * (1 - ru); rot = 0;
+        var k = t - LAND, tug = Math.exp(-Math.pow((ph - .85) / .012, 2));
+        bx = LX + Math.sin(k * 90) * .6; by = LY - 1.2 + Math.sin(k * 120) * 1.5 * Math.exp(-k * 9) + Math.sin(ph * 12.566) * .5 + tug * 3.4; sag = 13; rot = Math.sin(k * 80) * 6 * Math.exp(-k * 8);
       }
       var mx = (p.tx + bx) / 2, my = (p.ty + by) / 2 + sag;
       line.setAttribute("d", "M" + f1(p.tx) + " " + f1(p.ty) + " Q" + f1(mx) + " " + f1(my) + " " + f1(bx) + " " + f1(by));
@@ -180,7 +176,7 @@
       } else jf.setAttribute("opacity", 0);
       var ju = cl((t - .63) / .14);
       jr.setAttribute("rx", f1(1 + 15 * ju)); jr.setAttribute("ry", f1(.5 + 4 * ju)); jr.setAttribute("opacity", t > .63 && t < .77 ? (.8 * (1 - ju)).toFixed(2) : 0);
-      var w0 = Math.sin(t * 62.83) * .8 + .2, w1 = Math.sin(t * 56.55 + 1) * .8 + .2, x0 = ((t * 380 + 40) % 380) - 30, x1 = ((t * 380 + 190) % 380) - 30;
+      var w0 = Math.sin(ph * 62.83) * .8 + .2, w1 = Math.sin(ph * 56.55 + 1) * .8 + .2, x0 = ((ph * 380 + 40) % 380) - 30, x1 = ((ph * 380 + 190) % 380) - 30;
       b0.setAttribute("d", "M" + f1(x0 - 5) + " " + f1(36 - w0 * 3) + " Q" + f1(x0 - 2.5) + " " + f1(36 - 5 * w0 - 2) + " " + f1(x0) + " 36 Q" + f1(x0 + 2.5) + " " + f1(36 - 5 * w0 - 2) + " " + f1(x0 + 5) + " " + f1(36 - w0 * 3));
       b1.setAttribute("d", "M" + f1(x1 - 4) + " " + f1(54 - w1 * 2.5) + " Q" + f1(x1 - 2) + " " + f1(54 - 4 * w1 - 1.5) + " " + f1(x1) + " 54 Q" + f1(x1 + 2) + " " + f1(54 - 4 * w1 - 1.5) + " " + f1(x1 + 4) + " " + f1(54 - w1 * 2.5));
       if (!still) requestAnimationFrame(frame);
