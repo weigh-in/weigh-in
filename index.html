@@ -109,7 +109,7 @@
         handle = $("bs-handle"), shaft = $("bs-shaft"), reel = $("bs-reel"), line = $("bs-line"), bob = $("bs-bob"), fish = $("bs-fish"),
         r1 = $("bs-r1"), r2 = $("bs-r2"), jf = $("bs-jf"), jr = $("bs-jr"), b0 = $("bs-bird0"), b1 = $("bs-bird1"),
         ds = [0, 1, 2, 3, 4].map(function (i) { return $("bs-d" + i); });
-    var T = [0, .08, .30, .36, .44, .50, .93, 1], A = [-60, -63, -135, -135, -22, -8, -8, -60];
+    var T = [0, .08, .30, .36, .50, .90, 1], A = [-60, -63, -135, -135, -10, -8, -60];
     var LOOP = 4500, PX = 92, PY = 112, LEN = 64, LX = 255, LY = 152, REL = .44, LAND = .72;
     var DV = [[-30, -85], [-14, -105], [2, -115], [16, -100], [32, -80]];
     function sm(x) { return x * x * (3 - 2 * x); }
@@ -127,7 +127,7 @@
         tx: hx + LEN * dx + nx * bend, ty: hy + LEN * dy + ny * bend };
     }
     function hang(t) {
-      var p = rodPose(t), phi = Math.max(-1, Math.min(1, -omega(t) * .0005)) + Math.sin(t * 40) * .04;
+      var p = rodPose(t), phi = Math.max(-.45, Math.min(.45, -omega(t) * .00018)) + Math.sin(t * 40) * .03;
       return { x: p.tx + 17 * Math.sin(phi), y: p.ty + 17 * Math.cos(phi), phi: phi };
     }
     var R = hang(REL);
@@ -151,17 +151,21 @@
       if (t < REL) { var hg = hang(t); bx = hg.x; by = hg.y; sag = 0; rot = hg.phi * 30; }
       else if (t < LAND) {
         var u = (t - REL) / (LAND - REL);
-        bx = R.x + (LX - R.x) * (u * .75 + u * u * .25); by = R.y + (LY - R.y) * u - 78 * 4 * u * (1 - u); sag = 14 * u; rot = (u - .5) * 120;
-      } else {
-        var k = t - LAND, tug = Math.exp(-Math.pow((t - .87) / .012, 2));
+        var e = 1 - Math.pow(1 - u, 1.7); bx = R.x + (LX - R.x) * e; by = R.y + (LY - R.y) * u - 82 * 4 * u * (1 - u); sag = 14 * u; rot = (u - .5) * 120;
+      } else if (t < .90) {
+        var k = t - LAND, tug = Math.exp(-Math.pow((t - .85) / .012, 2));
         bx = LX + Math.sin(k * 90) * .6; by = LY - 1.2 + Math.sin(k * 120) * 1.5 * Math.exp(-k * 9) + Math.sin(t * 12.566) * .5 + tug * 3.4; sag = 13; rot = Math.sin(k * 80) * 6 * Math.exp(-k * 8);
+      } else {
+        // Reel in: the bobber lifts and slides back along the line to hang from the rod, ready for the next cast.
+        var ru = sm((t - .90) / .10), h0 = hang(0), fx0 = LX, fy0 = LY - 1.2;
+        bx = fx0 + (h0.x - fx0) * ru; by = fy0 + (h0.y - fy0) * ru - 16 * 4 * ru * (1 - ru); sag = 13 * (1 - ru); rot = 0;
       }
       var mx = (p.tx + bx) / 2, my = (p.ty + by) / 2 + sag;
       line.setAttribute("d", "M" + f1(p.tx) + " " + f1(p.ty) + " Q" + f1(mx) + " " + f1(my) + " " + f1(bx) + " " + f1(by));
       bob.setAttribute("transform", "translate(" + f1(bx) + " " + f1(by) + ") rotate(" + f1(rot) + ")");
-      fish.setAttribute("opacity", t > .94 ? cl(1 - (t - .94) / .04) : 1);
+      fish.setAttribute("opacity", 1);
       var s1 = cl((t - LAND) / .17), s2 = cl((t - LAND - .035) / .17);
-      r1.setAttribute("rx", f1(2 + 20 * s1)); r1.setAttribute("ry", f1(.8 + 5.5 * s1)); r1.setAttribute("opacity", t > LAND && t < LAND + .17 ? (.9 * (1 - s1)).toFixed(2) : 0);
+      r1.setAttribute("rx", f1(2 + 20 * s1)); r1.setAttribute("ry", f1(.8 + 5.5 * s1)); r1.setAttribute("opacity", t > LAND && t < LAND + .17 && t < .9 ? (.9 * (1 - s1)).toFixed(2) : 0);
       r2.setAttribute("rx", f1(2 + 32 * s2)); r2.setAttribute("ry", f1(.8 + 9 * s2)); r2.setAttribute("opacity", t > LAND + .035 && t < LAND + .205 ? (.7 * (1 - s2)).toFixed(2) : 0);
       var tt = (t - LAND) * LOOP / 1000;
       for (var i = 0; i < 5; i++) {
