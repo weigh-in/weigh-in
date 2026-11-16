@@ -117,7 +117,7 @@
     function ang(t) { t = cl(t); for (var i = 0; i < T.length - 1; i++) if (t <= T[i + 1]) return A[i] + (A[i + 1] - A[i]) * sm((t - T[i]) / (T[i + 1] - T[i])); return A[A.length - 1]; }
     function omega(t) { return (ang(t + .004) - ang(t - .004)) / .008; }
     function f1(x) { return x.toFixed(1); }
-    var still = window.matchMedia && matchMedia("(prefers-reduced-motion: reduce)").matches;
+    var still = false; // Always plays: it is a short loading screen, and phones with "remove animations" on would otherwise freeze it.
     function rodPose(t) {
       var a = ang(t), rad = a * Math.PI / 180, dx = Math.cos(rad), dy = Math.sin(rad), nx = -dy, ny = dx;
       var bend = -omega(t) * .0075; if (t > REL) bend += 3.2 * Math.sin((t - REL) * 260) * Math.exp(-(t - REL) * 28);
