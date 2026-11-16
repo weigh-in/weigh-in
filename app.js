@@ -1154,7 +1154,7 @@ function feedPosts() {
 /* What's new. Newest first. Add a new entry on top each time the app changes. */
 /* Bump APP_VERSION every time you change the app, and add a matching entry on top of UPDATES (with v: the same number).
    Phones check app.js every few minutes and offer the new version on their own. */
-const APP_VERSION = 70;
+const APP_VERSION = 71;
 // The number people see. APP_VERSION stays a plain counter so updates are detected. Big changes bump the first number (2.0), smaller ones the second (1.1, 1.2).
 const REL_NAMES = { 59: "1.0", 60: "1.0", 61: "1.1", 62: "1.2", 63: "1.2", 64: "1.2", 65: "1.2", 66: "1.2", 67: "1.2" };
 const relName = (v) => REL_NAMES[v] || (v < 59 ? `0.${v}` : `1.${v - 59}`);
@@ -1461,7 +1461,10 @@ function renderFeedCards() {
   const h = $feed.clientHeight || 1;
   const currentId = cards[Math.round($feed.scrollTop / h)]?.dataset.id;
   const nodes = list.map((p) => { let n = cardCache.get(p.id); if (!n) { n = makeCard(p); cardCache.set(p.id, n); } return n; });
+  // Moving a video in the page pauses it, so remember which ones were playing and start them again.
+  const wasPlaying = [...$feed.querySelectorAll("video.vid-feed")].filter((v) => !v.paused);
   $feed.replaceChildren(...nodes);
+  wasPlaying.forEach((v) => v.play().catch(() => {}));
   const idx = currentId ? list.findIndex((p) => p.id === currentId) : 0;
   if (idx > 0) $feed.scrollTop = idx * $feed.clientHeight;
   paintLikes(); paintSpotBtns();
@@ -1613,7 +1616,11 @@ function vidCardLayer(p) {
   const dur = el("span", { class: "vid-dur" }, vidTime(p.vid.dur || 0));
   const btn = el("button", { class: "vid-play", type: "button", "aria-label": `Play video, ${vidTime(p.vid.dur || 0)}`, onclick: async (e) => {
     e.stopPropagation(); btn.disabled = true; ring.classList.add("spin"); ring.textContent = ""; dur.textContent = "Loading…";
-    try { const url = await vidLoad(p); const v = el("video", { class: "vid-feed", src: url, playsinline: "", autoplay: "", loop: "", onclick: () => { v.paused ? v.play() : v.pause(); } }); btn.replaceWith(v); v.play().catch(() => {}); vidWatch(v); }
+    try { const url = await vidLoad(p); const v = el("video", { class: "vid-feed", src: url, playsinline: "", autoplay: "", loop: "", preload: "auto", onclick: () => { v.paused ? v.play().catch(() => {}) : v.pause(); } });
+      v.addEventListener("error", () => toast("This phone couldn't play that video."));
+      btn.replaceWith(v);
+      v.play().catch(() => { v.muted = true; v.play().catch(() => toast("Tap the video to play it.")); });
+      vidWatch(v); }
     catch { btn.disabled = false; ring.classList.remove("spin"); ring.innerHTML = tri; dur.textContent = "Try again"; toast("Couldn't load the video. Try again."); }
   } }, ring, dur);
   return btn;
@@ -4285,7 +4292,7 @@ async function applyUpdate() {
     }
   } catch { /* reload anyway */ }
   rememberUpdate();
-  try { await Promise.all(["index.html", "./"].map((u) => fetch(u, { cache: "reload" }).catch(() => {}))); } catch { /* reload anyway */ }
+  try { await Promise.all(["app.js", "./"].map((u) => fetch(u, { cache: "reload" }).catch(() => {}))); } catch { /* reload anyway */ }
   location.reload();
 }
 setTimeout(checkUpdate, 4000);
