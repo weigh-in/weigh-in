@@ -339,7 +339,7 @@ onAuthStateChanged(auth, async (user) => {
   S.owner = !!(user && user.uid === OWNER_UID);
   S.banned = false; S.mod = null; S.editMode = false; S.tourAcc = false;
   if (!user) { renderAuth(); return; }
-  $app.replaceChildren(el("div", { class: "boot" }, "Loading…"));
+  if (!document.getElementById("boot-cast")) $app.replaceChildren(el("div", { class: "boot" }, "Loading…"));
   try {
     const snap = await getDoc(doc(db, "users", user.uid));
     if (snap.exists()) { S.name = snap.data().name; S.nameAt = snap.data().nameAt?.toMillis?.() || 0; startApp(); return; }
@@ -1147,7 +1147,7 @@ function feedPosts() {
 /* What's new. Newest first. Add a new entry on top each time the app changes. */
 /* Bump APP_VERSION every time you change the app, and add a matching entry on top of UPDATES (with v: the same number).
    Phones check app.js every few minutes and offer the new version on their own. */
-const APP_VERSION = 67;
+const APP_VERSION = 68;
 // The number people see. APP_VERSION stays a plain counter so updates are detected. Big changes bump the first number (2.0), smaller ones the second (1.1, 1.2).
 const REL_NAMES = { 59: "1.0", 60: "1.0", 61: "1.1", 62: "1.2", 63: "1.2", 64: "1.2", 65: "1.2", 66: "1.2", 67: "1.2" };
 const relName = (v) => REL_NAMES[v] || (v < 59 ? `0.${v}` : `1.${v - 59}`);
