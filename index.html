@@ -35,13 +35,13 @@
 </head>
 <body>
 <div id="app">
-  <div class="boot boot-cast" id="boot-cast"><style>
-.boot.boot-cast{flex-direction:column;gap:14px}
-.boot-cast{display:flex;align-items:center;justify-content:center;height:100%;font-family:var(--display, Georgia, serif);color:var(--lake, #1F5C4D)}
-.boot-cast .boot-svg{width:min(90vw,380px);height:auto;border-radius:20px;box-shadow:0 12px 34px rgba(16,50,42,.28)}
-.boot-cast .boot-txt{font-size:1.3rem;letter-spacing:.01em}
-.boot-cast .boot-txt i{font-style:normal;animation:bsDot 1.2s infinite both}
-.boot-cast .boot-txt i:nth-child(2){animation-delay:.2s}.boot-cast .boot-txt i:nth-child(3){animation-delay:.4s}
+  <div id="boot-cast" style="display:flex;align-items:center;justify-content:center;height:100%;color:#1F5C4D;font-size:1.4rem">Loading Weigh-In…</div>
+<template id="bs-tpl"><style>
+:host{display:flex;flex-direction:column;gap:14px;align-items:center;justify-content:center;height:100%;font-family:var(--display, Georgia, serif);color:var(--lake, #1F5C4D)}
+.boot-svg{width:min(90vw,380px);height:auto;border-radius:20px;box-shadow:0 12px 34px rgba(16,50,42,.28)}
+.boot-txt{font-size:1.3rem;letter-spacing:.01em}
+.boot-txt i{font-style:normal;animation:bsDot 1.2s infinite both}
+.boot-txt i:nth-child(2){animation-delay:.2s}.boot-txt i:nth-child(3){animation-delay:.4s}
 @keyframes bsDot{0%,20%{opacity:.15}50%{opacity:1}100%{opacity:.15}}
 .bs-waves{animation:bsWave 3s ease-in-out infinite alternate}
 @keyframes bsWave{from{transform:translateX(-6px)}to{transform:translateX(6px)}}
@@ -52,7 +52,7 @@
 @keyframes bsGlint{from{opacity:.15}to{opacity:.8}}
 .bs-reed{transform-box:fill-box;transform-origin:50% 100%;animation:bsReed 3.2s ease-in-out infinite alternate}.bs-reed:nth-child(2){animation-delay:.7s}.bs-reed:nth-child(3){animation-delay:1.4s}
 @keyframes bsReed{from{transform:rotate(-3deg)}to{transform:rotate(3deg)}}
-@media (prefers-reduced-motion:reduce){.bs-waves,.bs-waves2,.bs-cloud,.bs-cloud2,.bs-glint,.bs-reed,.boot-txt i{animation:none}}
+
 </style><svg class="boot-svg" viewBox="0 0 320 200" role="img" aria-label="An angler casting a bobber" xmlns="http://www.w3.org/2000/svg">
 <defs>
 <linearGradient id="bs-sky" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#6DB7E3"/><stop offset=".55" stop-color="#BFE3EE"/><stop offset="1" stop-color="#FCE9CC"/></linearGradient>
@@ -97,13 +97,25 @@
 <g stroke="#3B5A33" stroke-width="1.6" stroke-linecap="round"><g class="bs-reed"><path d="M300 200 Q298 180 301 162"/><rect x="299.6" y="158" width="3" height="9" rx="1.5" fill="#6B4528" stroke="none"/></g><g class="bs-reed"><path d="M308 200 Q311 184 308 170"/><rect x="306.6" y="166" width="3" height="8" rx="1.5" fill="#6B4528" stroke="none"/></g><g class="bs-reed"><path d="M292 200 Q290 188 293 176"/></g></g>
 <rect width="320" height="200" fill="url(#bs-vig)"/>
 </g>
-</svg><div class="boot-txt">Loading Weigh-In<i>.</i><i>.</i><i>.</i></div></div>
+</svg><div class="boot-txt">Loading Weigh-In<i>.</i><i>.</i><i>.</i></div></template>
+<script>
+  // The loading scene lives in its own sealed box (shadow DOM), so no change to the app's styles can alter the animation.
+  (function () {
+    var h = document.getElementById("boot-cast"), t = document.getElementById("bs-tpl");
+    if (!h || !t || !h.attachShadow) return;
+    h.removeAttribute("style"); h.textContent = "";
+    h.style.cssText = "display:flex;flex-direction:column;gap:14px;align-items:center;justify-content:center;height:100%;font-family:var(--display, Georgia, serif);color:var(--lake, #1F5C4D)";
+    h.attachShadow({ mode: "open" }).appendChild(t.content.cloneNode(true));
+  })();
+</script>
   <noscript><p style="padding:24px;color:#fff">Weigh-In needs JavaScript turned on to work.</p></noscript>
 </div>
 <script>
   // Casting animation: one clock drives the man, rod, line and bobber so everything stays attached.
   (function () {
-    var $ = function (id) { return document.getElementById(id); };
+    var host = document.getElementById("boot-cast"), sr = host && host.shadowRoot;
+    if (!sr) return;
+    var $ = function (id) { return sr.getElementById(id); };
     if (!$("bs-rod")) return;
     var up = $("bs-up"), arm1 = $("bs-arm1"), arm2 = $("bs-arm2"), h1 = $("bs-h1"), h2 = $("bs-h2"),
         handle = $("bs-handle"), shaft = $("bs-shaft"), reel = $("bs-reel"), line = $("bs-line"), bob = $("bs-bob"), fish = $("bs-fish"),
@@ -132,7 +144,7 @@
     }
     var R = hang(REL);
     function frame(ms) {
-      if (!$("bs-rod")) return;
+      if (!host.isConnected) return;
       var tf = ms / LOOP, t = Math.min(tf, .9), ph = tf % 1, s = ms / 1000; // casts once, then the bobber keeps floating
       var p = rodPose(t), lean = (p.a + 60) * .07 + Math.sin(ph * 12.566) * .5;
       up.setAttribute("transform", "rotate(" + lean.toFixed(2) + " 85 122)");
