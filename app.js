@@ -333,7 +333,14 @@ async function claimName(name) {
   return true;
 }
 
+let bootWaited = false;
 onAuthStateChanged(auth, async (user) => {
+  // First time only: let the casting animation play one full loop (3.6 seconds) before the app appears.
+  if (!bootWaited) {
+    bootWaited = true;
+    const left = 3700 - performance.now();
+    if (left > 0 && document.getElementById("boot-cast")) await new Promise((r) => setTimeout(r, left));
+  }
   stopAll();
   S.user = user;
   S.owner = !!(user && user.uid === OWNER_UID);
@@ -1147,7 +1154,7 @@ function feedPosts() {
 /* What's new. Newest first. Add a new entry on top each time the app changes. */
 /* Bump APP_VERSION every time you change the app, and add a matching entry on top of UPDATES (with v: the same number).
    Phones check app.js every few minutes and offer the new version on their own. */
-const APP_VERSION = 68;
+const APP_VERSION = 69;
 // The number people see. APP_VERSION stays a plain counter so updates are detected. Big changes bump the first number (2.0), smaller ones the second (1.1, 1.2).
 const REL_NAMES = { 59: "1.0", 60: "1.0", 61: "1.1", 62: "1.2", 63: "1.2", 64: "1.2", 65: "1.2", 66: "1.2", 67: "1.2" };
 const relName = (v) => REL_NAMES[v] || (v < 59 ? `0.${v}` : `1.${v - 59}`);
