@@ -38,77 +38,147 @@
   <div class="boot boot-cast" id="boot-cast"><style>
 .boot.boot-cast{flex-direction:column;gap:14px}
 .boot-cast{display:flex;align-items:center;justify-content:center;height:100%;font-family:var(--display, Georgia, serif);color:var(--lake, #1F5C4D)}
-.boot-cast .boot-svg{width:min(86vw,360px);height:auto;border-radius:18px;box-shadow:0 10px 30px rgba(16,50,42,.22)}
+.boot-cast .boot-svg{width:min(90vw,380px);height:auto;border-radius:20px;box-shadow:0 12px 34px rgba(16,50,42,.28)}
 .boot-cast .boot-txt{font-size:1.3rem;letter-spacing:.01em}
 .boot-cast .boot-txt i{font-style:normal;animation:bsDot 1.2s infinite both}
 .boot-cast .boot-txt i:nth-child(2){animation-delay:.2s}.boot-cast .boot-txt i:nth-child(3){animation-delay:.4s}
 @keyframes bsDot{0%,20%{opacity:.15}50%{opacity:1}100%{opacity:.15}}
 .bs-waves{animation:bsWave 3s ease-in-out infinite alternate}
-@keyframes bsWave{from{transform:translateX(-5px)}to{transform:translateX(5px)}}
-.bs-cloud{animation:bsCloud 14s linear infinite alternate}.bs-cloud2{animation:bsCloud 19s linear infinite alternate-reverse}
-@keyframes bsCloud{from{transform:translateX(-10px)}to{transform:translateX(24px)}}
-@media (prefers-reduced-motion:reduce){.bs-waves,.bs-cloud,.bs-cloud2,.boot-txt i{animation:none}}
+@keyframes bsWave{from{transform:translateX(-6px)}to{transform:translateX(6px)}}
+.bs-waves2{animation:bsWave 4.2s ease-in-out infinite alternate-reverse}
+.bs-cloud{animation:bsCloud 16s linear infinite alternate}.bs-cloud2{animation:bsCloud 22s linear infinite alternate-reverse}
+@keyframes bsCloud{from{transform:translateX(-12px)}to{transform:translateX(28px)}}
+.bs-glint{animation:bsGlint 2.4s ease-in-out infinite alternate}.bs-glint:nth-child(2){animation-delay:.6s}.bs-glint:nth-child(3){animation-delay:1.1s}.bs-glint:nth-child(4){animation-delay:1.7s}
+@keyframes bsGlint{from{opacity:.15}to{opacity:.8}}
+.bs-reed{transform-box:fill-box;transform-origin:50% 100%;animation:bsReed 3.2s ease-in-out infinite alternate}.bs-reed:nth-child(2){animation-delay:.7s}.bs-reed:nth-child(3){animation-delay:1.4s}
+@keyframes bsReed{from{transform:rotate(-3deg)}to{transform:rotate(3deg)}}
+@media (prefers-reduced-motion:reduce){.bs-waves,.bs-waves2,.bs-cloud,.bs-cloud2,.bs-glint,.bs-reed,.boot-txt i{animation:none}}
 </style><svg class="boot-svg" viewBox="0 0 320 200" role="img" aria-label="An angler casting a bobber" xmlns="http://www.w3.org/2000/svg">
 <defs>
-<linearGradient id="bs-sky" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#8FC9E8"/><stop offset="1" stop-color="#E7F4EC"/></linearGradient>
-<linearGradient id="bs-water" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#3E8FB3"/><stop offset="1" stop-color="#1F5C7A"/></linearGradient>
-<clipPath id="bs-clip"><rect width="320" height="200" rx="18"/></clipPath>
+<linearGradient id="bs-sky" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#6DB7E3"/><stop offset=".55" stop-color="#BFE3EE"/><stop offset="1" stop-color="#FCE9CC"/></linearGradient>
+<radialGradient id="bs-glow"><stop offset="0" stop-color="#FFF2B8" stop-opacity=".95"/><stop offset="1" stop-color="#FFF2B8" stop-opacity="0"/></radialGradient>
+<linearGradient id="bs-water" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#58A6C4"/><stop offset=".5" stop-color="#2F7FA3"/><stop offset="1" stop-color="#1B4F6E"/></linearGradient>
+<linearGradient id="bs-vig" x1="0" y1="0" x2="0" y2="1"><stop offset=".7" stop-color="#0B2A38" stop-opacity="0"/><stop offset="1" stop-color="#0B2A38" stop-opacity=".35"/></linearGradient>
+<clipPath id="bs-clip"><rect width="320" height="200" rx="20"/></clipPath>
+<clipPath id="bs-cut"><rect x="0" y="0" width="320" height="153"/></clipPath>
 </defs>
 <g clip-path="url(#bs-clip)">
 <rect width="320" height="200" fill="url(#bs-sky)"/>
-<circle cx="268" cy="38" r="16" fill="#FFE29A"/>
-<g class="bs-cloud" fill="#fff" opacity=".9"><ellipse cx="60" cy="34" rx="22" ry="7"/><ellipse cx="76" cy="30" rx="14" ry="7"/></g>
-<g class="bs-cloud2" fill="#fff" opacity=".75"><ellipse cx="200" cy="22" rx="18" ry="5"/><ellipse cx="212" cy="19" rx="11" ry="5"/></g>
-<path d="M0 142 Q40 118 90 138 T190 136 T320 130 L320 146 L0 146Z" fill="#4F8F6B" opacity=".55"/>
+<circle cx="262" cy="46" r="42" fill="url(#bs-glow)"/><circle cx="262" cy="46" r="15" fill="#FFE9A3"/>
+<g class="bs-cloud" fill="#fff" opacity=".92"><ellipse cx="58" cy="34" rx="24" ry="7"/><ellipse cx="76" cy="29" rx="15" ry="7.5"/><ellipse cx="44" cy="30" rx="12" ry="5.5"/></g>
+<g class="bs-cloud2" fill="#fff" opacity=".78"><ellipse cx="190" cy="22" rx="19" ry="5"/><ellipse cx="203" cy="18" rx="12" ry="5.5"/></g>
+<path id="bs-bird0" fill="none" stroke="#2B3A45" stroke-width="1.3" stroke-linecap="round" d="M0 0"/>
+<path id="bs-bird1" fill="none" stroke="#2B3A45" stroke-width="1.1" stroke-linecap="round" d="M0 0"/>
+<path d="M0 146 Q40 112 92 134 T196 130 T320 118 L320 150 L0 150Z" fill="#6FA087" opacity=".7"/>
+<path d="M0 150 Q50 128 110 142 T230 138 T320 134 L320 152 L0 152Z" fill="#3F7A5E"/>
+<g fill="#2C5F49"><path d="M214 140 l5 -16 l5 16z"/><path d="M224 140 l4 -12 l4 12z"/><path d="M290 138 l5 -18 l5 18z"/><path d="M302 138 l4 -13 l4 13z"/><path d="M20 146 l4 -13 l4 13z"/></g>
 <rect y="144" width="320" height="56" fill="url(#bs-water)"/>
-<g class="bs-waves" stroke="#BFE3F2" stroke-width="1.5" stroke-linecap="round" fill="none" opacity=".7">
-<path d="M150 160 q8 -4 16 0 t16 0"/><path d="M210 172 q8 -4 16 0 t16 0"/><path d="M170 186 q8 -4 16 0 t16 0"/><path d="M270 158 q8 -4 16 0 t16 0"/><path d="M130 176 q8 -4 16 0 t16 0"/></g>
-<rect x="0" y="140" width="136" height="10" fill="#8A5A34"/><rect x="0" y="148" width="136" height="3" fill="#5E3B20"/>
-<rect x="14" y="150" width="6" height="40" fill="#5E3B20"/><rect x="62" y="150" width="6" height="40" fill="#5E3B20"/><rect x="118" y="150" width="6" height="40" fill="#5E3B20"/>
-<g id="bs-man">
-<rect x="76" y="116" width="7" height="24" rx="3" fill="#2F3E57"/><rect x="85" y="116" width="7" height="24" rx="3" fill="#2F3E57"/>
-<rect x="74" y="137" width="11" height="4" rx="2" fill="#3A2A1C"/><rect x="85" y="137" width="11" height="4" rx="2" fill="#3A2A1C"/>
-<rect x="74" y="94" width="22" height="26" rx="8" fill="#E8742A"/>
-<circle cx="85" cy="85" r="8" fill="#F1C9A0"/>
-<path d="M76 83 Q85 70 95 83 L101 84 L95 86 Q85 80 76 86Z" fill="#1F5C4D"/>
-<path d="M82 100 L92 112" stroke="#E8742A" stroke-width="6" stroke-linecap="round"/>
-<circle cx="93" cy="113" r="3.4" fill="#F1C9A0"/>
-</g>
-<g class="bs-rod" id="bs-rod"><line x1="92" y1="112" x2="104" y2="112" stroke="#3A2A1C" stroke-width="5" stroke-linecap="round"/><line x1="100" y1="112" x2="156" y2="112" stroke="#8A5A34" stroke-width="2.4" stroke-linecap="round"/><circle cx="104" cy="116" r="3" fill="#C9D3DA" stroke="#5B6770" stroke-width="1"/></g>
-<g id="bs-fish"><path id="bs-line" fill="none" stroke="#33414B" stroke-width="1" stroke-linecap="round" d="M124 57 L124 74"/><circle id="bs-b1" r="5.2" fill="#fff" stroke="#33414B" stroke-width="1" cx="124" cy="76"/><circle id="bs-b2" r="5.2" fill="#E04B3A" cx="124" cy="73"/></g>
-<ellipse id="bs-r1" cx="250" cy="148" rx="0" ry="0" fill="none" stroke="#E9F6FB" stroke-width="1.6" opacity="0"/>
-<ellipse id="bs-r2" cx="250" cy="148" rx="0" ry="0" fill="none" stroke="#E9F6FB" stroke-width="1.2" opacity="0"/>
+<g fill="#FFF4C4"><ellipse class="bs-glint" cx="262" cy="150" rx="12" ry="1.2"/><ellipse class="bs-glint" cx="264" cy="157" rx="9" ry="1.1"/><ellipse class="bs-glint" cx="260" cy="165" rx="14" ry="1.2"/><ellipse class="bs-glint" cx="266" cy="174" rx="8" ry="1"/></g>
+<g class="bs-waves" stroke="#CDEBF6" stroke-width="1.4" stroke-linecap="round" fill="none" opacity=".65"><path d="M150 160 q8 -4 16 0 t16 0"/><path d="M210 174 q8 -4 16 0 t16 0"/><path d="M170 188 q8 -4 16 0 t16 0"/><path d="M130 176 q8 -4 16 0 t16 0"/></g>
+<g class="bs-waves2" stroke="#CDEBF6" stroke-width="1.2" stroke-linecap="round" fill="none" opacity=".5"><path d="M280 162 q6 -3 12 0 t12 0"/><path d="M190 152 q6 -3 12 0 t12 0"/><path d="M100 186 q6 -3 12 0 t12 0"/></g>
+<ellipse id="bs-jr" cx="200" cy="158" rx="0" ry="0" fill="none" stroke="#E9F6FB" stroke-width="1.2" opacity="0"/>
+<g id="bs-jf" opacity="0"><ellipse cx="0" cy="0" rx="6.5" ry="2.7" fill="#6F8FA3"/><ellipse cx="0" cy="1" rx="5" ry="1.2" fill="#C9DCE6"/><path d="M-5 0 L-10.5 -3.6 L-10.5 3.6Z" fill="#587A8F"/><circle cx="3.6" cy="-.6" r=".7" fill="#10222E"/></g>
+<ellipse id="bs-r1" cx="255" cy="152" rx="0" ry="0" fill="none" stroke="#E9F6FB" stroke-width="1.6" opacity="0"/>
+<ellipse id="bs-r2" cx="255" cy="152" rx="0" ry="0" fill="none" stroke="#E9F6FB" stroke-width="1.2" opacity="0"/>
+<rect x="0" y="139" width="140" height="10" fill="#A27042"/>
+<g stroke="#7C512B" stroke-width="1"><path d="M22 139v10M44 139v10M66 139v10M88 139v10M110 139v10M132 139v10"/></g>
+<rect x="0" y="148" width="140" height="3.5" fill="#5E3B20"/>
+<rect x="14" y="151" width="6" height="40" fill="#5E3B20"/><rect x="62" y="151" width="6" height="40" fill="#5E3B20"/><rect x="118" y="151" width="6" height="40" fill="#5E3B20"/>
+<ellipse cx="85" cy="141" rx="17" ry="2.2" fill="#000" opacity=".22"/>
+<g id="bs-legs"><rect x="76" y="117" width="7.5" height="24" rx="3" fill="#2F3E57"/><rect x="85.5" y="117" width="7.5" height="24" rx="3" fill="#26344B"/><rect x="73.5" y="137.5" width="12" height="4.5" rx="2.2" fill="#3A2A1C"/><rect x="85" y="137.5" width="12" height="4.5" rx="2.2" fill="#3A2A1C"/></g>
+<g id="bs-up"><rect x="68" y="99" width="8" height="13" rx="2" fill="#7A5A3A"/><rect x="73" y="94" width="23" height="28" rx="8" fill="#E8742A"/><rect x="73" y="109" width="23" height="13" rx="5" fill="#C85F1D"/><rect x="82" y="88" width="6" height="8" rx="2" fill="#E8B88A"/><circle cx="85" cy="82" r="8.6" fill="#F1C9A0"/><circle cx="81" cy="84.5" r="1.9" fill="#E3AE82"/><path d="M75.5 80 Q85 65 96 80 L105 83 L96 85.4 Q85 77 75.5 85Z" fill="#1F5C4D"/><circle cx="90.2" cy="83" r="1.1" fill="#2B1B10"/><path d="M89.2 88 Q92 90.2 94.4 87.6" fill="none" stroke="#A8654A" stroke-width="1.1" stroke-linecap="round"/></g>
+<path id="bs-arm1" fill="none" stroke="#C85F1D" stroke-width="5.2" stroke-linecap="round" d="M0 0"/>
+<g id="bs-rod"><line id="bs-handle" stroke="#3A2A1C" stroke-width="5" stroke-linecap="round" x1="0" y1="0" x2="0" y2="0"/><path id="bs-shaft" fill="none" stroke="#9A6A3C" stroke-width="2.3" stroke-linecap="round" d="M0 0"/><circle id="bs-reel" r="3" fill="#CBD5DB" stroke="#5B6770" stroke-width="1"/></g>
+<path id="bs-arm2" fill="none" stroke="#E8742A" stroke-width="5.6" stroke-linecap="round" d="M0 0"/>
+<circle id="bs-h1" r="3.2" fill="#F1C9A0"/><circle id="bs-h2" r="3.2" fill="#F1C9A0"/>
+<g id="bs-fish"><path id="bs-line" fill="none" stroke="#2E3B45" stroke-width="1" stroke-linecap="round" d="M0 0"/>
+<g clip-path="url(#bs-cut)"><g id="bs-bob"><line x1="0" y1="-5" x2="0" y2="-9.5" stroke="#33414B" stroke-width="1.2" stroke-linecap="round"/><circle r="5.3" fill="#fff" stroke="#33414B" stroke-width=".9"/><path d="M-5.2 0 A5.2 5.2 0 0 1 5.2 0Z" fill="#E04B3A"/><path d="M-3.4 -1.2 Q-1.8 -4 .6 -4.4" fill="none" stroke="#fff" stroke-width=".9" opacity=".55" stroke-linecap="round"/></g></g></g>
+<g fill="#EAF7FC"><circle id="bs-d0" r="1.7" opacity="0"/><circle id="bs-d1" r="1.7" opacity="0"/><circle id="bs-d2" r="1.7" opacity="0"/><circle id="bs-d3" r="1.7" opacity="0"/><circle id="bs-d4" r="1.7" opacity="0"/></g>
+<g stroke="#3B5A33" stroke-width="1.6" stroke-linecap="round"><g class="bs-reed"><path d="M300 200 Q298 180 301 162"/><rect x="299.6" y="158" width="3" height="9" rx="1.5" fill="#6B4528" stroke="none"/></g><g class="bs-reed"><path d="M308 200 Q311 184 308 170"/><rect x="306.6" y="166" width="3" height="8" rx="1.5" fill="#6B4528" stroke="none"/></g><g class="bs-reed"><path d="M292 200 Q290 188 293 176"/></g></g>
+<rect width="320" height="200" fill="url(#bs-vig)"/>
 </g>
 </svg><div class="boot-txt">Loading Weigh-In<i>.</i><i>.</i><i>.</i></div></div>
   <noscript><p style="padding:24px;color:#fff">Weigh-In needs JavaScript turned on to work.</p></noscript>
 </div>
 <script>
-  // Casting animation: one clock drives the rod, line and bobber so the line always stays attached.
+  // Casting animation: one clock drives the man, rod, line and bobber so everything stays attached.
   (function () {
-    var rod = document.getElementById("bs-rod"); if (!rod) return;
-    var line = document.getElementById("bs-line"), b1 = document.getElementById("bs-b1"), b2 = document.getElementById("bs-b2"),
-        fish = document.getElementById("bs-fish"), r1 = document.getElementById("bs-r1"), r2 = document.getElementById("bs-r2");
-    var T = [0, .15, .38, .5, .56, .93, 1], A = [-60, -60, -130, -25, -12, -12, -60], LOOP = 3600;
-    var PX = 92, PY = 112, LEN = 64, LX = 250, LY = 148;
+    var $ = function (id) { return document.getElementById(id); };
+    if (!$("bs-rod")) return;
+    var up = $("bs-up"), arm1 = $("bs-arm1"), arm2 = $("bs-arm2"), h1 = $("bs-h1"), h2 = $("bs-h2"),
+        handle = $("bs-handle"), shaft = $("bs-shaft"), reel = $("bs-reel"), line = $("bs-line"), bob = $("bs-bob"), fish = $("bs-fish"),
+        r1 = $("bs-r1"), r2 = $("bs-r2"), jf = $("bs-jf"), jr = $("bs-jr"), b0 = $("bs-bird0"), b1 = $("bs-bird1"),
+        ds = [0, 1, 2, 3, 4].map(function (i) { return $("bs-d" + i); });
+    var T = [0, .08, .30, .36, .44, .50, .93, 1], A = [-60, -63, -135, -135, -22, -8, -8, -60];
+    var LOOP = 4500, PX = 92, PY = 112, LEN = 64, LX = 255, LY = 152, REL = .44, LAND = .72;
+    var DV = [[-30, -85], [-14, -105], [2, -115], [16, -100], [32, -80]];
     function sm(x) { return x * x * (3 - 2 * x); }
-    function angle(t) { for (var i = 0; i < T.length - 1; i++) if (t <= T[i + 1]) return A[i] + (A[i + 1] - A[i]) * sm((t - T[i]) / (T[i + 1] - T[i])); return A[A.length - 1]; }
-    function clamp(x) { return x < 0 ? 0 : x > 1 ? 1 : x; }
+    function cl(x) { return x < 0 ? 0 : x > 1 ? 1 : x; }
+    function ang(t) { t = cl(t); for (var i = 0; i < T.length - 1; i++) if (t <= T[i + 1]) return A[i] + (A[i + 1] - A[i]) * sm((t - T[i]) / (T[i + 1] - T[i])); return A[A.length - 1]; }
+    function omega(t) { return (ang(t + .004) - ang(t - .004)) / .008; }
+    function f1(x) { return x.toFixed(1); }
     var still = window.matchMedia && matchMedia("(prefers-reduced-motion: reduce)").matches;
+    function rodPose(t) {
+      var a = ang(t), rad = a * Math.PI / 180, dx = Math.cos(rad), dy = Math.sin(rad), nx = -dy, ny = dx;
+      var bend = -omega(t) * .0075; if (t > REL) bend += 3.2 * Math.sin((t - REL) * 260) * Math.exp(-(t - REL) * 28);
+      bend = Math.max(-16, Math.min(16, bend));
+      var hx = PX + (a + 60) * .06, hy = PY;
+      return { a: a, dx: dx, dy: dy, nx: nx, ny: ny, bend: bend, hx: hx, hy: hy,
+        tx: hx + LEN * dx + nx * bend, ty: hy + LEN * dy + ny * bend };
+    }
+    function hang(t) {
+      var p = rodPose(t), phi = Math.max(-1, Math.min(1, -omega(t) * .0005)) + Math.sin(t * 40) * .04;
+      return { x: p.tx + 17 * Math.sin(phi), y: p.ty + 17 * Math.cos(phi), phi: phi };
+    }
+    var R = hang(REL);
     function frame(ms) {
-      if (!document.getElementById("bs-rod")) return;
-      var t = still ? .9 : (ms % LOOP) / LOOP, a = angle(t), rad = a * Math.PI / 180;
-      var tx = PX + LEN * Math.cos(rad), ty = PY + LEN * Math.sin(rad), bx, by, sag;
-      if (t < .5) { bx = tx + Math.sin(t * 14) * 1.5; by = ty + 17; sag = 0; }
-      else if (t < .78) { var u = (t - .5) / .28, e = u * u * (3 - 2 * u) * .4 + u * .6; bx = tx + (LX - tx) * e; by = ty + (LY - ty) * u - 80 * 4 * u * (1 - u); sag = 12 * u; }
-      else { bx = LX; by = LY + Math.sin((t - .78) * 30) * 1.2; sag = 12; }
-      var r = tx + (bx - tx) / 2, c = ty + (by - ty) / 2 + sag;
-      rod.setAttribute("transform", "rotate(" + a.toFixed(2) + " " + PX + " " + PY + ")");
-      line.setAttribute("d", "M" + tx.toFixed(1) + " " + ty.toFixed(1) + " Q" + r.toFixed(1) + " " + c.toFixed(1) + " " + bx.toFixed(1) + " " + by.toFixed(1));
-      b1.setAttribute("cx", bx); b1.setAttribute("cy", by + 1.5); b2.setAttribute("cx", bx); b2.setAttribute("cy", by - 1.5);
-      fish.setAttribute("opacity", t > .93 ? clamp(1 - (t - .93) / .04) : 1);
-      var s1 = clamp((t - .78) / .14), s2 = clamp((t - .82) / .14);
-      r1.setAttribute("rx", 2 + 18 * s1); r1.setAttribute("ry", 1 + 5 * s1); r1.setAttribute("opacity", t > .78 && t < .93 ? .9 * (1 - s1) : 0);
-      r2.setAttribute("rx", 2 + 28 * s2); r2.setAttribute("ry", 1 + 8 * s2); r2.setAttribute("opacity", t > .82 && t < .97 ? .7 * (1 - s2) : 0);
+      if (!$("bs-rod")) return;
+      var t = still ? .9 : (ms % LOOP) / LOOP, s = ms / 1000;
+      var p = rodPose(t), lean = (p.a + 60) * .07 + Math.sin(s * 2.2) * .5;
+      up.setAttribute("transform", "rotate(" + lean.toFixed(2) + " 85 122)");
+      var lr = lean * Math.PI / 180, sx0 = 88 - 85, sy0 = 99 - 122;
+      var sx = 85 + sx0 * Math.cos(lr) - sy0 * Math.sin(lr), sy = 122 + sx0 * Math.sin(lr) + sy0 * Math.cos(lr);
+      var fx = p.hx - 8 * p.dx, fy = p.hy - 8 * p.dy;
+      arm1.setAttribute("d", "M" + f1(sx - 1) + " " + f1(sy) + " Q" + f1((sx + fx) / 2 - 3) + " " + f1((sy + fy) / 2 + 8) + " " + f1(fx) + " " + f1(fy));
+      arm2.setAttribute("d", "M" + f1(sx) + " " + f1(sy) + " Q" + f1((sx + p.hx) / 2 - 2) + " " + f1((sy + p.hy) / 2 + 7) + " " + f1(p.hx) + " " + f1(p.hy));
+      h1.setAttribute("cx", f1(fx)); h1.setAttribute("cy", f1(fy)); h2.setAttribute("cx", f1(p.hx)); h2.setAttribute("cy", f1(p.hy));
+      handle.setAttribute("x1", f1(p.hx - 8 * p.dx)); handle.setAttribute("y1", f1(p.hy - 8 * p.dy));
+      handle.setAttribute("x2", f1(p.hx + 14 * p.dx)); handle.setAttribute("y2", f1(p.hy + 14 * p.dy));
+      var b = p.bend;
+      shaft.setAttribute("d", "M" + f1(p.hx + 14 * p.dx) + " " + f1(p.hy + 14 * p.dy) + " Q" + f1(p.hx + (LEN / 2 + 7) * p.dx + p.nx * b * .35) + " " + f1(p.hy + (LEN / 2 + 7) * p.dy + p.ny * b * .35) + " " + f1(p.tx) + " " + f1(p.ty));
+      reel.setAttribute("cx", f1(p.hx + 9 * p.dx + p.nx * 4.2)); reel.setAttribute("cy", f1(p.hy + 9 * p.dy + p.ny * 4.2));
+      var bx, by, sag, rot = 0;
+      if (t < REL) { var hg = hang(t); bx = hg.x; by = hg.y; sag = 0; rot = hg.phi * 30; }
+      else if (t < LAND) {
+        var u = (t - REL) / (LAND - REL);
+        bx = R.x + (LX - R.x) * (u * .75 + u * u * .25); by = R.y + (LY - R.y) * u - 78 * 4 * u * (1 - u); sag = 14 * u; rot = (u - .5) * 120;
+      } else {
+        var k = t - LAND, tug = Math.exp(-Math.pow((t - .87) / .012, 2));
+        bx = LX + Math.sin(k * 90) * .6; by = LY - 1.2 + Math.sin(k * 120) * 1.5 * Math.exp(-k * 9) + Math.sin(s * 3) * .5 + tug * 3.4; sag = 13; rot = Math.sin(k * 80) * 6 * Math.exp(-k * 8);
+      }
+      var mx = (p.tx + bx) / 2, my = (p.ty + by) / 2 + sag;
+      line.setAttribute("d", "M" + f1(p.tx) + " " + f1(p.ty) + " Q" + f1(mx) + " " + f1(my) + " " + f1(bx) + " " + f1(by));
+      bob.setAttribute("transform", "translate(" + f1(bx) + " " + f1(by) + ") rotate(" + f1(rot) + ")");
+      fish.setAttribute("opacity", t > .94 ? cl(1 - (t - .94) / .04) : 1);
+      var s1 = cl((t - LAND) / .17), s2 = cl((t - LAND - .035) / .17);
+      r1.setAttribute("rx", f1(2 + 20 * s1)); r1.setAttribute("ry", f1(.8 + 5.5 * s1)); r1.setAttribute("opacity", t > LAND && t < LAND + .17 ? (.9 * (1 - s1)).toFixed(2) : 0);
+      r2.setAttribute("rx", f1(2 + 32 * s2)); r2.setAttribute("ry", f1(.8 + 9 * s2)); r2.setAttribute("opacity", t > LAND + .035 && t < LAND + .205 ? (.7 * (1 - s2)).toFixed(2) : 0);
+      var tt = (t - LAND) * LOOP / 1000;
+      for (var i = 0; i < 5; i++) {
+        var on = t > LAND && tt < .8, d = ds[i];
+        d.setAttribute("cx", f1(LX + DV[i][0] * tt)); d.setAttribute("cy", f1(LY - 2 + DV[i][1] * tt + 150 * tt * tt));
+        d.setAttribute("opacity", on ? (1 - tt / .8).toFixed(2) : 0);
+      }
+      var fu = (t - .50) / .13;
+      if (fu > 0 && fu < 1) {
+        var fx2 = 168 + 34 * fu, fy2 = 158 - 30 * 4 * fu * (1 - fu), ang2 = Math.atan2(-30 * 4 * (1 - 2 * fu), 34) * 180 / Math.PI;
+        jf.setAttribute("transform", "translate(" + f1(fx2) + " " + f1(fy2) + ") rotate(" + f1(ang2) + ")"); jf.setAttribute("opacity", 1);
+      } else jf.setAttribute("opacity", 0);
+      var ju = cl((t - .63) / .14);
+      jr.setAttribute("rx", f1(1 + 15 * ju)); jr.setAttribute("ry", f1(.5 + 4 * ju)); jr.setAttribute("opacity", t > .63 && t < .77 ? (.8 * (1 - ju)).toFixed(2) : 0);
+      var w0 = Math.sin(s * 14) * .8 + .2, w1 = Math.sin(s * 12 + 1) * .8 + .2, x0 = ((t * 400 + 40) % 380) - 30, x1 = ((t * 330 + 190) % 380) - 30;
+      b0.setAttribute("d", "M" + f1(x0 - 5) + " " + f1(36 - w0 * 3) + " Q" + f1(x0 - 2.5) + " " + f1(36 - 5 * w0 - 2) + " " + f1(x0) + " 36 Q" + f1(x0 + 2.5) + " " + f1(36 - 5 * w0 - 2) + " " + f1(x0 + 5) + " " + f1(36 - w0 * 3));
+      b1.setAttribute("d", "M" + f1(x1 - 4) + " " + f1(54 - w1 * 2.5) + " Q" + f1(x1 - 2) + " " + f1(54 - 4 * w1 - 1.5) + " " + f1(x1) + " 54 Q" + f1(x1 + 2) + " " + f1(54 - 4 * w1 - 1.5) + " " + f1(x1 + 4) + " " + f1(54 - w1 * 2.5));
       if (!still) requestAnimationFrame(frame);
     }
     requestAnimationFrame(frame);
