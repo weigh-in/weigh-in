@@ -458,10 +458,9 @@ nav.tabs{border-top:1px solid var(--line);box-shadow:0 -6px 20px rgba(16,48,42,.
 .share-btn{background:linear-gradient(135deg,var(--lake),#2f8a72);color:#fff;box-shadow:var(--shadow);font-size:17px}
 @media (prefers-reduced-motion:reduce){.sch-result{animation:none}.sch-course,.sch-opt{transition:none}}
 
-/* Play button: a glossy glass sphere */
-.vid-ring{position:relative;width:88px;height:88px;background:radial-gradient(circle at 34% 28%,rgba(255,255,255,.9) 0,rgba(255,255,255,.35) 14%,rgba(70,170,215,.55) 42%,rgba(14,70,105,.85) 78%,rgba(6,30,48,.95) 100%);border:1.5px solid rgba(255,255,255,.55);box-shadow:inset -7px -9px 16px rgba(0,20,40,.55),inset 5px 6px 12px rgba(255,255,255,.4),0 12px 24px rgba(0,0,0,.5),0 2px 4px rgba(0,0,0,.4);backdrop-filter:none;-webkit-backdrop-filter:none}
-.vid-ring::after{content:"";position:absolute;top:6%;left:15%;width:48%;height:30%;border-radius:50%;background:radial-gradient(ellipse at 50% 35%,rgba(255,255,255,.9),rgba(255,255,255,0) 72%);transform:rotate(-26deg);pointer-events:none}
-.vid-ring svg{position:relative;z-index:1;filter:drop-shadow(0 2px 3px rgba(0,30,50,.6))}
-.vid-ring.spin{animation:none;padding:0;border-top-color:rgba(255,255,255,.55)}
-.vid-ring.spin::before{content:"";position:absolute;inset:-6px;border-radius:50%;border:3px solid rgba(255,255,255,.95);border-top-color:transparent;animation:vidspin .8s linear infinite}
+/* Play button: just the triangle, no circle */
+.vid-ring,.vid-ring.spin{background:none;border:0;box-shadow:none;backdrop-filter:none;-webkit-backdrop-filter:none;padding:0;width:auto;height:auto;border-radius:0}
+.vid-ring::after,.vid-ring::before{display:none}
+.vid-ring svg{width:68px;height:68px;margin:0;filter:drop-shadow(0 3px 8px rgba(0,0,0,.6))}
+.vid-ring.spin{width:46px;height:46px;margin:11px 0;border:4px solid rgba(255,255,255,.95);border-top-color:transparent;border-radius:50%;filter:drop-shadow(0 2px 6px rgba(0,0,0,.5));animation:vidspin .8s linear infinite}
 .vid-play:active .vid-ring{transform:scale(.92)}
