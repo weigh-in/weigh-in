@@ -94,7 +94,7 @@ const ICON = {
 
 /* ======================= Firebase ======================= */
 if (!firebaseConfig.apiKey || firebaseConfig.apiKey.includes("PASTE")) {
-  $app.replaceChildren(el("div", { class: "auth" }, el("div", { class: "box" },
+  $app.replaceChildren(el("div", { class: "auth compact" }, el("div", { class: "box" },
     el("h1", null, "Almost there"),
     el("p", null, "Weigh-In isn't connected to your Firebase project yet. Open firebase-config.js and paste in your config (step 4 in the README)."))));
   throw new Error("Firebase config missing");
@@ -276,7 +276,7 @@ function renderAuth(mode = "signin") {
       }
     } catch (err) { msg.textContent = errText(err); }
   });
-  $app.replaceChildren(el("div", { class: "auth" }, el("div", { class: "box" },
+  $app.replaceChildren(el("div", { class: "auth compact" }, el("div", { class: "box" },
     el("h1", null, "Weigh-In"),
     el("p", null, "Post your catches, run tournaments with friends, and see who's got the biggest fish."),
     f,
@@ -287,7 +287,7 @@ function renderAuth(mode = "signin") {
       catch (err) { if (!/popup-closed|cancelled-popup/.test(err?.code || "")) msg.textContent = "Google sign-in didn't work here. Use your email and password instead."; }
     } }, "Continue with Google"),
     el("button", { class: "link", type: "button", style: "align-self:flex-start", onclick: openPrivacy }, "How Weigh-In uses your info"),
-    isInstalled() ? null : el("button", { class: "link", type: "button", style: "align-self:flex-start", id: "a-install", onclick: installApp }, "Install the app"),
+    isInstalled() ? null : el("button", { class: "btn wide share-btn", type: "button", id: "a-install", onclick: installApp }, "📲 Download the app"),
     el("div", { class: "row spread" },
       el("button", { class: "link", type: "button", onclick: () => renderAuth(isNew ? "signin" : "signup") },
         isNew ? "I already have an account" : "Create an account"),
@@ -313,7 +313,7 @@ function renderPickName(note) {
     const ok = await claimName(name);
     if (ok) startApp(); else msg.textContent = `"${name}" is taken. Try another.`;
   });
-  $app.replaceChildren(el("div", { class: "auth" }, el("div", { class: "box" },
+  $app.replaceChildren(el("div", { class: "auth compact" }, el("div", { class: "box" },
     el("h1", null, "Pick your name"), f,
     el("button", { class: "link", type: "button", onclick: () => signOut(auth) }, "Sign out"))));
 }
@@ -358,7 +358,7 @@ onAuthStateChanged(auth, async (user) => {
     }
     renderPickName();
   } catch (e) {
-    $app.replaceChildren(el("div", { class: "auth" }, el("div", { class: "box" },
+    $app.replaceChildren(el("div", { class: "auth compact" }, el("div", { class: "box" },
       el("h1", null, "Can't connect"), el("p", null, "Check that Firestore is turned on and the security rules are published (README steps 2 and 3)."),
       el("button", { class: "btn", type: "button", onclick: () => location.reload() }, "Try again"))));
   }
@@ -454,7 +454,7 @@ function startApp() {
 }
 function showBanned() {
   S.banned = true; stopAll();
-  $app.replaceChildren(el("div", { class: "auth" }, el("div", { class: "box" },
+  $app.replaceChildren(el("div", { class: "auth compact" }, el("div", { class: "box" },
     el("h1", null, "Account removed"),
     el("p", null, "The person who runs Weigh-In removed this account for breaking the rules (fishing photos only, no slurs or hate, be kind). You can't post, comment, or chat anymore."),
     el("button", { class: "btn", type: "button", onclick: () => signOut(auth) }, "Sign out"))));
@@ -1154,7 +1154,7 @@ function feedPosts() {
 /* What's new. Newest first. Add a new entry on top each time the app changes. */
 /* Bump APP_VERSION every time you change the app, and add a matching entry on top of UPDATES (with v: the same number).
    Phones check app.js every few minutes and offer the new version on their own. */
-const APP_VERSION = 71;
+const APP_VERSION = 72;
 // The number people see. APP_VERSION stays a plain counter so updates are detected. Big changes bump the first number (2.0), smaller ones the second (1.1, 1.2).
 const REL_NAMES = { 59: "1.0", 60: "1.0", 61: "1.1", 62: "1.2", 63: "1.2", 64: "1.2", 65: "1.2", 66: "1.2", 67: "1.2" };
 const relName = (v) => REL_NAMES[v] || (v < 59 ? `0.${v}` : `1.${v - 59}`);
@@ -4292,7 +4292,7 @@ async function applyUpdate() {
     }
   } catch { /* reload anyway */ }
   rememberUpdate();
-  try { await Promise.all(["app.js", "./"].map((u) => fetch(u, { cache: "reload" }).catch(() => {}))); } catch { /* reload anyway */ }
+  try { await Promise.all(["index.html", "./"].map((u) => fetch(u, { cache: "reload" }).catch(() => {}))); } catch { /* reload anyway */ }
   location.reload();
 }
 setTimeout(checkUpdate, 4000);
