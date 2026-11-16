@@ -156,8 +156,12 @@
         var k = t - LAND, tug = Math.exp(-Math.pow((ph - .85) / .012, 2));
         bx = LX + Math.sin(k * 90) * .6; by = LY - 1.2 + Math.sin(k * 120) * 1.5 * Math.exp(-k * 9) + Math.sin(ph * 12.566) * .5 + tug * 3.4; sag = 13; rot = Math.sin(k * 80) * 6 * Math.exp(-k * 8);
       }
-      var mx = (p.tx + bx) / 2, my = (p.ty + by) / 2 + sag;
-      line.setAttribute("d", "M" + f1(p.tx) + " " + f1(p.ty) + " Q" + f1(mx) + " " + f1(my) + " " + f1(bx) + " " + f1(by));
+      // The bobber's top (where the line ties on) always points along the line back to the rod, and it stands upright once it floats.
+      var rT = Math.atan2(p.tx - bx, -(p.ty - by)) * 180 / Math.PI, wf = t < LAND ? 0 : sm(cl((t - LAND) / .05)), wob = t >= LAND ? rot : 0;
+      rot = rT * (1 - wf) + wob * wf;
+      var ax = bx + Math.sin(rot * Math.PI / 180) * 9.5, ay = by - Math.cos(rot * Math.PI / 180) * 9.5;
+      var mx = (p.tx + ax) / 2, my = (p.ty + ay) / 2 + sag;
+      line.setAttribute("d", "M" + f1(p.tx) + " " + f1(p.ty) + " Q" + f1(mx) + " " + f1(my) + " " + f1(ax) + " " + f1(ay));
       bob.setAttribute("transform", "translate(" + f1(bx) + " " + f1(by) + ") rotate(" + f1(rot) + ")");
       fish.setAttribute("opacity", 1);
       var s1 = cl((t - LAND) / .17), s2 = cl((t - LAND - .035) / .17);
