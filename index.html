@@ -43,13 +43,11 @@
 .boot-cast .boot-txt i{font-style:normal;animation:bsDot 1.2s infinite both}
 .boot-cast .boot-txt i:nth-child(2){animation-delay:.2s}.boot-cast .boot-txt i:nth-child(3){animation-delay:.4s}
 @keyframes bsDot{0%,20%{opacity:.15}50%{opacity:1}100%{opacity:.15}}
-.bs-rod{transform-box:view-box;transform-origin:92px 112px;transform:rotate(-60deg);animation:bsRod 3.6s infinite}
-@keyframes bsRod{0%,15%{transform:rotate(-60deg);animation-timing-function:ease-in-out}38%{transform:rotate(-130deg);animation-timing-function:cubic-bezier(.5,0,.4,1)}50%{transform:rotate(-25deg)}56%{transform:rotate(-12deg)}93%{transform:rotate(-12deg);animation-timing-function:ease-in-out}100%{transform:rotate(-60deg)}}
 .bs-waves{animation:bsWave 3s ease-in-out infinite alternate}
 @keyframes bsWave{from{transform:translateX(-5px)}to{transform:translateX(5px)}}
 .bs-cloud{animation:bsCloud 14s linear infinite alternate}.bs-cloud2{animation:bsCloud 19s linear infinite alternate-reverse}
 @keyframes bsCloud{from{transform:translateX(-10px)}to{transform:translateX(24px)}}
-@media (prefers-reduced-motion:reduce){.bs-rod,.bs-waves,.bs-cloud,.bs-cloud2,.boot-txt i{animation:none}.bs-rod{transform:rotate(-12deg)}}
+@media (prefers-reduced-motion:reduce){.bs-waves,.bs-cloud,.bs-cloud2,.boot-txt i{animation:none}}
 </style><svg class="boot-svg" viewBox="0 0 320 200" role="img" aria-label="An angler casting a bobber" xmlns="http://www.w3.org/2000/svg">
 <defs>
 <linearGradient id="bs-sky" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#8FC9E8"/><stop offset="1" stop-color="#E7F4EC"/></linearGradient>
@@ -76,18 +74,46 @@
 <path d="M82 100 L92 112" stroke="#E8742A" stroke-width="6" stroke-linecap="round"/>
 <circle cx="93" cy="113" r="3.4" fill="#F1C9A0"/>
 </g>
-<g class="bs-rod"><line x1="92" y1="112" x2="104" y2="112" stroke="#3A2A1C" stroke-width="5" stroke-linecap="round"/><line x1="100" y1="112" x2="156" y2="112" stroke="#8A5A34" stroke-width="2.4" stroke-linecap="round"/><circle cx="104" cy="116" r="3" fill="#C9D3DA" stroke="#5B6770" stroke-width="1"/></g>
-<g><animate attributeName="opacity" dur="3.6s" repeatCount="indefinite" keyTimes="0;.93;.97;.99;1" values="1;1;0;0;1"/>
-<path fill="none" stroke="#33414B" stroke-width="1" stroke-linecap="round" d="M124 57 Q123 74 123 74"><animate attributeName="d" dur="3.6s" repeatCount="indefinite" calcMode="spline" keyTimes="0;0.15;0.38;0.5;0.56;0.64;0.78;0.82;0.93;1" values="M124 57 Q123 74 123 74;M124 57 Q123 74 123 74;M51 63 Q51 80 52 80;M150 85 Q149 102 148 102;M154 92 Q162 104 170 70;M155 99 Q180 111 205 40;M155 99 Q202 160 250 148;M155 99 Q202 158 250 146;M155 99 Q202 158 250 146;M124 57 Q123 74 123 74" keySplines=".4 0 .6 1;.4 0 .6 1;.4 0 .6 1;.4 0 .6 1;.4 0 .6 1;.4 0 .6 1;.4 0 .6 1;0 0 1 1;.4 0 .6 1"/></path>
-<circle r="5.2" fill="#fff" stroke="#33414B" stroke-width="1" cx="123" cy="75.5"><animate attributeName="cx" dur="3.6s" repeatCount="indefinite" calcMode="spline" keyTimes="0;0.15;0.38;0.5;0.56;0.64;0.78;0.82;0.93;1" values="123;123;52;148;170;205;250;250;250;123" keySplines=".4 0 .6 1;.4 0 .6 1;.4 0 .6 1;0 0 1 1;0 0 1 1;0 0 1 1;.4 0 .6 1;0 0 1 1;.4 0 .6 1"/><animate attributeName="cy" dur="3.6s" repeatCount="indefinite" calcMode="spline" keyTimes="0;0.15;0.38;0.5;0.56;0.64;0.78;0.82;0.93;1" values="75.5;75.5;81.5;103.5;71.5;41.5;149.5;147.5;147.5;75.5" keySplines=".4 0 .6 1;.4 0 .6 1;.4 0 .6 1;.2 .5 .5 1;.2 .5 .5 1;.5 0 .8 .5;.4 0 .6 1;0 0 1 1;.4 0 .6 1"/></circle>
-<circle r="5.2" fill="#E04B3A" cx="123" cy="73" clip-path="none"><animate attributeName="cx" dur="3.6s" repeatCount="indefinite" calcMode="spline" keyTimes="0;0.15;0.38;0.5;0.56;0.64;0.78;0.82;0.93;1" values="123;123;52;148;170;205;250;250;250;123" keySplines=".4 0 .6 1;.4 0 .6 1;.4 0 .6 1;0 0 1 1;0 0 1 1;0 0 1 1;.4 0 .6 1;0 0 1 1;.4 0 .6 1"/><animate attributeName="cy" dur="3.6s" repeatCount="indefinite" calcMode="spline" keyTimes="0;0.15;0.38;0.5;0.56;0.64;0.78;0.82;0.93;1" values="72.5;72.5;78.5;100.5;68.5;38.5;146.5;144.5;144.5;72.5" keySplines=".4 0 .6 1;.4 0 .6 1;.4 0 .6 1;.2 .5 .5 1;.2 .5 .5 1;.5 0 .8 .5;.4 0 .6 1;0 0 1 1;.4 0 .6 1"/></circle>
-</g>
-<ellipse cx="250" cy="148" rx="0" ry="0" fill="none" stroke="#E9F6FB" stroke-width="1.6" opacity="0"><animate attributeName="rx" dur="3.6s" repeatCount="indefinite" keyTimes="0;.78;.9;1" values="0;2;20;20"/><animate attributeName="ry" dur="3.6s" repeatCount="indefinite" keyTimes="0;.78;.9;1" values="0;1;6;6"/><animate attributeName="opacity" dur="3.6s" repeatCount="indefinite" keyTimes="0;.78;.8;.92;1" values="0;0;.9;0;0"/></ellipse>
-<ellipse cx="250" cy="148" rx="0" ry="0" fill="none" stroke="#E9F6FB" stroke-width="1.2" opacity="0"><animate attributeName="rx" dur="3.6s" repeatCount="indefinite" keyTimes="0;.82;.95;1" values="0;2;30;30"/><animate attributeName="ry" dur="3.6s" repeatCount="indefinite" keyTimes="0;.82;.95;1" values="0;1;9;9"/><animate attributeName="opacity" dur="3.6s" repeatCount="indefinite" keyTimes="0;.82;.84;.97;1" values="0;0;.7;0;0"/></ellipse>
+<g class="bs-rod" id="bs-rod"><line x1="92" y1="112" x2="104" y2="112" stroke="#3A2A1C" stroke-width="5" stroke-linecap="round"/><line x1="100" y1="112" x2="156" y2="112" stroke="#8A5A34" stroke-width="2.4" stroke-linecap="round"/><circle cx="104" cy="116" r="3" fill="#C9D3DA" stroke="#5B6770" stroke-width="1"/></g>
+<g id="bs-fish"><path id="bs-line" fill="none" stroke="#33414B" stroke-width="1" stroke-linecap="round" d="M124 57 L124 74"/><circle id="bs-b1" r="5.2" fill="#fff" stroke="#33414B" stroke-width="1" cx="124" cy="76"/><circle id="bs-b2" r="5.2" fill="#E04B3A" cx="124" cy="73"/></g>
+<ellipse id="bs-r1" cx="250" cy="148" rx="0" ry="0" fill="none" stroke="#E9F6FB" stroke-width="1.6" opacity="0"/>
+<ellipse id="bs-r2" cx="250" cy="148" rx="0" ry="0" fill="none" stroke="#E9F6FB" stroke-width="1.2" opacity="0"/>
 </g>
 </svg><div class="boot-txt">Loading Weigh-In<i>.</i><i>.</i><i>.</i></div></div>
   <noscript><p style="padding:24px;color:#fff">Weigh-In needs JavaScript turned on to work.</p></noscript>
 </div>
+<script>
+  // Casting animation: one clock drives the rod, line and bobber so the line always stays attached.
+  (function () {
+    var rod = document.getElementById("bs-rod"); if (!rod) return;
+    var line = document.getElementById("bs-line"), b1 = document.getElementById("bs-b1"), b2 = document.getElementById("bs-b2"),
+        fish = document.getElementById("bs-fish"), r1 = document.getElementById("bs-r1"), r2 = document.getElementById("bs-r2");
+    var T = [0, .15, .38, .5, .56, .93, 1], A = [-60, -60, -130, -25, -12, -12, -60], LOOP = 3600;
+    var PX = 92, PY = 112, LEN = 64, LX = 250, LY = 148;
+    function sm(x) { return x * x * (3 - 2 * x); }
+    function angle(t) { for (var i = 0; i < T.length - 1; i++) if (t <= T[i + 1]) return A[i] + (A[i + 1] - A[i]) * sm((t - T[i]) / (T[i + 1] - T[i])); return A[A.length - 1]; }
+    function clamp(x) { return x < 0 ? 0 : x > 1 ? 1 : x; }
+    var still = window.matchMedia && matchMedia("(prefers-reduced-motion: reduce)").matches;
+    function frame(ms) {
+      if (!document.getElementById("bs-rod")) return;
+      var t = still ? .9 : (ms % LOOP) / LOOP, a = angle(t), rad = a * Math.PI / 180;
+      var tx = PX + LEN * Math.cos(rad), ty = PY + LEN * Math.sin(rad), bx, by, sag;
+      if (t < .5) { bx = tx + Math.sin(t * 14) * 1.5; by = ty + 17; sag = 0; }
+      else if (t < .78) { var u = (t - .5) / .28, e = u * u * (3 - 2 * u) * .4 + u * .6; bx = tx + (LX - tx) * e; by = ty + (LY - ty) * u - 80 * 4 * u * (1 - u); sag = 12 * u; }
+      else { bx = LX; by = LY + Math.sin((t - .78) * 30) * 1.2; sag = 12; }
+      var r = tx + (bx - tx) / 2, c = ty + (by - ty) / 2 + sag;
+      rod.setAttribute("transform", "rotate(" + a.toFixed(2) + " " + PX + " " + PY + ")");
+      line.setAttribute("d", "M" + tx.toFixed(1) + " " + ty.toFixed(1) + " Q" + r.toFixed(1) + " " + c.toFixed(1) + " " + bx.toFixed(1) + " " + by.toFixed(1));
+      b1.setAttribute("cx", bx); b1.setAttribute("cy", by + 1.5); b2.setAttribute("cx", bx); b2.setAttribute("cy", by - 1.5);
+      fish.setAttribute("opacity", t > .93 ? clamp(1 - (t - .93) / .04) : 1);
+      var s1 = clamp((t - .78) / .14), s2 = clamp((t - .82) / .14);
+      r1.setAttribute("rx", 2 + 18 * s1); r1.setAttribute("ry", 1 + 5 * s1); r1.setAttribute("opacity", t > .78 && t < .93 ? .9 * (1 - s1) : 0);
+      r2.setAttribute("rx", 2 + 28 * s2); r2.setAttribute("ry", 1 + 8 * s2); r2.setAttribute("opacity", t > .82 && t < .97 ? .7 * (1 - s2) : 0);
+      if (!still) requestAnimationFrame(frame);
+    }
+    requestAnimationFrame(frame);
+  })();
+</script>
 <script>
   // Only on the old GitHub address: tell people Weigh-In has a new home.
   (function () {
