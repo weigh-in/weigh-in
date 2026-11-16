@@ -266,6 +266,8 @@ function renderAuth(mode = "signin") {
     msg.textContent = "";
     try {
       if (isNew) {
+        const emailErr = emailProblem(email);
+        if (emailErr) { msg.textContent = emailErr; return; }
         const name = String(fd.get("name") || "").trim();
         if (!NAME_RE.test(name)) { msg.textContent = "Angler name must be 2 to 20 letters, numbers or _."; return; }
         if (badText(name)) { msg.textContent = "That name isn't allowed. Pick another one."; return; }
@@ -350,6 +352,20 @@ onAuthStateChanged(auth, async (user) => {
   if (needsVerify(user)) { renderVerify(user); return; }
   await authedEntry(user);
 });
+
+// Sign-up email check: it must look like a real address (name@gmail.com), not a typo of a big provider, and not a throwaway inbox.
+const EMAIL_TYPOS = { "gmial.com": "gmail.com", "gmal.com": "gmail.com", "gmail.co": "gmail.com", "gmail.con": "gmail.com", "gamil.com": "gmail.com", "gmai.com": "gmail.com", "gnail.com": "gmail.com", "gmail.cm": "gmail.com", "yaho.com": "yahoo.com", "yahooo.com": "yahoo.com", "yahoo.con": "yahoo.com", "hotmial.com": "hotmail.com", "hotmal.com": "hotmail.com", "hotmail.con": "hotmail.com", "outlok.com": "outlook.com", "outlook.con": "outlook.com", "iclould.com": "icloud.com", "icloud.con": "icloud.com" };
+const EMAIL_FAKE = /^(mailinator\.com|guerrillamail\.(com|net|org|biz)|10minutemail\.\w+|tempmail\.\w+|temp-mail\.org|yopmail\.\w+|trashmail\.\w+|throwawaymail\.com|sharklasers\.com|getnada\.com|maildrop\.cc|dispostable\.com|fakeinbox\.com|mailnesia\.com|example\.(com|org|net)|test\.(com|org)|fake\.com|asdf\.com)$/i;
+function emailProblem(email) {
+  const e = String(email || "").trim();
+  const help = "Use a real email address, like name@gmail.com.";
+  if (e.length > 254 || !/^[A-Za-z0-9._%+-]{1,64}@([A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?\.)+[A-Za-z]{2,24}$/.test(e)) return help;
+  const [local, dom] = [e.slice(0, e.lastIndexOf("@")), e.slice(e.lastIndexOf("@") + 1).toLowerCase()];
+  if (local.startsWith(".") || local.endsWith(".") || local.includes("..")) return help;
+  if (EMAIL_TYPOS[dom]) return `Did you mean ${local}@${EMAIL_TYPOS[dom]}?`;
+  if (EMAIL_FAKE.test(dom)) return "That kind of email can't be used. Use your real email address.";
+  return "";
+}
 
 // New email-and-password accounts must confirm their email before using the app (accounts made before this rule are not affected).
 const VERIFY_FROM = Date.parse("2026-11-16T22:00:00Z");
@@ -1194,7 +1210,7 @@ function feedPosts() {
 /* What's new. Newest first. Add a new entry on top each time the app changes. */
 /* Bump APP_VERSION every time you change the app, and add a matching entry on top of UPDATES (with v: the same number).
    Phones check app.js every few minutes and offer the new version on their own. */
-const APP_VERSION = 73;
+const APP_VERSION = 74;
 // The number people see. APP_VERSION stays a plain counter so updates are detected. Big changes bump the first number (2.0), smaller ones the second (1.1, 1.2).
 const REL_NAMES = { 59: "1.0", 60: "1.0", 61: "1.1", 62: "1.2", 63: "1.2", 64: "1.2", 65: "1.2", 66: "1.2", 67: "1.2" };
 const relName = (v) => REL_NAMES[v] || (v < 59 ? `0.${v}` : `1.${v - 59}`);
