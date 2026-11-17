@@ -1210,7 +1210,7 @@ function feedPosts() {
 /* What's new. Newest first. Add a new entry on top each time the app changes. */
 /* Bump APP_VERSION every time you change the app, and add a matching entry on top of UPDATES (with v: the same number).
    Phones check app.js every few minutes and offer the new version on their own. */
-const APP_VERSION = 75;
+const APP_VERSION = 76;
 // The number people see. APP_VERSION stays a plain counter so updates are detected. Big changes bump the first number (2.0), smaller ones the second (1.1, 1.2).
 const REL_NAMES = { 59: "1.0", 60: "1.0", 61: "1.1", 62: "1.2", 63: "1.2", 64: "1.2", 65: "1.2", 66: "1.2", 67: "1.2" };
 const relName = (v) => REL_NAMES[v] || (v < 59 ? `0.${v}` : `1.${v - 59}`);
@@ -4562,9 +4562,38 @@ async function installApp() {
   }
   openInstallHelp();
 }
+// iPhones can't show an install pop-up, so this walks through it with pictures and an arrow pointing at Safari's Share button.
+function openIosGuide(ua) {
+  const notSafari = /CriOS|FxiOS|EdgiOS|OPiOS|GSA\/|FBAN|FBAV|Instagram|Line\/|Snapchat|TikTok|Twitter/i.test(ua) || !/Safari/i.test(ua);
+  const close = () => bg.remove();
+  const ico = (inner, color) => { const t = el("span", { class: "ios-ico" }); t.innerHTML = `<svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="${color || "#0a84ff"}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${inner}</svg>`; return t; };
+  const step = (n, icon, title, sub) => el("div", { class: "ios-step" }, el("span", { class: "ios-n" }, String(n)), icon, el("div", { class: "ios-t" }, el("b", null, title), sub ? el("span", null, sub) : null));
+  const appIcon = el("img", { src: "bobber-192.png", alt: "", width: 34, height: 34, class: "ios-app" });
+  const arrow = el("div", { class: "ios-arrow", "aria-hidden": "true" }, el("span", null, "Tap the Share button below"),
+    (() => { const t = el("span", { class: "ios-arrow-ico" }); t.innerHTML = '<svg viewBox="0 0 24 24" width="30" height="30" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4v14"/><path d="M5 12l7 7 7-7"/></svg>'; return t; })());
+  const bg = el("div", { class: "sheet-bg", onclick: (e) => { if (e.target === bg) close(); } },
+    el("div", { class: "sheet ios-sheet", role: "dialog", "aria-label": "Install on iPhone", style: "height:auto;max-height:94%" },
+      el("div", { class: "sheet-h" }, el("h2", null, "Install on iPhone"), el("button", { class: "link", type: "button", onclick: close }, "Close")),
+      el("div", { class: "msgs about" },
+        notSafari ? el("div", { class: "ios-warn" },
+          el("b", null, "Open this in Safari first"),
+          el("span", null, "iPhone only lets Safari install apps. Copy the link, open Safari, and paste it in the address bar."),
+          el("button", { class: "btn wide", type: "button", id: "ios-copy", onclick: async () => {
+            try { await navigator.clipboard.writeText(location.origin + "/"); toast("Link copied. Paste it in Safari."); } catch { toast(location.origin + "/"); }
+          } }, "Copy the link")) : null,
+        el("div", { class: "ios-steps" },
+          step(1, ico('<path d="M12 15V3"/><path d="M8 7l4-4 4 4"/><path d="M6 11H5a1 1 0 0 0-1 1v8a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-8a1 1 0 0 0-1-1h-1"/>'), "Tap the Share button", "The square with an arrow pointing up. If you don't see it, tap the ••• button first."),
+          step(2, ico('<rect x="4" y="4" width="16" height="16" rx="3"/><path d="M12 8v8M8 12h8"/>', "#1c1c1e"), "Tap Add to Home Screen", "Scroll down the list if you don't see it."),
+          step(3, el("span", { class: "ios-ico ios-add" }, "Add"), "Tap Add", "In the top right corner."),
+          step(4, appIcon, "Open Weigh-In from your home screen", "It opens like a normal app, with no browser bar.")),
+        arrow)));
+  document.body.append(bg);
+}
+
 function openInstallHelp() {
   const ua = navigator.userAgent || "";
   const ios = /iphone|ipad|ipod/i.test(ua) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+  if (ios) { openIosGuide(ua); return; }
   const android = /android/i.test(ua);
   const steps = ios
     ? ["Open this page in Safari. It won't work from inside another app.", "Tap the Share button, the square with an arrow pointing up.", "Scroll down and tap Add to Home Screen.", "Tap Add. Weigh-In now has an icon like any other app."]
