@@ -1406,7 +1406,8 @@ const UPDATES = [
     "A distance scale sits under the zoom buttons, so you can tell how far a spot really is.",
     "Pins that are bunched together now group into a green bubble that matches the app.",
     "The round buttons under your name now say what they do: Updates, Settings, Years, Chat and Log.",
-    "Buttons and filter chips all over the app are bigger, so they are easier to hit with a thumb."] },
+    "Buttons and filter chips all over the app are bigger, so they are easier to hit with a thumb.",
+    "Your profile now fits on one screen. Fishing school, the game, Spot saver and Spot finder sit in a grid instead of a long list you had to scroll."] },
   { id: "2026-11-16a", v: 77, date: "Nov 16", title: "Works without signal", items: [
     "Out on the water with no bars? Weigh-In now opens anyway, and you can still read your feed, your log and your saved spots.",
     "Post a catch with no signal and it goes up by itself the moment you get service again. Nothing is lost.",
@@ -4698,16 +4699,19 @@ function viewMe(p) {
   const biggest = Math.max(0, ...mine.map((x) => x.lb || 0));
   const pins = S.spots.filter((s) => s.uid === S.user.uid).length;
   const open = (v) => () => { S.meView = v; renderTab(); };
-  const card = (id, icon, title, hint, fn, hot) => el("button", { class: "sch-me", type: "button", id, style: "min-height:84px;box-sizing:border-box", onclick: fn },
-    el("span", { class: "sch-badge" }, icon), el("span", { class: "stack", style: "gap:2px;text-align:left;flex:1;min-width:0" }, el("b", null, title), el("span", { class: "hint", style: "white-space:nowrap;overflow:hidden;text-overflow:ellipsis" }, hint)),
-    hot ? el("span", { class: "pill live" }, "New") : null, el("span", { class: "label" }, "›"));
+  p.classList.add("me-home");   // tighter spacing, so the whole profile fits without scrolling
+  const card = (id, icon, title, hint, fn, hot) => el("button", { class: "me-tile", type: "button", id, onclick: fn },
+    el("span", { class: "me-tile-i", "aria-hidden": "true" }, icon),
+    el("b", { class: "me-tile-t" }, title),
+    el("span", { class: "me-tile-h" }, hint),
+    hot ? el("span", { class: "pill live" }, "New") : null);
   const iconTile = (id, emoji, label, aria, dot, fn) => el("button", { class: "icon-tile", type: "button", id, "aria-label": aria || label, onclick: fn },
     el("span", { class: "icon-tile-e", "aria-hidden": "true" }, emoji), el("span", { class: "icon-tile-t" }, label),
     dot ? el("span", { class: "dot" }) : null);
   p.append(
     el("div", { class: "row", id: "me-head", style: "gap:14px;flex-wrap:nowrap;align-items:center" },
       el("button", { class: "profile-head", type: "button", id: "me-profile", "aria-label": "Open your profile", style: "background:none;border:0;padding:0;font:inherit;color:inherit;cursor:pointer;flex:none", onclick: open("profile") },
-        el("div", { class: "av-edit" }, avatar(S.user.uid, S.name, 96))),
+        el("div", { class: "av-edit" }, avatar(S.user.uid, S.name, 72))),
       el("div", { class: "stack", style: "gap:8px;min-width:0;flex:1" },
         el("button", { type: "button", id: "me-profile-name", "aria-label": "Open your profile", style: "background:none;border:0;padding:0;text-align:left;font:inherit;color:inherit;cursor:pointer;min-height:44px", onclick: open("profile") },
           el("h1", { style: "overflow-wrap:anywhere;margin:0" }, "@" + S.name)),
@@ -4730,11 +4734,12 @@ function viewMe(p) {
       : el("div", { class: "share-row" },
           el("button", { class: "btn share-btn", type: "button", id: "me-share", onclick: shareApp }, "📤 Share Weigh-In with friends"),
           el("button", { class: "btn share-btn", type: "button", id: "me-install", onclick: installApp }, "📲 Download the app")),
-    (() => { const r = schRank(sch().xp), nx = schNext(); return card("me-school", r.icon, "Fishing school", `${r.title} · ${sch().xp} XP${nx ? " · " + nx.text : ""}`, () => { S.sch = { v: "home" }; S.meView = "school"; renderTab(); }); })(),
-    card("me-game", "🎣", "Fishing game", `Level ${fcLevel()} · 🪙 ${fcCoins()} · cast, hook and reel`, openFishGame),
-        card("me-spots", "📍", "Spot saver", S.saved.length ? `${S.saved.length} spot${S.saved.length === 1 ? "" : "s"} saved. Only you see them` : "Save your secret spots", open("spots")),
-    card("me-water", "🔍", "Spot finder", "Find lakes and spots near you", open("water")),
-    wrapSeason() ? card("me-wrap", "🎞️", "Your year in fish", `${wrapYear()} recap · tap to watch`, () => openWrapped(wrapYear())) : null,
+    el("div", { class: "me-grid" },
+    (() => { const r = schRank(sch().xp); return card("me-school", r.icon, "Fishing school", `${r.title} · ${sch().xp} XP`, () => { S.sch = { v: "home" }; S.meView = "school"; renderTab(); }); })(),
+    card("me-game", "🎣", "Fishing game", `Level ${fcLevel()} · 🪙 ${fcCoins()}`, openFishGame),
+        card("me-spots", "📍", "Spot saver", S.saved.length ? `${S.saved.length} saved, private` : "Your secret spots", open("spots")),
+    card("me-water", "🔍", "Spot finder", "Lakes near you", open("water")),
+    wrapSeason() ? card("me-wrap", "🎞️", "Your year", `${wrapYear()} recap`, () => openWrapped(wrapYear())) : null),
   );
 }
 function yearsList() {
