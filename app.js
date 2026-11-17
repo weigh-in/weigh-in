@@ -288,8 +288,20 @@ function badText(text) {
 }
 const NO_SLURS = "That includes language that isn't allowed here. Please change it.";
 const PERMS = [["deletePosts", "Delete catches"], ["deleteComments", "Delete comments"], ["reports", "See and handle reports"], ["ban", "Ban and unban anglers"], ["warn", "Warn anglers"]];
-const MODERN_TILES = "https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}";
-const MODERN_OPTS = { maxZoom: 19, attribution: "Tiles &copy; Esri, HERE, Garmin, OpenStreetMap contributors" };
+/* How the map looks. Water is the US Geological Survey's topographic map: it names lakes, rivers,
+   creeks and coves and shows the shape of the land, which is what you want when you are sizing up a
+   spot. Satellite is real pictures from above. Streets is the plain road map for getting there.
+   USGS tiles stop at zoom 16, so maxNativeZoom lets the map keep zooming in on the last ones. */
+const BASEMAPS = [
+  ["water", "Water", "https://basemap.nationalmap.gov/arcgis/rest/services/USGSTopo/MapServer/tile/{z}/{y}/{x}",
+    { maxZoom: 19, maxNativeZoom: 16, attribution: "USGS The National Map" }],
+  ["sat", "Satellite", "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
+    { maxZoom: 19, maxNativeZoom: 18, attribution: "Tiles &copy; Esri" }],
+  ["street", "Streets", "https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}",
+    { maxZoom: 19, attribution: "Tiles &copy; Esri, HERE, Garmin, OpenStreetMap contributors" }],
+];
+const mapStyle = () => BASEMAPS.find((b) => b[0] === getPref("mapstyle", "water")) || BASEMAPS[0];
+const baseLayer = (L, b) => L.tileLayer(b[2], b[3]);
 const US_STATES = [["AL","Alabama"],["AK","Alaska"],["AZ","Arizona"],["AR","Arkansas"],["CA","California"],["CO","Colorado"],["CT","Connecticut"],["DE","Delaware"],["DC","District of Columbia"],["FL","Florida"],["GA","Georgia"],["HI","Hawaii"],["ID","Idaho"],["IL","Illinois"],["IN","Indiana"],["IA","Iowa"],["KS","Kansas"],["KY","Kentucky"],["LA","Louisiana"],["ME","Maine"],["MD","Maryland"],["MA","Massachusetts"],["MI","Michigan"],["MN","Minnesota"],["MS","Mississippi"],["MO","Missouri"],["MT","Montana"],["NE","Nebraska"],["NV","Nevada"],["NH","New Hampshire"],["NJ","New Jersey"],["NM","New Mexico"],["NY","New York"],["NC","North Carolina"],["ND","North Dakota"],["OH","Ohio"],["OK","Oklahoma"],["OR","Oregon"],["PA","Pennsylvania"],["RI","Rhode Island"],["SC","South Carolina"],["SD","South Dakota"],["TN","Tennessee"],["TX","Texas"],["UT","Utah"],["VT","Vermont"],["VA","Virginia"],["WA","Washington"],["WV","West Virginia"],["WI","Wisconsin"],["WY","Wyoming"]];
 const US_BOUNDS = [[17, -180], [72, -64]];   // the map stays on the USA (including Alaska and Hawaii)
 const placeLabel = (x) => [x.city, x.state].filter(Boolean).join(", ");
@@ -1381,13 +1393,18 @@ function feedPosts() {
 /* What's new. Newest first. Add a new entry on top each time the app changes. */
 /* Bump APP_VERSION every time you change the app, and add a matching entry on top of UPDATES (with v: the same number).
    Phones check app.js every few minutes and offer the new version on their own. */
-const APP_VERSION = 80;
+const APP_VERSION = 81;
 // The number people see. APP_VERSION stays a plain counter so updates are detected. Big changes bump the first number (2.0), smaller ones the second (1.1, 1.2).
 const REL_NAMES = { 59: "1.0", 60: "1.0", 61: "1.1", 62: "1.2", 63: "1.2", 64: "1.2", 65: "1.2", 66: "1.2", 67: "1.2",
-  68: "1.3", 69: "1.3", 70: "1.3", 71: "1.4", 72: "1.4", 73: "1.5", 74: "1.5", 75: "1.5", 76: "1.5", 77: "1.8", 78: "1.8", 79: "1.9", 80: "1.9" };
+  68: "1.3", 69: "1.3", 70: "1.3", 71: "1.4", 72: "1.4", 73: "1.5", 74: "1.5", 75: "1.5", 76: "1.5", 77: "1.8", 78: "1.8", 79: "1.9", 80: "1.9", 81: "2.0" };
 const relName = (v) => REL_NAMES[v] || (v < 59 ? `0.${v}` : `1.${v - 59}`);
 try { if ((parseInt(localStorage.getItem("weighin-appv"), 10) || 0) < APP_VERSION) localStorage.setItem("weighin-appv", String(APP_VERSION)); } catch { /* private mode */ }
 const UPDATES = [
+  { id: "2026-11-17a", v: 81, date: "Nov 17", title: "A map made for fishing", items: [
+    "The map now opens on a water map that names lakes, rivers, creeks and coves and shows the shape of the land, instead of a plain road map.",
+    "Three big buttons at the top right switch between Water, Satellite and Streets. The app remembers which one you like.",
+    "A distance scale sits under the zoom buttons, so you can tell how far a spot really is.",
+    "Pins that are bunched together now group into a green bubble that matches the app."] },
   { id: "2026-11-16a", v: 77, date: "Nov 16", title: "Works without signal", items: [
     "Out on the water with no bars? Weigh-In now opens anyway, and you can still read your feed, your log and your saved spots.",
     "Post a catch with no signal and it goes up by itself the moment you get service again. Nothing is lost.",
@@ -3547,7 +3564,7 @@ function openMapPicker(startQuery, startLoc, onDone) {
   loadLeaflet().then((L) => {
     let c = startLoc || (() => { try { return JSON.parse(getPref("lastloc", "null")); } catch { return null; } })();
     map = L.map(mapBox, { maxBounds: US_BOUNDS, maxBoundsViscosity: 0.9, minZoom: 3 }).setView(c ? [c.lat, c.lng] : [39.5, -98.35], c ? 13 : 4);
-    L.tileLayer(MODERN_TILES, MODERN_OPTS).addTo(map);
+    baseLayer(L, mapStyle()).addTo(map);
     map.on("click", (e) => setPick(e.latlng.lat, e.latlng.lng, ""));
     if (startLoc) setPick(startLoc.lat, startLoc.lng, "");
     setTimeout(() => map?.invalidateSize(), 80);
@@ -3580,6 +3597,12 @@ function renderMap() {
   const bar = el("div", { class: "map-filters" });
   const box = el("div", { class: "map", id: "map" });
   const note = el("div", { class: "map-note", id: "map-note" }, "Loading map…");
+  let styleId = mapStyle()[0], setMapStyle = null;
+  const styles = el("div", { class: "map-styles", role: "group", "aria-label": "What the map shows" });
+  const paintStyles = () => styles.replaceChildren(...BASEMAPS.map(([id, label]) =>
+    el("button", { type: "button", class: id === styleId ? "on" : "", "aria-pressed": String(id === styleId),
+      onclick: () => setMapStyle?.(id) }, label)));
+  paintStyles();
   const fab = el("button", { class: "map-fab", type: "button", id: "map-locate", "aria-label": "Show where I am", onclick: () => {
     wherePhone().then((o) => {
       const L = window.L; if (!L || !S.map) return;
@@ -3603,16 +3626,26 @@ function renderMap() {
   }
   S.paintMapBar = paintBar;
   paintBar();
-  $screen.replaceChildren(bar, box, fab, note);
+  // The switcher floats over the map itself, so it never sits on top of the filter bar.
+  $screen.replaceChildren(bar, el("div", { class: "map-wrap" }, box, styles), fab, note);
   const token = ++mapToken;
   loadLeaflet().then((L) => {
     if (S.tab !== "map" || token !== mapToken) return;
     S.map = L.map(box, { maxBounds: US_BOUNDS, maxBoundsViscosity: 0.9, minZoom: 3 }).setView([39.5, -98.35], 4);
-    const streets = L.tileLayer(MODERN_TILES, MODERN_OPTS);
-    const sat = L.tileLayer("https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}", { maxZoom: 19, attribution: "Tiles &copy; Esri" });
-    streets.addTo(S.map);
-    L.control.layers({ "Map": streets, "Satellite": sat }, null, { position: "topright" }).addTo(S.map);
-    S.markers = (L.markerClusterGroup ? L.markerClusterGroup({ maxClusterRadius: 40, showCoverageOnHover: false }) : L.layerGroup()).addTo(S.map);
+    let base = baseLayer(L, mapStyle()).addTo(S.map);
+    // Switching look: the old tiles stay until the new ones have arrived, so the map never flashes empty.
+    setMapStyle = (id) => {
+      const b = BASEMAPS.find((x) => x[0] === id) || BASEMAPS[0];
+      if (b[0] === styleId) return;
+      styleId = b[0]; setPref("mapstyle", b[0]); paintStyles();
+      const old = base;
+      base = baseLayer(L, b).addTo(S.map);
+      const drop = () => { if (old !== base) S.map.removeLayer(old); };
+      base.once("load", drop); setTimeout(drop, 2500);
+    };
+    L.control.scale({ imperial: true, metric: false, position: "topleft" }).addTo(S.map);
+    S.markers = (L.markerClusterGroup ? L.markerClusterGroup({ maxClusterRadius: 40, showCoverageOnHover: false,
+      iconCreateFunction: (c) => L.divIcon({ className: "bob-cluster", html: `<span>${c.getChildCount()}</span>`, iconSize: [38, 38], iconAnchor: [19, 19] }) }) : L.layerGroup()).addTo(S.map);
     drawSpots(true);
     const fs = S.focusSpot; S.focusSpot = null;           // came here from "see on the map" on a post
     const target = fs && S.spots.find((x) => x.id === fs);
