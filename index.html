@@ -8,7 +8,14 @@
 <meta name="theme-color" content="#1F5C4D">
 <meta property="og:title" content="Weigh-In">
 <meta property="og:description" content="Post catches, run fishing tournaments, check rivers and the bite forecast.">
-<meta property="og:image" content="https://weigh-in.github.io/weigh-in/bobber-512.png">
+<meta property="og:image" content="https://weighin-app.pages.dev/bobber-512.png">
+<meta property="og:url" content="https://weighin-app.pages.dev/">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="Weigh-In">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="Weigh-In">
+<meta name="twitter:description" content="Post catches, run fishing tournaments, check rivers and the bite forecast.">
+<meta name="twitter:image" content="https://weighin-app.pages.dev/bobber-512.png">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -247,6 +254,24 @@
   (function () {
     if (/\.github\.io$/.test(location.hostname)) return; // old address: only show the "we have moved" page
     var m = document.createElement("script"); m.type = "module"; m.src = "app.js?v=" + encodeURIComponent(window.__appv || "");
+    // If the code never arrives (no signal, a bad connection), say so instead of loading forever.
+    var died = false;
+    function stuck(why) {
+      if (died || window.__appReady) return;
+      died = true;
+      var off = !navigator.onLine;
+      document.getElementById("app").innerHTML =
+        '<div style="display:flex;flex-direction:column;gap:14px;align-items:center;justify-content:center;height:100%;padding:24px;text-align:center;color:#fff;font-family:Barlow,system-ui,sans-serif">'
+        + '<img src="bobber-192.png" alt="" width="72" height="72" style="border-radius:18px">'
+        + '<h1 style="margin:0;font-size:1.5rem">' + (off ? "You are offline" : "Weigh-In could not load") + '</h1>'
+        + '<p style="margin:0;font-size:1.05rem;line-height:1.5;max-width:320px;opacity:.9">'
+        + (off ? "Turn on wifi or data, then try again." : "Check your connection and try again. " + (why || "")) + '</p>'
+        + '<button type="button" onclick="location.reload()" style="background:#E8742A;color:#fff;border:0;font:inherit;font-weight:700;font-size:1.1rem;padding:14px 26px;border-radius:12px">Try again</button>'
+        + '</div>';
+    }
+    m.onerror = function () { stuck(""); };
+    window.addEventListener("online", function () { if (died) location.reload(); });
+    setTimeout(function () { stuck("It is taking too long."); }, 25000);
     document.body.appendChild(m);
   })();
 </script>
