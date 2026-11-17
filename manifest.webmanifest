@@ -2,14 +2,73 @@
   "name": "Weigh-In",
   "short_name": "Weigh-In",
   "description": "Post your catches, run fishing tournaments, and chat with friends.",
+  "id": "./",
   "start_url": "./",
+  "categories": [
+    "sports",
+    "social",
+    "lifestyle"
+  ],
+  "orientation": "portrait",
   "scope": "./",
   "display": "standalone",
   "background_color": "#0F2E26",
   "theme_color": "#1F5C4D",
   "icons": [
-    { "src": "bobber-192.png", "sizes": "192x192", "type": "image/png" },
-    { "src": "bobber-512.png", "sizes": "512x512", "type": "image/png" },
-    { "src": "bobber-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
-  ]
+    {
+      "src": "bobber-192.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "bobber-512.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    },
+    {
+      "src": "bobber-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Post a catch",
+      "short_name": "Post",
+      "url": "./?go=post",
+      "icons": [
+        {
+          "src": "bobber-192.png",
+          "sizes": "192x192"
+        }
+      ]
+    },
+    {
+      "name": "Bite forecast",
+      "short_name": "Bite",
+      "url": "./?go=bite",
+      "icons": [
+        {
+          "src": "bobber-192.png",
+          "sizes": "192x192"
+        }
+      ]
+    },
+    {
+      "name": "My profile",
+      "short_name": "Profile",
+      "url": "./?go=me",
+      "icons": [
+        {
+          "src": "bobber-192.png",
+          "sizes": "192x192"
+        }
+      ]
+    }
+  ],
+  "launch_handler": {
+    "client_mode": "navigate-existing"
+  },
+  "prefer_related_applications": false
 }
