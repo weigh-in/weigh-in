@@ -125,6 +125,17 @@ function avatar(uid, name, size = 32) {
   return n;
 }
 function loadImage(src) { return new Promise((res, rej) => { const i = new Image(); i.onload = () => res(i); i.onerror = rej; i.src = src; }); }
+// WebP makes a photo about half the size of a JPEG that looks the same. Nearly every phone
+// can make one; the few that can't quietly get a JPEG instead.
+let webpOk = null;
+function canWebp() {
+  if (webpOk === null) {
+    try { const c = document.createElement("canvas"); c.width = c.height = 1; webpOk = c.toDataURL("image/webp").startsWith("data:image/webp"); }
+    catch { webpOk = false; }
+  }
+  return webpOk;
+}
+function encodePic(canvas, q) { return canWebp() ? canvas.toDataURL("image/webp", q) : canvas.toDataURL("image/jpeg", q); }
 async function squarePhoto(file, size = 256) {
   const url = URL.createObjectURL(file);
   try {
@@ -132,7 +143,7 @@ async function squarePhoto(file, size = 256) {
     const side = Math.min(img.width, img.height);
     const c = document.createElement("canvas"); c.width = c.height = size;
     c.getContext("2d").drawImage(img, (img.width - side) / 2, (img.height - side) / 2, side, side, 0, 0, size, size);
-    return c.toDataURL("image/jpeg", 0.82);
+    return encodePic(c, 0.82);
   } finally { URL.revokeObjectURL(url); }
 }
 async function thumbFrom(dataUrl, max = 160) {
@@ -141,7 +152,7 @@ async function thumbFrom(dataUrl, max = 160) {
     const sc = Math.min(1, max / Math.max(i.width, i.height));
     const c = document.createElement("canvas"); c.width = Math.round(i.width * sc); c.height = Math.round(i.height * sc);
     c.getContext("2d").drawImage(i, 0, 0, c.width, c.height);
-    return c.toDataURL("image/jpeg", 0.6);
+    return encodePic(c, 0.6);
   } catch { return ""; }
 }
 /* ---------- color themes ---------- */
@@ -1334,10 +1345,10 @@ function feedPosts() {
 /* What's new. Newest first. Add a new entry on top each time the app changes. */
 /* Bump APP_VERSION every time you change the app, and add a matching entry on top of UPDATES (with v: the same number).
    Phones check app.js every few minutes and offer the new version on their own. */
-const APP_VERSION = 78;
+const APP_VERSION = 79;
 // The number people see. APP_VERSION stays a plain counter so updates are detected. Big changes bump the first number (2.0), smaller ones the second (1.1, 1.2).
 const REL_NAMES = { 59: "1.0", 60: "1.0", 61: "1.1", 62: "1.2", 63: "1.2", 64: "1.2", 65: "1.2", 66: "1.2", 67: "1.2",
-  68: "1.3", 69: "1.3", 70: "1.3", 71: "1.4", 72: "1.4", 73: "1.5", 74: "1.5", 75: "1.5", 76: "1.5", 77: "1.8", 78: "1.8" };
+  68: "1.3", 69: "1.3", 70: "1.3", 71: "1.4", 72: "1.4", 73: "1.5", 74: "1.5", 75: "1.5", 76: "1.5", 77: "1.8", 78: "1.8", 79: "1.9" };
 const relName = (v) => REL_NAMES[v] || (v < 59 ? `0.${v}` : `1.${v - 59}`);
 try { if ((parseInt(localStorage.getItem("weighin-appv"), 10) || 0) < APP_VERSION) localStorage.setItem("weighin-appv", String(APP_VERSION)); } catch { /* private mode */ }
 const UPDATES = [
@@ -1353,6 +1364,7 @@ const UPDATES = [
     "Long-press the Weigh-In icon on your home screen to jump straight to Post a catch, the bite forecast or your profile.",
     "Hearts load a lot faster. Every phone used to download every like in the whole app just to show the numbers; now each catch carries its own count.",
     "The feed no longer stops at the 40 newest catches. Swipe to the bottom and tap Load older catches to keep going back through everything.",
+    "Catch photos are now about a third of the size with no difference you can see, so the feed loads faster, uses less of your data, and the app can hold far more catches.",
     "A Download the app button in your profile, with step-by-step pictures for iPhone."] },
   { id: "2026-11-15f", v: 67, date: "Nov 15", title: "Log icon", items: [
     "Fishing log is now a small 📓 button by your other icons under your name."] },
@@ -1769,7 +1781,7 @@ const vidMime = () => { for (const m of ["video/mp4;codecs=avc1", "video/webm;co
 const vidTime = (s) => `${Math.floor(s / 60)}:${String(Math.round(s % 60)).padStart(2, "0")}`;
 function vidPoster(v) {
   try { const w = v.videoWidth || 640, h = v.videoHeight || 480, k = Math.min(1, 720 / Math.max(w, h)); const c = document.createElement("canvas"); c.width = Math.round(w * k); c.height = Math.round(h * k);
-    c.getContext("2d").drawImage(v, 0, 0, c.width, c.height); return c.toDataURL("image/jpeg", 0.7); } catch { return ""; }
+    c.getContext("2d").drawImage(v, 0, 0, c.width, c.height); return encodePic(c, 0.7); } catch { return ""; }
 }
 function vidRecord(stream, onTick) {   // records a stream at a low bitrate; resolves with { blob, mime, dur }
   return new Promise((resolve, reject) => {
@@ -2350,15 +2362,17 @@ async function shrinkPhoto(file) {
   const url = URL.createObjectURL(file);
   try {
     const img = await new Promise((res, rej) => { const i = new Image(); i.onload = () => res(i); i.onerror = rej; i.src = url; });
-    let max = 1000, q = 0.75, out = "";
+    // 820 across is as much as a phone screen can actually show, and in WebP that is roughly
+    // a third of what the app used to store and send for every catch.
+    let max = 820, q = canWebp() ? 0.72 : 0.72, out = "";
     for (let tries = 0; tries < 6; tries++) {
       const scale = Math.min(1, max / Math.max(img.width, img.height));
       const c = document.createElement("canvas");
       c.width = Math.round(img.width * scale); c.height = Math.round(img.height * scale);
       c.getContext("2d").drawImage(img, 0, 0, c.width, c.height);
-      out = c.toDataURL("image/jpeg", q);
-      if (out.length < 600000) return out;
-      max = Math.round(max * 0.8); q = Math.max(0.5, q - 0.08);
+      out = encodePic(c, q);
+      if (out.length < 300000) return out;
+      max = Math.round(max * 0.82); q = Math.max(0.5, q - 0.07);
     }
     return out.length < 880000 ? out : "";
   } finally { URL.revokeObjectURL(url); }
