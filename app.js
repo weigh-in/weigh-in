@@ -1407,6 +1407,7 @@ const UPDATES = [
     "Pins that are bunched together now group into a green bubble that matches the app.",
     "The round buttons under your name now say what they do: Updates, Settings, Years, Chat and Log.",
     "Buttons and filter chips all over the app are bigger, so they are easier to hit with a thumb.",
+    "Private tournaments with an entry fee now work as pay to enter: people pay the organizer first, then tap I paid, ask to join. The organizer checks, taps Paid, let in, and they are ticked off as paid.",
     "Your profile now fits on one screen and fills it. Fishing school, the game, Spot saver and Spot finder are big tiles in a grid instead of a long list you had to scroll."] },
   { id: "2026-11-16a", v: 77, date: "Nov 16", title: "Works without signal", items: [
     "Out on the water with no bars? Weigh-In now opens anyway, and you can still read your feed, your log and your saved spots.",
@@ -3027,20 +3028,28 @@ function tourRequestsPanel() {
 function tourJoinPanel() {
   const pend = S.joinIn.filter((r) => r.status === "pending");
   if (!pend.length) return null;
-  return el("section", { class: "stack tour-money", id: "tour-joins" }, el("h2", null, `Join requests (${pend.length})`), ...pend.map((r) =>
-    el("div", { class: "trade-offer", "data-join": r.id },
+  // Lets someone in. paidToo also ticks them off as paid (only for tournaments with an entry fee).
+  const letIn = async (r, paidToo) => {
+    const t = S.tournaments.find((x) => x.id === r.tid);
+    try {
+      if (t && !(t.members || []).includes(r.uid)) await updateDoc(doc(db, "tournaments", r.tid), { members: arrayUnion(r.uid) });
+      if (t && paidToo) { const had = t.paid || [t.createdBy]; if (!had.includes(r.uid)) await updateDoc(doc(db, "tournaments", r.tid), { paid: [...had, r.uid] }); }
+      await updateDoc(doc(db, "tourJoins", r.id), { status: "approved" });
+      toast(`@${r.name} is in${paidToo ? " and marked as paid" : ""}.`);
+    } catch (err) { toast(errText(err)); }
+  };
+  return el("section", { class: "stack tour-money", id: "tour-joins" }, el("h2", null, `Join requests (${pend.length})`), ...pend.map((r) => {
+    const t = S.tournaments.find((x) => x.id === r.tid), fee = +t?.fee || 0;
+    return el("div", { class: "trade-offer", "data-join": r.id },
       el("b", null, "@" + r.name), el("span", { class: "hint" }, "wants to join " + (r.tname || "your tournament")),
+      fee ? el("span", { class: "hint", style: "font-weight:700" }, `${fmtFee(fee)} entry \u00b7 ${r.saysPaid ? "says they paid. Check your " + (t.payHow || "payments") + " first." : "hasn't said they paid"}`) : null,
       el("div", { class: "row" },
-        el("button", { class: "btn small", type: "button", "data-act": "join-yes", onclick: async () => {
-          const t = S.tournaments.find((x) => x.id === r.tid);
-          try {
-            if (t && !(t.members || []).includes(r.uid)) await updateDoc(doc(db, "tournaments", r.tid), { members: arrayUnion(r.uid) });
-            await updateDoc(doc(db, "tourJoins", r.id), { status: "approved" }); toast(`@${r.name} is in.`);
-          } catch (err) { toast(errText(err)); }
-        } }, "Approve"),
+        el("button", { class: "btn small", type: "button", "data-act": "join-yes", onclick: () => letIn(r, !!fee) }, fee ? "Paid, let in" : "Approve"),
+        fee ? el("button", { class: "btn ghost small", type: "button", "data-act": "join-free", onclick: () => letIn(r, false) }, "Let in unpaid") : null,
         el("button", { class: "btn ghost small", type: "button", "data-act": "join-no", onclick: async () => {
           try { await updateDoc(doc(db, "tourJoins", r.id), { status: "declined" }); toast("Declined."); } catch (err) { toast(errText(err)); }
-        } }, "Decline")))));
+        } }, "Decline")));
+  }));
 }
 async function approveTour(r) {
   const sp = { ...r.spec }; if (!sp.startAt) { toast("That request is missing its dates."); return; }
@@ -3185,7 +3194,7 @@ function viewCreateTour(p) {
   });
   p.append(el("button", { class: "link", type: "button", style: "align-self:flex-start", onclick: () => { S.creatingTour = false; renderTab(); } }, "‹ Back"),
     el("h1", null, priv ? "New private tournament" : canPubTour() ? "New tournament" : "Request a tournament"),
-    priv ? el("p", { class: "muted", style: "margin:0" }, "Invite only. Everyone can see it in the list, but people have to ask to join and you say yes or no. You run it.") : canPubTour() ? null : el("p", { class: "muted", style: "margin:0" }, "Public tournaments are set up by the owner. Fill this in and send it. If the owner says yes, it goes live and you run it."), f);
+    priv ? el("p", { class: "muted", style: "margin:0" }, "Invite only. Everyone can see it in the list, but people have to ask to join and you say yes or no. Turn on an entry fee and people pay you first, then ask to join. You check you got it and let them in. You run it.") : canPubTour() ? null : el("p", { class: "muted", style: "margin:0" }, "Public tournaments are set up by the owner. Fill this in and send it. If the owner says yes, it goes live and you run it."), f);
 }
 let phaseFilter = null;
 function openTour(id) {
@@ -3244,13 +3253,21 @@ function viewTour(p) {
     const ask = async () => {
       try {
         if (jr) await deleteDoc(doc(db, "tourJoins", jid));
-        await setDoc(doc(db, "tourJoins", jid), { tid: t.id, tname: t.name, uid: S.user.uid, name: S.name, org: t.createdBy, status: "pending", createdAt: serverTimestamp() });
+        await setDoc(doc(db, "tourJoins", jid), { tid: t.id, tname: t.name, uid: S.user.uid, name: S.name, org: t.createdBy, status: "pending", ...((+t.fee || 0) > 0 ? { saysPaid: true } : {}), createdAt: serverTimestamp() });
         toast("Request sent. The organizer will take a look.");
       } catch (err) { toast(errText(err)); }
     };
-    p.append(el("section", { class: "stack tour-money", id: "tour-locked" }, el("h2", null, "This one is invite only"),
-      el("p", { class: "muted", style: "margin:0" }, `Ask @${t.createdByName || "the organizer"} if you can join. They'll say yes or no.`),
-      !jr ? el("button", { class: "btn wide", type: "button", id: "t-ask", onclick: ask }, "Ask to join")
+    const fee = +t.fee || 0, orgName = t.createdByName || "the organizer";
+    const payBox = el("div", { id: "tour-cash" });
+    if (fee) getUser(t.createdBy).then((u) => { const tag = cashTag(u?.cash); if (tag) payBox.replaceChildren(cashButton(tag, `\u{1F4B5} Pay ${fmtFee(fee)} on Cash App (${tag})`, fee)); });
+    p.append(el("section", { class: "stack tour-money", id: "tour-locked" }, el("h2", null, fee ? `Invite only \u00b7 ${fmtFee(fee)} to enter` : "This one is invite only"),
+      fee
+        ? el("div", { class: "stack", style: "gap:8px" },
+            el("p", { style: "margin:0" }, `To get in: pay @${orgName}${t.payHow ? " (" + t.payHow + ")" : ""}, then tap the button below. They check that you paid and let you in.`),
+            payBox,
+            el("p", { class: "hint", style: "margin:0" }, "Weigh-In doesn't handle money. You pay the organizer yourself."))
+        : el("p", { class: "muted", style: "margin:0" }, `Ask @${orgName} if you can join. They'll say yes or no.`),
+      !jr ? el("button", { class: "btn wide", type: "button", id: "t-ask", onclick: ask }, fee ? "I paid, ask to join" : "Ask to join")
         : jr.status === "pending" ? el("p", { class: "pb-ok", style: "margin:0;font-weight:700" }, "⏳ Waiting for the organizer.")
         : jr.status === "declined" ? el("div", { class: "stack" }, el("p", { class: "hint", style: "margin:0" }, "They said not this time."), el("button", { class: "btn ghost small", type: "button", style: "align-self:flex-start", onclick: ask }, "Ask again"))
         : el("p", { class: "hint", style: "margin:0" }, "Approved. One moment…")));
