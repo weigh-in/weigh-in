@@ -42,7 +42,7 @@ h1{font-size:1.7rem} h2{font-size:1.15rem}
 .btn.ghost{background:transparent;color:var(--lake);border:2px solid var(--lake)}
 .btn.small{padding:6px 14px;min-height:44px;font-size:.9rem}
 /* The buttons under your name: an icon with its name under it, so nobody has to guess. */
-.icon-row{display:flex;gap:8px;width:100%}
+.icon-row{display:grid;grid-template-columns:repeat(auto-fit,minmax(46px,1fr));gap:6px;width:100%}
 .icon-tile{position:relative;flex:1;min-width:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;min-height:58px;padding:6px 2px;background:var(--surface);border:2px solid var(--line);border-radius:14px;color:var(--ink);font:inherit;cursor:pointer}
 .icon-tile-e{font-size:1.15rem;line-height:1}
 .icon-tile-t{font-size:.66rem;font-weight:700;letter-spacing:.02em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%}
@@ -541,3 +541,7 @@ nav.tabs{border-top:1px solid var(--line);box-shadow:0 -6px 20px rgba(16,48,42,.
 .feed-end .stack{gap:12px;align-items:center;max-width:300px;padding:24px}
 .feed-end h2{margin:0}
 .feed-end p{margin:0;opacity:.8;line-height:1.4}
+
+.trip-place{display:flex;flex-direction:column;gap:6px;padding:12px 14px;border:1px solid var(--line);border-radius:14px;background:var(--surface)}
+.trip-cost{padding:14px;border:2px solid var(--line);border-radius:14px;background:var(--water)}
+.trip-total{margin:0;font-weight:800;font-size:1.1rem;line-height:1.35}
