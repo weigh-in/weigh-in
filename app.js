@@ -1393,13 +1393,17 @@ function feedPosts() {
 /* What's new. Newest first. Add a new entry on top each time the app changes. */
 /* Bump APP_VERSION every time you change the app, and add a matching entry on top of UPDATES (with v: the same number).
    Phones check app.js every few minutes and offer the new version on their own. */
-const APP_VERSION = 82;
+const APP_VERSION = 83;
 // The number people see. APP_VERSION stays a plain counter so updates are detected. Big changes bump the first number (2.0), smaller ones the second (1.1, 1.2).
 const REL_NAMES = { 59: "1.0", 60: "1.0", 61: "1.1", 62: "1.2", 63: "1.2", 64: "1.2", 65: "1.2", 66: "1.2", 67: "1.2",
-  68: "1.3", 69: "1.3", 70: "1.3", 71: "1.4", 72: "1.4", 73: "1.5", 74: "1.5", 75: "1.5", 76: "1.5", 77: "1.8", 78: "1.8", 79: "1.9", 80: "1.9", 81: "2.0", 82: "2.0" };
+  68: "1.3", 69: "1.3", 70: "1.3", 71: "1.4", 72: "1.4", 73: "1.5", 74: "1.5", 75: "1.5", 76: "1.5", 77: "1.8", 78: "1.8", 79: "1.9", 80: "1.9", 81: "2.0", 82: "2.0", 83: "1.19" };
 const relName = (v) => REL_NAMES[v] || (v < 59 ? `0.${v}` : `1.${v - 59}`);
 try { if ((parseInt(localStorage.getItem("weighin-appv"), 10) || 0) < APP_VERSION) localStorage.setItem("weighin-appv", String(APP_VERSION)); } catch { /* private mode */ }
 const UPDATES = [
+  { id: "2026-11-17b", v: 83, date: "Nov 17", title: "Trip planner", items: [
+    "New Trip button under your name. Pick where you're going and how many people, and it finds places to eat, places to stay and tackle shops nearby, each with distance, phone and directions.",
+    "It also shows what lures to bring for that place, using the same Advisor as the Bite tab and the forecast there.",
+    "It works out how many rooms you need and splits the cost: type a room price and food money and it shows the total and what each person pays."] },
   { id: "2026-11-17a", v: 82, date: "Nov 17", title: "A map made for fishing", items: [
     "The map now opens on a water map that names lakes, rivers, creeks and coves and shows the shape of the land, instead of a plain road map.",
     "Three big buttons at the top right switch between Water, Satellite and Streets. The app remembers which one you like.",
@@ -4708,6 +4712,7 @@ function viewMe(p) {
   if (S.meView === "spots") { p.append(backBtn("‹ Profile")); return viewSpots(p); }
   if (S.meView === "friends") { p.append(backBtn("‹ Profile")); return viewFriends(p); }
   if (S.meView === "water") { p.append(backBtn("‹ Profile")); return viewWater(p); }
+  if (S.meView === "trip") { p.append(backBtn("‹ Profile")); return viewTrip(p); }
   if (S.meView === "school") return viewSchool(p);
   if (S.meView === "settings") return viewSettings(p);
   if (S.meView === "owner" && isStaff()) return viewOwner(p);
@@ -4740,6 +4745,7 @@ function viewMe(p) {
       yearsList().ys.length ? iconTile("me-yearsbtn", "\u{1F39E}\uFE0F", "Years", "Your years", false, openYears) : null,
       iconTile("me-friends", "\u{1F4AC}", "Chat", S.reqIn.length + S.unread.size ? `Friends and chat, ${S.reqIn.length + S.unread.size} new` : "Friends and chat", !!(S.reqIn.length + S.unread.size), open("friends")),
       iconTile("me-log", "\u{1F4D3}", "Log", "Fishing log", false, open("log")),
+      iconTile("me-trip", "\u{1F9F3}", "Trip", "Trip planner", false, open("trip")),
     ].filter(Boolean)),
     el("div", { class: "stats four" },
       el("div", null, el("b", null, String(mine.length)), el("span", null, "Catches")),
@@ -4758,6 +4764,98 @@ function viewMe(p) {
     card("me-water", "🔍", "Spot finder", "Lakes near you", open("water")),
     wrapSeason() ? card("me-wrap", "🎞️", "Your year", `${wrapYear()} recap`, () => openWrapped(wrapYear())) : null),
   );
+}
+// ---- Trip planner: pick a place and how many people. Finds food, lodging and tackle shops nearby, suggests lures, and splits the cost. ----
+const TRIP_Q = (r, la, ln) => `(nwr["amenity"~"^(restaurant|fast_food|cafe|pub|bar)$"]["name"](around:${r},${la},${ln});nwr["tourism"~"^(hotel|motel|guest_house|chalet|hostel|camp_site|caravan_site|apartment)$"]["name"](around:${r},${la},${ln});nwr["shop"~"^(fishing|outdoor|sports|hunting|marine)$"]["name"](around:${r},${la},${ln}););out center 500;`;
+const tripKm = (a, b) => { const R = 6371, rad = Math.PI / 180, dLa = (b.lat - a.lat) * rad, dLn = (b.lng - a.lng) * rad, h = Math.sin(dLa / 2) ** 2 + Math.cos(a.lat * rad) * Math.cos(b.lat * rad) * Math.sin(dLn / 2) ** 2; return 2 * R * Math.asin(Math.sqrt(h)); };
+const tripMi = (km) => { const m = km * 0.621371; return m < 10 ? m.toFixed(1) + " mi" : Math.round(m) + " mi"; };
+function tripSort(rows, loc) {
+  const eat = [], stay = [], shops = [];
+  for (const r of rows) {
+    const t = r.tags || {}, d = tripKm(loc, r), x = { ...r, km: d };
+    if (/^(restaurant|fast_food|cafe|pub|bar)$/.test(t.amenity || "")) eat.push(x);
+    else if (t.tourism) stay.push(x);
+    else if (t.shop === "fishing" || /bait|tackle|fish|outfitter|marine/i.test(r.name)) shops.push(x);
+  }
+  const by = (a, b) => a.km - b.km;
+  const sit = (x) => x.tags.amenity === "restaurant" ? 0 : x.tags.amenity === "fast_food" ? 1 : 2;   // sit-down places first, then quick food, then bars and cafes
+  eat.sort((a, b) => sit(a) - sit(b) || by(a, b)); stay.sort(by); shops.sort(by);
+  return { eat: eat.slice(0, 8), stay: stay.slice(0, 8), shops: shops.slice(0, 6) };
+}
+const TRIP_STAY_NAME = { hotel: "Hotel", motel: "Motel", guest_house: "Guest house", chalet: "Cabin", hostel: "Hostel", camp_site: "Campground", caravan_site: "RV park", apartment: "Apartment" };
+function tripPlace(x, kind) {
+  const t = x.tags, bits = [kind === "stay" ? TRIP_STAY_NAME[t.tourism] : kind === "shop" ? "Tackle and outdoors" : (t.cuisine ? t.cuisine.split(";")[0].replace(/_/g, " ") : (t.amenity || "").replace(/_/g, " "))].filter(Boolean);
+  const web = /^https?:\/\//i.test(t.website || t["contact:website"] || "") ? (t.website || t["contact:website"]) : "";
+  const phone = t.phone || t["contact:phone"] || "";
+  return el("div", { class: "trip-place", "data-trip": kind },
+    el("div", { class: "row spread", style: "align-items:flex-start;flex-wrap:nowrap;gap:10px" },
+      el("b", { style: "overflow-wrap:anywhere" }, x.name), el("span", { class: "pill soon", style: "flex:none" }, tripMi(x.km))),
+    el("span", { class: "hint" }, bits.join(" · ")),
+    phone ? el("span", { class: "small", style: "user-select:text" }, "📞 " + phone) : null,
+    t.opening_hours ? el("span", { class: "muted small" }, "🕒 " + t.opening_hours.slice(0, 80)) : null,
+    el("div", { class: "row", style: "gap:8px" },
+      el("a", { class: "btn small ghost", href: `https://www.google.com/maps/dir/?api=1&destination=${x.lat},${x.lng}`, target: "_blank", rel: "noopener" }, "🧭 Directions"),
+      web ? el("a", { class: "btn small ghost", href: web, target: "_blank", rel: "noopener" }, "🌐 Website") : null));
+}
+function viewTrip(p) {
+  const T = S.trip || (S.trip = { loc: null, ppl: 2, nights: 1, room: "", food: "", res: null, busy: false, err: "" });
+  if (!T.loc) { try { const l = JSON.parse(getPref("tripLoc", "null")); if (l && typeof l.lat === "number") T.loc = l; } catch { /* none saved */ } }
+  const box = el("div", { class: "stack", id: "trip-box" }); p.append(box);
+  const num = (v) => { const n = parseFloat(String(v).replace(/[$,]/g, "")); return Number.isFinite(n) && n >= 0 ? n : 0; };
+  const pick = (loc) => { T.loc = loc; T.res = null; T.err = ""; setPref("tripLoc", JSON.stringify(loc)); paint(); run(); };
+  const run = async () => {
+    if (!T.loc || T.busy) return; T.busy = true; T.err = ""; T.res = null; paint();
+    const rows = await wfAsk(TRIP_Q(25000, T.loc.lat, T.loc.lng), (m) => { const n = box.querySelector("#trip-status"); if (n) n.textContent = m; });
+    T.busy = false;
+    if (!rows) T.err = "The free map servers are busy right now. Tap Try again in a minute."; else T.res = tripSort(rows, T.loc);
+    paint();
+  };
+  const cost = () => {
+    const rooms = Math.max(1, Math.ceil(T.ppl / 2)), rm = num(T.room), fd = num(T.food);
+    const total = rooms * rm * T.nights + T.ppl * fd * (T.nights + 1);
+    return { rooms, total, each: total / T.ppl };
+  };
+  function paint() {
+    if (box.dataset.live && !box.isConnected) return;   // the first paint happens before the screen is on the page
+    box.dataset.live = "1";
+    const c = cost(), people = el("div", { class: "row", style: "gap:12px;align-items:center" },
+      el("button", { class: "btn small", type: "button", id: "trip-minus", "aria-label": "One fewer person", disabled: T.ppl <= 1 ? "" : null, onclick: () => { T.ppl = Math.max(1, T.ppl - 1); paint(); } }, "−"),
+      el("b", { id: "trip-ppl", style: "min-width:90px;text-align:center" }, `${T.ppl} ${T.ppl === 1 ? "person" : "people"}`),
+      el("button", { class: "btn small", type: "button", id: "trip-plus", "aria-label": "One more person", disabled: T.ppl >= 20 ? "" : null, onclick: () => { T.ppl = Math.min(20, T.ppl + 1); paint(); } }, "+"));
+    const kids = [el("h1", null, "Trip planner"), el("p", { class: "hint" }, "Pick where you're going and how many are coming. I'll find places to eat and stay, tackle shops, and what lures to bring.")];
+    if (!T.loc) { kids.push(wxPicker(pick, "Where are you fishing?")); box.replaceChildren(...kids); return; }
+    kids.push(el("div", { class: "row spread", style: "align-items:center" }, el("strong", { id: "trip-where" }, "📍 " + T.loc.name),
+      el("button", { class: "link", type: "button", id: "trip-change", onclick: () => { T.loc = null; T.res = null; paint(); } }, "Change place")),
+      el("div", { class: "field" }, el("span", null, "How many people?"), people));
+    if (T.busy) kids.push(el("p", { class: "muted", id: "trip-status", role: "status" }, "Looking up places near " + T.loc.name + "…"));
+    if (T.err) kids.push(el("p", { class: "muted", id: "trip-err" }, T.err), el("button", { class: "btn wide", type: "button", id: "trip-retry", onclick: run }, "Try again"));
+    if (!T.busy && !T.res && !T.err) kids.push(el("button", { class: "btn wide", type: "button", id: "trip-go", onclick: run }, "Find places"));
+    // lures: the same advisor as the Bite tab, for that place
+    const lureBox = el("div", { id: "trip-lures", class: "stack" }, el("p", { class: "muted small" }, "Loading the forecast…"));
+    fetchWeather(T.loc).then((w) => { if (lureBox.isConnected) lureBox.replaceChildren(advisorCard(w, T.loc)); }, () => { if (lureBox.isConnected) lureBox.replaceChildren(el("p", { class: "muted" }, "Couldn't load the forecast for lure ideas. Check your signal.")); });
+    const sect = (id, title, list, kind, none) => el("div", { class: "stack", id }, el("h2", null, title), list.length ? list.map((x) => tripPlace(x, kind)) : el("p", { class: "muted" }, none));
+    if (T.res) {
+      kids.push(sect("trip-eat", "🍽️ Places to eat", T.res.eat, "eat", "Nothing listed within about 15 miles. Try a bigger town nearby."),
+        el("div", { class: "stack", id: "trip-stay-box" }, sect("trip-stay", "🛏️ Places to stay", T.res.stay, "stay", "No lodging listed within about 15 miles. Try a bigger town nearby."),
+          el("p", { class: "hint", id: "trip-rooms" }, `${T.ppl} ${T.ppl === 1 ? "person needs" : "people need"} about ${c.rooms} ${c.rooms === 1 ? "room" : "rooms"} (two to a room), or one cabin or a few campsites. Call ahead for prices and open dates.`)),
+        sect("trip-shops", "🪱 Tackle and bait shops", T.res.shops, "shop", "No tackle shops listed nearby. Check a Walmart or sporting goods store in town."),
+        el("p", { class: "muted small" }, "Places come from OpenStreetMap, which volunteers keep up to date. Some may be closed or missing, so call before you go."));
+    }
+    kids.push(el("h2", null, "🎣 What lures to bring"), lureBox);
+    kids.push(el("div", { class: "stack trip-cost", id: "trip-cost" }, el("h2", null, "💵 Splitting the cost"),
+      el("div", { class: "two" },
+        el("label", { class: "field" }, el("span", null, "Room, per night"), el("input", { id: "trip-room", inputmode: "decimal", placeholder: "$ 110", value: T.room, oninput: (e) => { T.room = e.target.value; upd(); } })),
+        el("label", { class: "field" }, el("span", null, "Food each, per day"), el("input", { id: "trip-food", inputmode: "decimal", placeholder: "$ 40", value: T.food, oninput: (e) => { T.food = e.target.value; upd(); } }))),
+      el("label", { class: "field" }, el("span", null, "Nights"), el("select", { id: "trip-nights", onchange: (e) => { T.nights = +e.target.value; upd(); } }, [1, 2, 3, 4, 5, 6, 7, 10, 14].map((n) => el("option", { value: String(n), selected: n === T.nights ? "" : null }, `${n} ${n === 1 ? "night" : "nights"}`)))),
+      el("p", { id: "trip-total", class: "trip-total", role: "status" }, ""),
+      el("p", { class: "hint" }, "Rough math only: rooms are two people each, and food counts the nights plus one day. Add gas, bait, licenses and a guide on your own.")));
+    box.replaceChildren(...kids); upd();
+  }
+  function upd() {
+    const t = box.querySelector("#trip-total"); if (!t) return; const c = cost();
+    t.textContent = c.total > 0 ? `About ${fmtFee(c.total)} total for ${T.ppl}, ${fmtFee(c.each)} each` : "Type a room price and what you spend on food to see the total.";
+  }
+  paint(); if (T.loc && !T.res && !T.busy && !T.err) run();
 }
 function yearsList() {
   const cur = new Date().getFullYear(), by = new Map();
