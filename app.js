@@ -6,7 +6,8 @@ import {
   signOut, sendPasswordResetEmail, GoogleAuthProvider, signInWithPopup, deleteUser, sendEmailVerification
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 import {
-  getFirestore, collection, doc, setDoc, getDoc, getDocs, addDoc, deleteDoc, updateDoc, onSnapshot,
+  getFirestore, initializeFirestore, persistentLocalCache, persistentMultipleTabManager,
+  collection, doc, setDoc, getDoc, getDocs, addDoc, deleteDoc, updateDoc, onSnapshot,
   query, where, orderBy, limit, serverTimestamp, arrayUnion, documentId
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
@@ -101,7 +102,14 @@ if (!firebaseConfig.apiKey || firebaseConfig.apiKey.includes("PASTE")) {
 }
 const fb = initializeApp(firebaseConfig);
 const auth = getAuth(fb);
-const db = getFirestore(fb);
+// Keep a copy of your own data on the phone. At the lake with no bars you can still open the app,
+// read your feed, log and spots, and anything you post goes up by itself once you have signal again.
+let db;
+try {
+  db = initializeFirestore(fb, { localCache: persistentLocalCache({ tabManager: persistentMultipleTabManager() }) });
+} catch (e) {
+  db = getFirestore(fb); // private browsing, an old phone, or storage turned off
+}
 
 /* ======================= avatars + photo helpers ======================= */
 const userCache = new Map();
@@ -206,7 +214,7 @@ function setPref(k, v) { try { localStorage.setItem("weighin-" + k, v); } catch 
 
 /* ======================= app state ======================= */
 const S = {
-  user: null, name: "", tab: "feed",
+  user: null, name: "", tab: (() => { try { const g = new URLSearchParams(location.search).get("go"); return ["post", "bite", "me", "feed", "map", "trade", "tour"].includes(g) ? g : "feed"; } catch { return "feed"; } })(),
   posts: [], tournaments: [], log: [], saved: [],
   reqIn: [], reqOut: [], friendships: [], unread: new Set(), chatOpen: null, recaps: [], offIn: [], offOut: [], tradeAll: [], tradeMine: [], tourReqs: [], joinIn: [], joinOut: [],
   openTournament: null, tourPosts: [], viewing: null, creatingTour: false,
@@ -337,6 +345,45 @@ async function claimName(name) {
 }
 
 let bootWaited = false;
+
+/* ---------- never leave someone staring at a blank screen ---------- */
+function bootCrash(what) {
+  try {
+    document.getElementById("net-bar")?.remove();
+    $app.replaceChildren(el("div", { class: "auth compact" }, el("div", { class: "box", style: "text-align:center;align-items:center" },
+      el("h1", null, navigator.onLine ? "Weigh-In hit a snag" : "You are offline"),
+      el("p", null, navigator.onLine
+        ? "Something went wrong while starting up. Trying again usually fixes it."
+        : "Turn on wifi or data, then try again."),
+      el("button", { class: "btn wide", type: "button", onclick: () => location.reload() }, "Try again"),
+      el("button", { class: "link small", type: "button", onclick: fixTheApp }, "Still stuck? Fix the app"),
+      el("p", { class: "hint", style: "opacity:.6;word-break:break-word" }, String(what || "").slice(0, 160)))));
+  } catch { /* if even this fails there is nothing left to try */ }
+}
+window.addEventListener("error", (e) => { if (!window.__appReady) bootCrash(e.message); });
+window.addEventListener("unhandledrejection", (e) => { if (!window.__appReady) bootCrash(e.reason?.message || e.reason); });
+
+/* ---------- a quiet bar when the phone loses signal ---------- */
+function paintNet() {
+  const off = !navigator.onLine;
+  let bar = document.getElementById("net-bar");
+  if (!off) { bar?.remove(); return; }
+  if (!bar) {
+    bar = el("div", { id: "net-bar", role: "status" }, "No connection. New catches will not load.");
+    document.body.append(bar);
+  }
+}
+addEventListener("online", paintNet); addEventListener("offline", paintNet);
+
+/* ---------- Settings > Fix the app: throw away saved copies and start clean ---------- */
+async function fixTheApp() {
+  if (!confirm("Clear the app's saved copy and reload? You stay signed in and nothing you posted is deleted.")) return;
+  try { navigator.serviceWorker?.controller?.postMessage("weighin-clear"); } catch { /* no worker */ }
+  try { if (window.caches) for (const k of await caches.keys()) await caches.delete(k); } catch { /* blocked */ }
+  try { const rs = await navigator.serviceWorker?.getRegistrations?.() || []; for (const g of rs) await g.unregister(); } catch { /* blocked */ }
+  try { localStorage.removeItem("weighin-appv"); } catch { /* private mode */ }
+  location.replace(location.pathname + "?v=" + APP_VERSION);
+}
 onAuthStateChanged(auth, async (user) => {
   // First time only: let the casting animation play one full loop (4.5 seconds) before the app appears.
   if (!bootWaited) {
@@ -344,6 +391,8 @@ onAuthStateChanged(auth, async (user) => {
     const left = 4600 - performance.now();
     if (left > 0 && document.getElementById("boot-cast")) await new Promise((r) => setTimeout(r, left));
   }
+  window.__appReady = true;
+  paintNet();
   stopAll();
   S.user = user;
   S.owner = !!(user && user.uid === OWNER_UID);
@@ -1210,12 +1259,23 @@ function feedPosts() {
 /* What's new. Newest first. Add a new entry on top each time the app changes. */
 /* Bump APP_VERSION every time you change the app, and add a matching entry on top of UPDATES (with v: the same number).
    Phones check app.js every few minutes and offer the new version on their own. */
-const APP_VERSION = 76;
+const APP_VERSION = 77;
 // The number people see. APP_VERSION stays a plain counter so updates are detected. Big changes bump the first number (2.0), smaller ones the second (1.1, 1.2).
-const REL_NAMES = { 59: "1.0", 60: "1.0", 61: "1.1", 62: "1.2", 63: "1.2", 64: "1.2", 65: "1.2", 66: "1.2", 67: "1.2" };
+const REL_NAMES = { 59: "1.0", 60: "1.0", 61: "1.1", 62: "1.2", 63: "1.2", 64: "1.2", 65: "1.2", 66: "1.2", 67: "1.2",
+  68: "1.3", 69: "1.3", 70: "1.3", 71: "1.4", 72: "1.4", 73: "1.5", 74: "1.5", 75: "1.5", 76: "1.5", 77: "2.0" };
 const relName = (v) => REL_NAMES[v] || (v < 59 ? `0.${v}` : `1.${v - 59}`);
 try { if ((parseInt(localStorage.getItem("weighin-appv"), 10) || 0) < APP_VERSION) localStorage.setItem("weighin-appv", String(APP_VERSION)); } catch { /* private mode */ }
 const UPDATES = [
+  { id: "2026-11-16a", v: 77, date: "Nov 16", title: "Weigh-In 2.0 — works without signal", items: [
+    "Out on the water with no bars? Weigh-In now opens anyway, and you can still read your feed, your log and your saved spots.",
+    "Post a catch with no signal and it goes up by itself the moment you get service again. Nothing is lost.",
+    "A small bar tells you when the phone has no connection, so you are never guessing.",
+    "The app opens a lot faster, because it keeps itself on your phone instead of downloading every time.",
+    "New loading screen: an angler casting a bobber.",
+    "If the app ever gets stuck, Settings now has Fix the app to reload a clean copy.",
+    "Brand new accounts have to confirm their email, which keeps fake sign-ups out.",
+    "Long-press the Weigh-In icon on your home screen to jump straight to Post a catch, the bite forecast or your profile.",
+    "A Download the app button in your profile, with step-by-step pictures for iPhone."] },
   { id: "2026-11-15f", v: 67, date: "Nov 15", title: "Log icon", items: [
     "Fishing log is now a small 📓 button by your other icons under your name."] },
   { id: "2026-11-15e", v: 66, date: "Nov 15", title: "Spot finder and chat icon", items: [
@@ -4542,6 +4602,7 @@ function viewSettings(p) {
       el("span", { class: "hint" }, "Everyone using Weigh-In can see map pins. Skip the location for your home or a secret spot.")),
     el("section", { class: "stack" },
       el("button", { class: "btn ghost wide", type: "button", id: "s-about", onclick: openPrivacy }, "About and privacy"),
+      el("button", { class: "btn ghost wide", type: "button", id: "s-fix", onclick: fixTheApp }, "Fix the app (reload a clean copy)"),
       el("button", { class: "btn wide", type: "button", onclick: () => { if (confirm("Sign out of Weigh-In?")) signOut(auth); } }, "Sign out"),
       el("button", { class: "link danger small", type: "button", id: "s-delacct", style: "align-self:center", onclick: deleteMyAccount }, "Delete my account")),
     el("p", { class: "hint", id: "s-ver" }, `Weigh-In version ${relName(APP_VERSION)}`),
