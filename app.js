@@ -261,15 +261,16 @@ function setPref(k, v) { try { localStorage.setItem("weighin-" + k, v); } catch 
 
 /* ======================= app state ======================= */
 const S = {
-  user: null, name: "", tab: (() => { try { const g = new URLSearchParams(location.search).get("go"); return ["post", "bite", "me", "feed", "map", "trade", "tours"].includes(g) ? g : "feed"; } catch { return "feed"; } })(),
+  user: null, name: "", tab: (() => { try { if (new URLSearchParams(location.search).get("t")) return "tours"; const g = new URLSearchParams(location.search).get("go"); return ["post", "bite", "me", "feed", "map", "trade", "tours"].includes(g) ? g : "feed"; } catch { return "feed"; } })(),
   posts: [], tournaments: [], log: [], saved: [],
   myLikes: new Set(), lcount: new Map(), likeNMode: false,
   live: [], older: [], moreLeft: true, loadingMore: false, scrollTo: null,
-  reqIn: [], reqOut: [], friendships: [], unread: new Set(), chatOpen: null, recaps: [], offIn: [], offOut: [], tradeAll: [], tradeMine: [], tourReqs: [], joinIn: [], joinOut: [],
+  reqIn: [], reqOut: [], friendships: [], unread: new Set(), chatOpen: null, recaps: [], offIn: [], offOut: [], tradeAll: [], tradeMine: [], tourReqs: [], joinIn: [], joinOut: [], inviteIn: [], inviteOut: [],
   openTournament: null, tourPosts: [], viewing: null, creatingTour: false,
   meView: "main", mine: [], spots: [], map: null, markers: null, likes: new Map(), mod: null,
 };
 const unsubs = [];
+const TLINK = { id: (() => { try { return (new URLSearchParams(location.search).get("t") || "").replace(/[^A-Za-z0-9]/g, "").slice(0, 40); } catch { return ""; } })() };   // a shared tournament link
 let tourUnsub = null, meUnsub = null;
 function stopAll() { unsubs.splice(0).forEach((u) => u()); stopTrade(); tourUnsub?.(); tourUnsub = null; meUnsub?.(); meUnsub = null; destroyMap(); stopOwner(); cardCache.clear(); S.mine = []; }
 
@@ -622,15 +623,23 @@ function startApp() {
     if (S.tab === "tours" && !S.creatingTour && !S.openTournament) renderTab();
   }, () => {}));
   unsubs.push(onSnapshot(query(collection(db, "tourJoins"), where("org", "==", uid)), (s) => {
-    S.joinIn = s.docs.map((d) => ({ id: d.id, ...d.data() }));
+    S.joinIn = s.docs.map((d) => ({ id: d.id, ...d.data() })); updateDot();
     if (S.tab === "tours" && !S.creatingTour) renderTab();
   }, () => {}));
   unsubs.push(onSnapshot(query(collection(db, "tourJoins"), where("uid", "==", uid)), (s) => {
     S.joinOut = s.docs.map((d) => ({ id: d.id, ...d.data() }));
     if (S.tab === "tours" && !S.creatingTour) renderTab();
   }, () => {}));
+  unsubs.push(onSnapshot(query(collection(db, "tourInvites"), where("to", "==", uid)), (s) => {
+    S.inviteIn = s.docs.map((d) => ({ id: d.id, ...d.data() })); updateDot();
+    if (S.tab === "tours" && !S.creatingTour && !S.openTournament) renderTab();
+  }, () => {}));
+  unsubs.push(onSnapshot(query(collection(db, "tourInvites"), where("from", "==", uid)), (s) => {
+    S.inviteOut = s.docs.map((d) => ({ id: d.id, ...d.data() })); S.invitePaint?.();
+  }, () => {}));
   unsubs.push(onSnapshot(collection(db, "tournaments"), (s) => {
     S.tournaments = s.docs.map((d) => ({ id: d.id, ...d.data() }));
+    if (TLINK.id && S.tournaments.some((x) => x.id === TLINK.id)) { const id = TLINK.id; TLINK.id = ""; try { history.replaceState(null, "", location.pathname); } catch { /* fine */ } S.tab = "tours"; openTour(id); return; }
     if (S.tab === "tours") renderTab();
   }, () => {}));
   unsubs.push(onSnapshot(query(collection(db, "users", uid, "log"), orderBy("date", "desc")), (s) => {
@@ -689,7 +698,7 @@ function buildShell() {
   $nav = el("nav", { class: "tabs", "aria-label": "Sections" }, el("div", { class: "in" }, tabs.map(([k, label, icon]) =>
     el("button", { class: "tab" + (k === "post" ? " post" : ""), type: "button", "data-tab": k, onclick: () => go(k) },
       k === "post" ? el("span", { class: "bob", html: icon }) : el("span", { html: icon }), label,
-      k === "me" || k === "trade" ? el("span", { class: "dot", hidden: true }) : null))));
+      k === "me" || k === "trade" || k === "tours" ? el("span", { class: "dot", hidden: true }) : null))));
   $app.replaceChildren($screen, $nav);
   go(S.tab);
 }
@@ -704,6 +713,7 @@ function go(tab) {
 function updateDot() {
   $nav?.querySelector(".tab[data-tab=me] .dot")?.toggleAttribute("hidden", S.reqIn.length === 0 && !unseenUpdate() && !S.unread.size);
   $nav?.querySelector(".tab[data-tab=trade] .dot")?.toggleAttribute("hidden", !tradeUnseen());
+  $nav?.querySelector(".tab[data-tab=tours] .dot")?.toggleAttribute("hidden", !myInvites().length && !S.joinIn.some((r) => r.status === "pending"));
 }
 function renderTab() {
   clearInterval(tick);
@@ -1400,13 +1410,18 @@ function feedPosts() {
 /* What's new. Newest first. Add a new entry on top each time the app changes. */
 /* Bump APP_VERSION every time you change the app, and add a matching entry on top of UPDATES (with v: the same number).
    Phones check app.js every few minutes and offer the new version on their own. */
-const APP_VERSION = 85;
+const APP_VERSION = 86;
 // The number people see. APP_VERSION stays a plain counter so updates are detected. Big changes bump the first number (2.0), smaller ones the second (1.1, 1.2).
 const REL_NAMES = { 59: "1.0", 60: "1.0", 61: "1.1", 62: "1.2", 63: "1.2", 64: "1.2", 65: "1.2", 66: "1.2", 67: "1.2",
-  68: "1.3", 69: "1.3", 70: "1.3", 71: "1.4", 72: "1.4", 73: "1.5", 74: "1.5", 75: "1.5", 76: "1.5", 77: "1.8", 78: "1.8", 79: "1.9", 80: "1.9", 81: "2.0", 82: "2.0", 83: "1.19", 84: "1.20", 85: "1.21" };
+  68: "1.3", 69: "1.3", 70: "1.3", 71: "1.4", 72: "1.4", 73: "1.5", 74: "1.5", 75: "1.5", 76: "1.5", 77: "1.8", 78: "1.8", 79: "1.9", 80: "1.9", 81: "2.0", 82: "2.0", 83: "1.19", 84: "1.20", 85: "1.21", 86: "1.22" };
 const relName = (v) => REL_NAMES[v] || (v < 59 ? `0.${v}` : `1.${v - 59}`);
 try { if ((parseInt(localStorage.getItem("weighin-appv"), 10) || 0) < APP_VERSION) localStorage.setItem("weighin-appv", String(APP_VERSION)); } catch { /* private mode */ }
 const UPDATES = [
+  { id: "2026-11-17e", v: 86, date: "Nov 17", title: "Invite people to a tournament", items: [
+    "Open a tournament and tap Invite people. Pick a friend or search a username, and they get an invite on their Tourneys tab. One tap on Join and they're in, with no approval needed.",
+    "The Tourneys tab gets a red dot when you have an invite or a join request waiting.",
+    "Share a link to bring in people who haven't joined Weigh-In yet. In a private tournament, people who only have the link still have to be approved.",
+    "In a private tournament only the organizer can invite. In a public one any member can."] },
   { id: "2026-11-17d", v: 85, date: "Nov 17", title: "Tournament boxes, deleting and a better filter", items: [
     "Every tournament now has its own box, and it says who made it.",
     "The owner can delete any tournament, and can now give moderators a Delete tournaments power. Moderators can never delete or ban the owner, warn the owner, or remove the owner's catches, comments or tournaments.",
@@ -3060,6 +3075,85 @@ function tourRequestsPanel() {
     el("span", { class: "row", style: "gap:8px;flex-wrap:nowrap" }, el("span", { class: "pill " + (r.status === "approved" ? "live" : r.status === "declined" ? "final" : "soon") }, { pending: "Waiting", approved: "Approved", declined: "Declined" }[r.status] || r.status),
       r.status !== "pending" ? el("button", { class: "link small", type: "button", "aria-label": "Remove", onclick: () => deleteDoc(doc(db, "tourRequests", r.id)).catch(() => {}) }, "✕") : null))));
 }
+// ---- Inviting people to a tournament ----
+const myInvites = () => S.inviteIn.filter((i) => i.status === "pending" && S.tournaments.some((t) => t.id === i.tid && !(t.members || []).includes(S.user.uid)));
+async function acceptInvite(inv) {
+  const t = S.tournaments.find((x) => x.id === inv.tid);
+  try {
+    await updateDoc(doc(db, "tournaments", inv.tid), { members: arrayUnion(S.user.uid) });
+    await updateDoc(doc(db, "tourInvites", inv.id), { status: "accepted" });
+    const fee = +t?.fee || 0;
+    toast(fee ? `You're in ${inv.tname}. Entry is ${fmtFee(fee)}: pay @${t.createdByName || "the organizer"}${t.payHow ? " (" + t.payHow + ")" : ""} yourself.` : `You're in ${inv.tname}!`);
+    openTour(inv.tid);
+  } catch (err) { toast(errText(err)); }
+}
+function tourInvitePanel() {
+  const list = myInvites(); if (!list.length) return null;
+  return el("section", { class: "stack tour-money", id: "tour-invites" }, el("h2", null, `You're invited (${list.length})`), ...list.map((i) => {
+    const t = S.tournaments.find((x) => x.id === i.tid), fee = +t?.fee || 0;
+    return el("div", { class: "trade-offer", "data-invite": i.id },
+      el("b", null, i.tname), el("span", { class: "hint" }, `@${i.fromName} invited you${fee ? ` · ${fmtFee(fee)} entry, paid to them` : ""}`),
+      el("div", { class: "row" },
+        el("button", { class: "btn small", type: "button", "data-act": "inv-yes", onclick: () => acceptInvite(i) }, "Join"),
+        el("button", { class: "btn ghost small", type: "button", "data-act": "inv-no", onclick: async () => { try { await updateDoc(doc(db, "tourInvites", i.id), { status: "declined" }); toast("No thanks sent."); } catch (err) { toast(errText(err)); } } }, "No thanks")));
+  }));
+}
+function openTourInvite(t) {
+  const me = S.user.uid, close = () => { S.invitePaint = null; bg.remove(); };
+  const list = el("div", { class: "stack", id: "inv-list" }), found = el("div", { class: "stack", id: "inv-found" });
+  const q = el("input", { id: "inv-q", type: "search", placeholder: "Type a username", maxlength: 20, autocomplete: "off", "aria-label": "Find an angler by username" });
+  const live = () => S.tournaments.find((x) => x.id === t.id) || t;
+  const send = async (uid, name) => {
+    const id = t.id + "_" + uid;
+    try {
+      if (S.inviteOut.some((i) => i.id === id)) await deleteDoc(doc(db, "tourInvites", id));
+      await setDoc(doc(db, "tourInvites", id), { tid: t.id, tname: t.name, to: uid, toName: name, from: me, fromName: S.name, status: "pending", createdAt: serverTimestamp() });
+      toast(`Invited @${name}.`);
+    } catch (err) { toast(errText(err)); }
+  };
+  const row = (uid, name) => {
+    const inn = (live().members || []).includes(uid), iv = S.inviteOut.find((i) => i.id === t.id + "_" + uid);
+    return el("div", { class: "row spread", "data-who": uid, style: "flex-wrap:nowrap;align-items:center;min-height:48px" }, el("span", { class: "t", style: "min-width:0;overflow-wrap:anywhere" }, "@" + name),
+      inn ? el("span", { class: "pill final" }, "Already in")
+        : iv?.status === "pending" ? el("span", { class: "pill live", "data-state": "sent" }, "Invited ✓")
+        : el("button", { class: "btn small", type: "button", "data-invite-to": uid, onclick: () => send(uid, name) }, iv?.status === "declined" ? "Invite again" : "Invite"));
+  };
+  const paint = () => {
+    const fr = S.friendships.map(friendOf);
+    list.replaceChildren(el("h3", { style: "margin:0" }, "Your friends"), fr.length ? fr.map((f) => row(f.uid, f.name)) : el("p", { class: "muted small" }, "No friends added yet. Find anglers by username below."));
+  };
+  S.invitePaint = paint;
+  let tm = 0, seq = 0;
+  const search = () => {
+    clearTimeout(tm); const pre = q.value.trim().toLowerCase();
+    if (!pre) { found.replaceChildren(); return; }
+    tm = setTimeout(async () => {
+      const my = ++seq;
+      try {
+        const r = await getDocs(query(collection(db, "usernames"), where(documentId(), ">=", pre), where(documentId(), "<", pre + ""), limit(8)));
+        if (my !== seq) return;
+        const rows = r.docs.map((d) => d.data()).filter((d) => d.uid !== OWNER_UID && d.uid !== me);
+        found.replaceChildren(rows.length ? rows.map((d) => row(d.uid, d.name)) : el("p", { class: "muted small" }, "No one with that username."));
+      } catch { found.replaceChildren(el("p", { class: "muted small" }, "Search didn't work. Try again.")); }
+    }, 250);
+  };
+  q.addEventListener("input", search);
+  const share = async () => {
+    const url = location.origin + "/?t=" + t.id, text = `Join my fishing tournament "${t.name}" on Weigh-In`;
+    try { if (navigator.share) { await navigator.share({ title: t.name, text, url }); return; } } catch (e) { if (e?.name === "AbortError") return; }
+    try { await navigator.clipboard.writeText(url); toast("Link copied. Send it to anyone."); } catch { toast(url); }
+  };
+  const bg = el("div", { class: "sheet-bg", id: "invite-sheet", onclick: (e) => { if (e.target === bg) close(); } },
+    el("div", { class: "sheet", role: "dialog", "aria-label": "Invite people" },
+      el("div", { class: "sheet-h" }, el("h2", null, "Invite people"), el("button", { class: "link", type: "button", id: "inv-close", onclick: close }, "Done")),
+      el("div", { class: "stack", style: "padding:12px 16px 20px;gap:14px" },
+        el("p", { class: "hint", style: "margin:0" }, t.private ? "They get an invite on their Tourneys tab and tap Join. You don't have to approve them." : "They get an invite on their Tourneys tab."),
+        list,
+        el("h3", { style: "margin:0" }, "Find someone"), q, found,
+        el("button", { class: "btn ghost wide", type: "button", id: "inv-share", onclick: share }, "🔗 Share a link"),
+        el("p", { class: "hint", style: "margin:0" }, t.private ? "Anyone who opens the link still has to be approved, unless you invited them by name." : "Anyone with the link can open the tournament and join."))));
+  document.body.append(bg); paint();
+}
 function tourJoinPanel() {
   const pend = S.joinIn.filter((r) => r.status === "pending");
   if (!pend.length) return null;
@@ -3105,6 +3199,7 @@ function viewTours(p) {
     el("div", { class: "row", style: "gap:8px;flex-wrap:nowrap" },
       el("button", { class: "btn ghost small", type: "button", id: "t-new-priv", onclick: () => { S.creatingTour = "private"; renderTab(); } }, "🔒 Private"),
       el("button", { class: "btn small", type: "button", id: "t-new", onclick: () => { S.creatingTour = "public"; renderTab(); } }, canPubTour() ? "New" : "Request one"))));
+  const invPanel = tourInvitePanel(); if (invPanel) p.append(invPanel);
   const joinPanel = tourJoinPanel(); if (joinPanel) p.append(joinPanel);
   const reqPanel = tourRequestsPanel(); if (reqPanel) p.append(reqPanel);
   if (!ts.length) { p.append(el("p", { class: "empty" }, canPubTour() ? "No tournaments yet. Tap New to start one." : "No tournaments yet. Tap Request one to ask the owner to start one.")); return; }
@@ -3346,13 +3441,15 @@ function viewTour(p) {
             payBox,
             el("p", { class: "hint", style: "margin:0" }, "Weigh-In doesn't handle money. You pay the organizer yourself."))
         : el("p", { class: "muted", style: "margin:0" }, `Ask @${orgName} if you can join. They'll say yes or no.`),
-      !jr ? el("button", { class: "btn wide", type: "button", id: "t-ask", onclick: ask }, fee ? "I paid, ask to join" : "Ask to join")
+      S.inviteIn.find((i) => i.tid === t.id && i.status === "pending") ? el("button", { class: "btn wide", type: "button", id: "t-accept", onclick: () => acceptInvite(S.inviteIn.find((i) => i.tid === t.id && i.status === "pending")) }, `Accept @${S.inviteIn.find((i) => i.tid === t.id && i.status === "pending").fromName}'s invite`)
+      : !jr ? el("button", { class: "btn wide", type: "button", id: "t-ask", onclick: ask }, fee ? "I paid, ask to join" : "Ask to join")
         : jr.status === "pending" ? el("p", { class: "pb-ok", style: "margin:0;font-weight:700" }, "⏳ Waiting for the organizer.")
         : jr.status === "declined" ? el("div", { class: "stack" }, el("p", { class: "hint", style: "margin:0" }, "They said not this time."), el("button", { class: "btn ghost small", type: "button", style: "align-self:flex-start", onclick: ask }, "Ask again"))
         : el("p", { class: "hint", style: "margin:0" }, "Approved. One moment…")));
     if (t.createdBy === S.user.uid || S.owner) { /* organizer and owner fall through */ } else return;
   }
   p.append(tourMoneyCard(t, joined));
+  if (joined && st !== "final" && (!t.private || t.createdBy === S.user.uid)) p.append(el("button", { class: "btn ghost wide", type: "button", id: "t-invite", onclick: () => openTourInvite(t) }, "➕ Invite people"));
   if (t.manual) {
     const wins = phases, n = wins.length, single = n === 1, org = t.createdBy === S.user.uid, orgName = t.createdByName || "the organizer";
     const lab = el("span", { class: "label" }), big = el("b", { class: "big" }), sub = el("span", { class: "hint" });
