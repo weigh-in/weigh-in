@@ -1262,13 +1262,14 @@ function feedPosts() {
 const APP_VERSION = 77;
 // The number people see. APP_VERSION stays a plain counter so updates are detected. Big changes bump the first number (2.0), smaller ones the second (1.1, 1.2).
 const REL_NAMES = { 59: "1.0", 60: "1.0", 61: "1.1", 62: "1.2", 63: "1.2", 64: "1.2", 65: "1.2", 66: "1.2", 67: "1.2",
-  68: "1.3", 69: "1.3", 70: "1.3", 71: "1.4", 72: "1.4", 73: "1.5", 74: "1.5", 75: "1.5", 76: "1.5", 77: "2.0" };
+  68: "1.3", 69: "1.3", 70: "1.3", 71: "1.4", 72: "1.4", 73: "1.5", 74: "1.5", 75: "1.5", 76: "1.5", 77: "1.8" };
 const relName = (v) => REL_NAMES[v] || (v < 59 ? `0.${v}` : `1.${v - 59}`);
 try { if ((parseInt(localStorage.getItem("weighin-appv"), 10) || 0) < APP_VERSION) localStorage.setItem("weighin-appv", String(APP_VERSION)); } catch { /* private mode */ }
 const UPDATES = [
-  { id: "2026-11-16a", v: 77, date: "Nov 16", title: "Weigh-In 2.0 — works without signal", items: [
+  { id: "2026-11-16a", v: 77, date: "Nov 16", title: "Works without signal", items: [
     "Out on the water with no bars? Weigh-In now opens anyway, and you can still read your feed, your log and your saved spots.",
     "Post a catch with no signal and it goes up by itself the moment you get service again. Nothing is lost.",
+    "The whole fishing game works with no signal. Cast, fight fish, spend coins and level up, and your progress uploads by itself when you get service. Only the leaderboard needs a connection.",
     "A small bar tells you when the phone has no connection, so you are never guessing.",
     "The app opens a lot faster, because it keeps itself on your phone instead of downloading every time.",
     "New loading screen: an angler casting a bobber.",
@@ -4967,7 +4968,14 @@ function fcMine() {
 }
 /* ---------- cloud save: the game progress follows your account ---------- */
 const FC_SAVE_KEYS = ["fcach", "fcbag", "fccoins", "fcdex", "fcents", "fcgear", "fcloc", "fclure", "fclv", "fclvpaid", "fcpaid", "fcrod", "fcxp", "fcstats"];
-let fcCloudLast = "", fcCloudAt = 0, fcCloudReady = false, fcCloudTimer = 0;
+let fcCloudLast = "", fcCloudAt = 0, fcCloudReady = false, fcCloudTimer = 0, fcWaitingNet = false;
+// No signal when we tried to sync the game: try again the moment it comes back, so a session
+// played at the lake uploads by itself instead of waiting for the next app start.
+function fcSyncWhenBack() {
+  if (fcWaitingNet) return;
+  fcWaitingNet = true;
+  addEventListener("online", () => { fcWaitingNet = false; if (S.user) fcCloudSync(); }, { once: true });
+}
 function fcSnapshot() { const d = {}; for (const k of FC_SAVE_KEYS) { const v = getPref(k, ""); if (v) d[k] = v; } return d; }
 async function fcCloudPush(force) {
   if (!S.user || !fcCloudReady) return;
@@ -4981,7 +4989,7 @@ async function fcCloudSync() {
   if (!S.user) return;
   const uid = S.user.uid; fcCloudReady = false; fcCloudLast = "";
   let c = null;
-  try { const snap = await getDoc(doc(db, "fcsave", uid)); if (snap.exists()) c = snap.data(); } catch { return; }   // offline: try again next time
+  try { const snap = await getDoc(doc(db, "fcsave", uid)); if (snap.exists()) c = snap.data(); } catch { fcSyncWhenBack(); return; }   // no signal: the game still plays, and this runs again when it is back
   const owner = getPref("fcowner", ""), foreign = !!owner && owner !== uid;   // the progress on this phone belongs to someone else
   if (c?.reset && c.reset !== getPref("fcreset", "")) {   // restarted on another device: restart here too
     FC_SAVE_KEYS.forEach((k) => setPref(k, "")); setPref("fcreset", c.reset); toast("Your fishing game was restarted on another device.");
@@ -5158,7 +5166,7 @@ function openFishGame() {
       el("h2", null, "Leaderboard"),
       el("div", { class: "chips" }, BOARDS.map(([id, n]) => el("button", { class: "chip", type: "button", "data-board": id, "aria-pressed": String(rk === id), onclick: () => { rk = id; loadBoard(); } }, n))),
       el("div", { class: "chips" }, [["all", "Everyone"], ["friends", "Friends"]].map(([id, n]) => el("button", { class: "chip", type: "button", "data-scope": id, "aria-pressed": String(scope === id), onclick: () => { scope = id; loadBoard(); } }, n))),
-      rankState.err && rankState.key === rk + "|" + scope ? el("p", { class: "muted small" }, "Couldn't load the leaderboard. Check your internet and try again.")
+      rankState.err && rankState.key === rk + "|" + scope ? el("p", { class: "muted small" }, (navigator.onLine ? "Couldn't load the leaderboard. Try again in a moment." : "The leaderboard needs a connection. Everything else in the game works offline."))
         : !rows ? el("p", { class: "muted small" }, "Loading...")
         : !rows.length ? el("p", { class: "muted small" }, scope === "friends" ? "None of your friends have played yet." : "Nobody is on this board yet. Play a bit and you will be first.")
         : el("div", { class: "list", id: "fc-board" }, rows.map((r, i) => el("div", { class: "item" + (r.uid === S.user.uid ? " me" : ""), style: "cursor:default;gap:10px", "data-rank": i + 1 },
