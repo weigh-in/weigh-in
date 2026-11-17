@@ -1393,13 +1393,18 @@ function feedPosts() {
 /* What's new. Newest first. Add a new entry on top each time the app changes. */
 /* Bump APP_VERSION every time you change the app, and add a matching entry on top of UPDATES (with v: the same number).
    Phones check app.js every few minutes and offer the new version on their own. */
-const APP_VERSION = 83;
+const APP_VERSION = 84;
 // The number people see. APP_VERSION stays a plain counter so updates are detected. Big changes bump the first number (2.0), smaller ones the second (1.1, 1.2).
 const REL_NAMES = { 59: "1.0", 60: "1.0", 61: "1.1", 62: "1.2", 63: "1.2", 64: "1.2", 65: "1.2", 66: "1.2", 67: "1.2",
-  68: "1.3", 69: "1.3", 70: "1.3", 71: "1.4", 72: "1.4", 73: "1.5", 74: "1.5", 75: "1.5", 76: "1.5", 77: "1.8", 78: "1.8", 79: "1.9", 80: "1.9", 81: "2.0", 82: "2.0", 83: "1.19" };
+  68: "1.3", 69: "1.3", 70: "1.3", 71: "1.4", 72: "1.4", 73: "1.5", 74: "1.5", 75: "1.5", 76: "1.5", 77: "1.8", 78: "1.8", 79: "1.9", 80: "1.9", 81: "2.0", 82: "2.0", 83: "1.19", 84: "1.20" };
 const relName = (v) => REL_NAMES[v] || (v < 59 ? `0.${v}` : `1.${v - 59}`);
 try { if ((parseInt(localStorage.getItem("weighin-appv"), 10) || 0) < APP_VERSION) localStorage.setItem("weighin-appv", String(APP_VERSION)); } catch { /* private mode */ }
 const UPDATES = [
+  { id: "2026-11-17c", v: 84, date: "Nov 17", title: "Start the clock yourself", items: [
+    "Private tournaments can now start when you say. Tick I'll start the clock myself, then press Start when everyone is ready.",
+    "Split a tournament into sections and press Start on each one, like a different lure or spot for each part. Everyone sees a live countdown, and catches only count while a section is running.",
+    "You can end a section or the whole tournament early. Both ask you to tap twice, so you don't do it by accident.",
+    "Picking the fish is easier too: tap the fish you want to count, or leave it on Any fish."] },
   { id: "2026-11-17b", v: 83, date: "Nov 17", title: "Trip planner", items: [
     "New Trip button under your name. Pick where you're going and how many people, and it finds places to eat, places to stay and tackle shops nearby, each with distance, phone and directions.",
     "It also shows what lures to bring for that place, using the same Advisor as the Bite tab and the forecast there.",
@@ -2440,13 +2445,23 @@ async function shrinkPhoto(file) {
     return out.length < 880000 ? out : "";
   } finally { URL.revokeObjectURL(url); }
 }
+// A manual tournament has no clock times set ahead. The organizer presses Start, and each section gets the time it was started (pstart) and, if it was ended early, when (pend).
+function manualWins(t) {
+  const ps = t.pstart || [], pe = t.pend || [];
+  return phasesOf(t).map((ph, i) => { const s = +ps[i] || 0; let e = s ? (+pe[i] || s + (ph.mins || 0) * 60000) : 0; if (s && t.endedAt && e > t.endedAt) e = t.endedAt; return { i, s, e, ph }; });
+}
 function tourRange(t) {
+  if (t.manual) { const w = manualWins(t), st = w.filter((x) => x.s), last = w[w.length - 1]; return { s: st.length ? st[0].s : 0, e: t.endedAt || (last && last.s ? last.e : 8.64e15) }; }
   if (t.startAt && t.endAt) return { s: t.startAt, e: t.endAt };
   return { s: new Date(t.start + "T00:00:00").getTime(), e: new Date(t.end + "T23:59:59").getTime() };
 }
-function tourStatus(t) { const { s, e } = tourRange(t), now = Date.now(); return now < s ? "soon" : now > e ? "final" : "live"; }
+function tourStatus(t) {
+  if (t.manual) { const w = manualWins(t), last = w[w.length - 1]; if (!w.some((x) => x.s)) return "soon"; return t.endedAt || (last && last.s && Date.now() >= last.e) ? "final" : "live"; }
+  const { s, e } = tourRange(t), now = Date.now(); return now < s ? "soon" : now > e ? "final" : "live";
+}
 const phasesOf = (t) => (Array.isArray(t.phases) ? t.phases : []);
 function phaseWindows(t) {
+  if (t.manual) return manualWins(t);
   let at = tourRange(t).s;
   return phasesOf(t).map((ph, i) => { const w = { i, s: at, e: at + (ph.mins || 0) * 60000, ph }; at = w.e; return w; });
 }
@@ -2460,6 +2475,10 @@ function fmtDur(ms) {
 const dtLocal = (ms) => { const d = new Date(ms); return `${localDate(d)}T${pad2(d.getHours())}:${pad2(d.getMinutes())}`; };
 // Does this catch count? Timed tournaments only count catches inside the time window that follow the phase's lure rule.
 function catchCounts(t, p) {
+  if (t.manual) {   // only catches inside a section that was running count
+    const ms = p.createdAt?.toMillis?.() || Date.now(), w = manualWins(t).find((x) => x.s && ms >= x.s && ms < x.e);
+    return !!w && !(w.ph.lure && !lureOk(w.ph.lure, p.lure));
+  }
   if (!t.startAt) return true;
   const ms = p.createdAt?.toMillis?.() || 0, { s, e } = tourRange(t);
   if (ms && (ms < s || ms > e)) return false;
@@ -2542,6 +2561,7 @@ function viewPost(p) {
     const t = myLive.find((x) => x.id === tid);
     if (!t) { tourHint.textContent = myLive.length ? "Only tournaments you've joined that are happening now show up here." : "Join a tournament in Tourneys to count this catch."; return; }
     const ph = phasesOf(t)[phaseAt(t)];
+    if (t.manual && !ph) { tourHint.textContent = "The organizer hasn't started a section right now, so a catch posted now won't count in this tournament."; return; }
     tourHint.textContent = (ph ? `Now: ${ph.name}${ph.where ? " at " + ph.where : ""}${ph.lure ? ". Lure rule: " + ph.lure + " only" : ""}.` : "This catch will count in this tournament.") + (tourSpecies(t).length ? ` Only ${tourSpeciesText(t)} counts.` : "");
   };
   const f = el("form", { novalidate: true },
@@ -3081,7 +3101,7 @@ function viewTours(p) {
     const st = tourStatus(t), n = (t.members || []).length;
     return el("button", { class: "item", type: "button", onclick: () => openTour(t.id) },
       el("div", { class: "stack", style: "gap:2px;min-width:0" }, el("span", { class: "t" }, t.name), t.private ? el("span", { class: "pill soon", style: "align-self:flex-start" }, "🔒 Invite only") : null, speciesPill(t), tourMoneyLine(t),
-        el("span", { class: "s" }, `${SCORING[t.scoring]?.name || ""} · ${t.startAt ? fmtWhen(t.startAt) : fmtDay(t.start) + (t.end !== t.start ? " – " + fmtDay(t.end) : "")}${phasesOf(t).length ? " · " + phasesOf(t).length + " phases" : ""} · ${n} angler${n === 1 ? "" : "s"}`)),
+        el("span", { class: "s" }, `${SCORING[t.scoring]?.name || ""} · ${t.manual ? "Organizer starts the clock" : t.startAt ? fmtWhen(t.startAt) : fmtDay(t.start) + (t.end !== t.start ? " – " + fmtDay(t.end) : "")}${phasesOf(t).length > 1 ? " · " + phasesOf(t).length + (t.manual ? " sections" : " phases") : ""} · ${n} angler${n === 1 ? "" : "s"}`)),
       el("span", { class: "pill " + st }, { live: "Live", soon: "Upcoming", final: "Final" }[st]));
   })));
 }
@@ -3095,6 +3115,11 @@ function viewCreateTour(p) {
   const endField = el("label", { class: "field" }, el("span", null, "Ends"), el("input", { id: "t-end", type: "datetime-local", value: dtLocal(start0 + 3 * 3600000) }));
   const phaseWrap = el("div", { class: "stack", hidden: true });
   const startInput = el("input", { id: "t-start", type: "datetime-local", value: dtLocal(start0) });
+  const startField = el("label", { class: "field" }, el("span", null, "Starts"), startInput);
+  const manBox = el("input", { type: "checkbox", id: "t-manual" });
+  const totalIn = el("input", { id: "t-total", type: "number", inputmode: "numeric", min: 5, max: 4320, value: "180", "aria-label": "Minutes" });
+  const totalField = el("label", { class: "field", id: "t-totalfield", hidden: "" }, el("span", null, "How long is it? (minutes)"), totalIn);
+  const syncMan = () => { const m = manBox.checked; startField.hidden = m; endField.hidden = m || splitBox.checked; totalField.hidden = !(m && !splitBox.checked); paintSummary(); };
   const feeBox = el("input", { type: "checkbox", id: "t-feeon" });
   const feeIn = el("input", { id: "t-fee", type: "number", inputmode: "decimal", min: 1, max: 500, step: "0.01", placeholder: "5", "aria-label": "Entry fee in dollars" });
   const payIn = el("input", { id: "t-pay", maxlength: 60, placeholder: "Cash App $name, Venmo @name, or cash at the ramp", value: cashTag(S.cash) ? "Cash App " + cashTag(S.cash) : "", "aria-label": "How to pay" });
@@ -3104,7 +3129,7 @@ function viewCreateTour(p) {
   function paintSummary() {
     const mins = phaseRows.reduce((a, r) => a + (parseInt(r.mins.value) || 0), 0);
     const st = new Date(startInput.value).getTime();
-    summary.textContent = mins && st ? `Total ${Math.floor(mins / 60)}h ${mins % 60}m. Ends ${fmtWhen(st + mins * 60000)}.` : "Enter the minutes for each phase.";
+    summary.textContent = mins && manBox.checked ? `Total ${Math.floor(mins / 60)}h ${mins % 60}m, counted from when you press Start on each section.` : mins && st ? `Total ${Math.floor(mins / 60)}h ${mins % 60}m. Ends ${fmtWhen(st + mins * 60000)}.` : "Enter the minutes for each phase.";
   }
   function addPhase(pre = {}) {
     const r = {
@@ -3123,13 +3148,23 @@ function viewCreateTour(p) {
   }
   addPhase({ mins: 60 }); addPhase({ mins: 60 });
   phaseWrap.append(phasesBox, el("button", { class: "btn ghost small", type: "button", style: "align-self:flex-start", onclick: () => { if (phaseRows.length >= 8) { toast("That's the max of 8 phases."); return; } addPhase({ mins: 60 }); } }, "+ Add phase"), summary);
-  splitBox.addEventListener("change", () => { phaseWrap.hidden = !splitBox.checked; endField.hidden = splitBox.checked; paintSummary(); });
+  splitBox.addEventListener("change", () => { phaseWrap.hidden = !splitBox.checked; syncMan(); });
+  manBox.addEventListener("change", syncMan);
   startInput.addEventListener("input", paintSummary);
   const spMode = el("select", { id: "t-spmode", "aria-label": "Which fish count" }, el("option", { value: "all" }, "Any fish"), el("option", { value: "one" }, "Only one type of fish"), el("option", { value: "many" }, "A few types of fish"));
   const spIn = el("input", { id: "t-species", maxlength: 150, placeholder: "Largemouth Bass", autocomplete: "off", hidden: "" });
   const spHint = el("span", { class: "hint", id: "t-sphint" }, "Every fish counts on the leaderboard.");
+  const spChips = el("div", { class: "chips", id: "t-spchips", role: "group", "aria-label": "Tap fish to pick them", hidden: "" }, ["Largemouth Bass", "Smallmouth Bass", "Spotted Bass", "Crappie", "Bluegill", "Catfish", "Walleye", "Trout", "Striped Bass", "Northern Pike", "Carp", "White Bass"].map((n) =>
+    el("button", { class: "chip", type: "button", "data-fish": n, "aria-pressed": "false", onclick: (e) => {
+      const cur = spIn.value.split(",").map((x) => x.trim()).filter(Boolean), has = cur.some((x) => sk(x) === sk(n));
+      let next = has ? cur.filter((x) => sk(x) !== sk(n)) : spMode.value === "one" ? [n] : [...cur, n].slice(0, 6);
+      spIn.value = next.join(", "); paintSp();
+    } }, n)));
+  const paintSp = () => { const cur = spIn.value.split(",").map((x) => sk(x)); spChips.querySelectorAll("button").forEach((b) => b.setAttribute("aria-pressed", String(cur.includes(sk(b.dataset.fish))))); };
+  spIn.addEventListener("input", paintSp);
   spMode.addEventListener("change", () => {
-    const m = spMode.value; spIn.hidden = m === "all";
+    const m = spMode.value; spIn.hidden = m === "all"; spChips.hidden = m === "all";
+    if (m === "one" && spIn.value.includes(",")) spIn.value = spIn.value.split(",")[0].trim(); paintSp();
     if (m === "one") { spIn.setAttribute("list", "species"); spIn.placeholder = "Largemouth Bass"; spHint.textContent = "Only this fish counts. Other fish posted into the tournament are left out."; }
     else if (m === "many") { spIn.removeAttribute("list"); spIn.placeholder = "Largemouth Bass, Crappie, Bluegill"; spHint.textContent = "Separate the fish with commas (up to 6). Typing just Bass counts every kind of bass."; }
     else spHint.textContent = "Every fish counts on the leaderboard.";
@@ -3139,9 +3174,10 @@ function viewCreateTour(p) {
     el("label", { class: "field" }, el("span", null, "How is the leaderboard scored?"),
       el("select", { id: "t-scoring", name: "scoring" }, Object.entries(SCORING).map(([k, s]) => el("option", { value: k }, `${s.name}: ${s.desc}`))),
       el("span", { class: "hint" }, "First fish, biggest fish and most fish awards are always shown too.")),
-    el("div", { class: "field", id: "t-fish" }, el("span", null, "Which fish count?"), spMode, spIn, spHint),
-    el("label", { class: "field" }, el("span", null, "Starts"), startInput),
-    endField,
+    el("div", { class: "field", id: "t-fish" }, el("span", null, "Which fish count?"), spMode, spChips, spIn, spHint),
+    priv ? el("label", { class: "row", style: "gap:10px;flex-wrap:nowrap", id: "t-manual-row" }, manBox, el("span", null, "I'll start the clock myself (press Start when everyone is ready)")) : null,
+    startField,
+    endField, totalField,
     el("label", { class: "row", style: "gap:10px;flex-wrap:nowrap" }, splitBox, el("span", null, "Split into phases (a different lake or lure for each part)")),
     phaseWrap,
     el("div", { class: "field", id: "t-money" }, el("span", null, "Entry fee and prize"),
@@ -3155,7 +3191,7 @@ function viewCreateTour(p) {
     const fd = new FormData(f);
     const name = String(fd.get("name") || "").trim();
     if (badText(name)) { toast(NO_SLURS); return; }
-    const startAt = new Date(startInput.value).getTime();
+    const manual = priv && manBox.checked, startAt = manual ? Date.now() : new Date(startInput.value).getTime();
     if (!name) { toast("Give the tournament a name."); return; }
     if (!startAt) { toast("Pick a start date and time."); return; }
     let endAt, phases = [];
@@ -3164,6 +3200,10 @@ function viewCreateTour(p) {
       if (phases.some((x) => isBad(x.name, x.where, x.lure))) { toast(NO_SLURS); return; }
       if (phases.some((x) => x.mins < 5 || x.mins > 1440)) { toast("Each phase needs 5 to 1440 minutes."); return; }
       endAt = startAt + phases.reduce((a, x) => a + x.mins, 0) * 60000;
+    } else if (manual) {
+      const mins = parseInt(totalIn.value) || 0;
+      if (mins < 5 || mins > 4320) { toast("How long it runs has to be 5 to 4320 minutes."); return; }
+      phases = [{ name: "Fishing time", where: "", lure: "", mins }]; endAt = startAt + mins * 60000;
     } else {
       endAt = new Date(f.querySelector("#t-end").value).getTime();
       if (!endAt || endAt <= startAt) { toast("The end has to be after the start."); return; }
@@ -3185,6 +3225,7 @@ function viewCreateTour(p) {
       const data = { name, fee, prize, payHow: fee ? payHow : "", paid: [S.user.uid], scoring: fd.get("scoring"), start: localDate(new Date(startAt)), end: localDate(new Date(endAt)), startAt, endAt,
         createdBy: S.user.uid, createdByName: S.name, members: [S.user.uid], createdAt: serverTimestamp() };
       if (phases.length) data.phases = phases;
+      if (manual) { delete data.startAt; delete data.endAt; data.manual = true; data.pstart = phases.map(() => 0); data.pend = phases.map(() => 0); }
       if (spNames.length) data.species = spNames;
       if (priv) data.private = true;
       if (!canPubTour() && !priv) {   // only the owner makes public tournaments, so everyone else asks first
@@ -3238,6 +3279,27 @@ function awardsFor(posts) {
   const most = [...counts.values()].sort((a, b) => b.n - a.n)[0];
   return { first, big, most };
 }
+function tourClock(t) {
+  const wins = manualWins(t), n = wins.length, single = n === 1, now = Date.now(), status = tourStatus(t);
+  const running = wins.find((w) => w.s && now >= w.s && now < w.e), next = wins.find((w) => !w.s);
+  const ps = wins.map((w) => w.s), pe = wins.map((w) => (+(t.pend || [])[w.i] || 0));
+  const save = async (a, b, extra = {}, msg = "Done.") => { try { await updateDoc(doc(db, "tournaments", t.id), { pstart: a, pend: b, ...extra }); toast(msg); } catch (err) { toast(errText(err)); } };
+  const twoTap = (id, text, armed, fn) => { let on = false; return el("button", { class: "btn ghost wide", type: "button", id, onclick: (e) => { if (!on) { on = true; e.target.textContent = armed; setTimeout(() => { on = false; e.target.textContent = text; }, 4000); return; } fn(); } }, text); };
+  if (status === "final") return el("p", { class: "hint", id: "tour-clock" }, "This tournament is finished.");
+  const kids = [el("h2", null, "⏱ You run the clock")];
+  if (next) {
+    const ph = next.ph, what = [`${ph.mins} minutes`, ph.where || null, ph.lure ? ph.lure + " only" : null].filter(Boolean).join(" · ");
+    kids.push(el("button", { class: "btn wide", type: "button", id: "clock-start", onclick: () => {
+      const t0 = Date.now(), a = ps.slice(), b = pe.slice(); a[next.i] = t0; if (running) b[running.i] = t0;
+      save(a, b, {}, single ? "Clock started. Good luck!" : `${ph.name} started.`);
+    } }, single ? "▶ Start the tournament" : `▶ Start ${next.i === 0 ? "" : "next: "}${ph.name}`), el("p", { class: "hint", style: "margin:0" }, what + (running && !single ? ". This also ends the section that's running." : "")));
+  }
+  if (running) kids.push(twoTap("clock-end", running.i === n - 1 ? "■ End the tournament now" : "■ End this section now", "Tap again to end it", () => {
+    const b = pe.slice(); b[running.i] = Date.now(); save(ps, b, running.i === n - 1 ? { endedAt: Date.now() } : {}, "Ended.");
+  }));
+  if (next && !single && status === "live") kids.push(twoTap("clock-endall", "■ End the whole tournament now", "Tap again to end everything", () => save(ps, pe, { endedAt: Date.now() }, "Tournament ended.")));
+  return el("section", { class: "stack tour-money", id: "tour-clock" }, kids);
+}
 function viewTour(p) {
   const t = S.tournaments.find((x) => x.id === S.openTournament);
   if (!t) { p.append(el("button", { class: "link", type: "button", style: "align-self:flex-start", onclick: () => { S.openTournament = null; tourUnsub?.(); tourUnsub = null; renderTab(); } }, "‹ All tourneys"), el("p", { class: "muted" }, "Loading tournament…")); return; }
@@ -3246,7 +3308,7 @@ function viewTour(p) {
   p.append(el("button", { class: "link", type: "button", style: "align-self:flex-start", onclick: () => { S.openTournament = null; tourUnsub?.(); tourUnsub = null; renderTab(); } }, "‹ All tourneys"),
     el("div", { class: "stack", style: "gap:6px" },
       el("div", { class: "row" }, el("span", { class: "pill " + st }, { live: "Live", soon: "Upcoming", final: "Final" }[st]),
-        el("span", { class: "label" }, timed ? `${fmtWhen(range.s)} to ${fmtWhen(range.e)}` : `${fmtDay(t.start)}${t.end !== t.start ? " – " + fmtDay(t.end) : ""}`)),
+        el("span", { class: "label" }, t.manual ? (range.s ? `Started ${fmtWhen(range.s)}` : "Organizer starts the clock") : timed ? `${fmtWhen(range.s)} to ${fmtWhen(range.e)}` : `${fmtDay(t.start)}${t.end !== t.start ? " – " + fmtDay(t.end) : ""}`)),
       el("h1", null, t.name),
       t.private ? el("span", { class: "pill soon", style: "align-self:flex-start" }, "🔒 Invite only") : null,
       speciesPill(t),
@@ -3278,6 +3340,23 @@ function viewTour(p) {
     if (t.createdBy === S.user.uid || S.owner) { /* organizer and owner fall through */ } else return;
   }
   p.append(tourMoneyCard(t, joined));
+  if (t.manual) {
+    const wins = phases, n = wins.length, single = n === 1, org = t.createdBy === S.user.uid, orgName = t.createdByName || "the organizer";
+    const lab = el("span", { class: "label" }), big = el("b", { class: "big" }), sub = el("span", { class: "hint" });
+    p.append(el("div", { class: "timer", role: "timer", id: "tour-timer" }, lab, big, sub));
+    let lastKey = "";
+    const upd = () => {
+      const now = Date.now(), status = tourStatus(t), idx = phaseAt(t, now), key = status + idx;
+      if (lastKey && key !== lastKey) { renderTab(); return; }
+      lastKey = key;
+      if (status === "soon") { lab.textContent = "Not started"; big.textContent = "Waiting"; sub.textContent = org ? "Tap Start below when everyone is ready." : `Waiting for @${orgName} to start the clock.`; }
+      else if (status === "final") { lab.textContent = "Finished"; big.textContent = "Time's up"; sub.textContent = ""; }
+      else if (idx >= 0) { lab.textContent = single ? "Time left" : `Section ${idx + 1} of ${n}: ${wins[idx].ph.name}`; big.textContent = fmtDur(wins[idx].e - now) + " left"; sub.textContent = ""; }
+      else { lab.textContent = "Between sections"; big.textContent = "Break"; sub.textContent = org ? "Start the next section when you're ready." : `Waiting for @${orgName} to start the next section. Catches don't count until then.`; }
+    };
+    upd(); tick = setInterval(upd, 1000);
+    if (org) p.append(tourClock(t));
+  }
   if (timed) {
     const lab = el("span", { class: "label" }), big = el("b", { class: "big" }), sub = el("span", { class: "hint" });
     p.append(el("div", { class: "timer", role: "timer" }, lab, big, sub));
@@ -3293,13 +3372,13 @@ function viewTour(p) {
     };
     upd(); tick = setInterval(upd, 1000);
   }
-  if (phases.length) {
-    const nowIdx = phaseAt(t);
+  if (phases.length && !(t.manual && phases.length === 1)) {
+    const nowIdx = phaseAt(t), done = (w) => t.manual ? !!w.s && Date.now() >= w.e : Date.now() > w.e;
     p.append(el("section", { class: "stack" }, el("h2", null, "Phases"), el("div", { class: "list" }, phases.map((w) =>
       el("div", { class: "item", style: "cursor:default" },
         el("div", { class: "stack", style: "gap:2px;min-width:0" }, el("span", { class: "t" }, `${w.i + 1}. ${w.ph.name}`),
           el("span", { class: "s" }, [w.ph.where || null, w.ph.lure ? w.ph.lure + " only" : "Any lure", `${w.ph.mins} min`].filter(Boolean).join(" · "))),
-        el("span", { class: "pill " + (w.i === nowIdx ? "live" : Date.now() > w.e ? "final" : "soon") }, w.i === nowIdx ? "Now" : Date.now() > w.e ? "Done" : "Next"))))));
+        el("span", { class: "pill " + (w.i === nowIdx ? "live" : done(w) ? "final" : "soon") }, w.i === nowIdx ? "Now" : done(w) ? "Done" : "Next"))))));
   }
   if (!joined && st !== "final" && !t.private) p.append(el("button", { class: "btn wide", type: "button", id: "t-join", onclick: async () => {
     if ((+t.fee || 0) > 0 && !confirm(`This tournament has a ${fmtFee(+t.fee)} entry fee. Weigh-In doesn't take payments. You pay @${t.createdByName || "the organizer"} yourself${t.payHow ? " (" + t.payHow + ")" : ""}. Join?`)) return;
@@ -3311,7 +3390,7 @@ function viewTour(p) {
   const members = t.members || [];
   const counted = S.tourPosts.filter((x) => members.includes(x.uid) && catchCounts(t, x));
   const scoped = phaseFilter == null ? counted : counted.filter((x) => x.phase === phaseFilter);
-  if (phases.length) p.append(el("div", { class: "chips", role: "group", "aria-label": "Show results for" },
+  if (phases.length && !(t.manual && phases.length === 1)) p.append(el("div", { class: "chips", role: "group", "aria-label": "Show results for" },
     [["Overall", null], ...phases.map((w) => [w.ph.name, w.i])].map(([label, v]) =>
       el("button", { class: "chip", type: "button", "aria-pressed": String(phaseFilter === v), onclick: () => { phaseFilter = v; renderTab(); } }, label))));
 
