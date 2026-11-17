@@ -1407,7 +1407,7 @@ const UPDATES = [
     "Pins that are bunched together now group into a green bubble that matches the app.",
     "The round buttons under your name now say what they do: Updates, Settings, Years, Chat and Log.",
     "Buttons and filter chips all over the app are bigger, so they are easier to hit with a thumb.",
-    "Your profile now fits on one screen. Fishing school, the game, Spot saver and Spot finder sit in a grid instead of a long list you had to scroll."] },
+    "Your profile now fits on one screen and fills it. Fishing school, the game, Spot saver and Spot finder are big tiles in a grid instead of a long list you had to scroll."] },
   { id: "2026-11-16a", v: 77, date: "Nov 16", title: "Works without signal", items: [
     "Out on the water with no bars? Weigh-In now opens anyway, and you can still read your feed, your log and your saved spots.",
     "Post a catch with no signal and it goes up by itself the moment you get service again. Nothing is lost.",
