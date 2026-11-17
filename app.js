@@ -155,6 +155,42 @@ async function thumbFrom(dataUrl, max = 160) {
     return encodePic(c, 0.6);
   } catch { return ""; }
 }
+/* ---------- catch photos in Cloudflare R2 ----------
+   New catch photos are saved to a photo bucket (functions/api/photo.js) and the catch just keeps a short link.
+   Everything that shows a photo still works, because a link is a picture too. If the bucket is not set up,
+   or there is no signal, nothing changes: the photo is saved inside the catch like before. */
+const R2_URL = /^\/api\/photo\?id=/;
+function dataToBlob(d) {
+  const m = /^data:([^;,]+);base64,(.*)$/.exec(d || "");
+  if (!m) return null;
+  const bin = atob(m[2]), u = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) u[i] = bin.charCodeAt(i);
+  return new Blob([u], { type: m[1] });
+}
+async function uploadPhoto(dataUrl) {
+  try {
+    if (navigator.onLine === false || !auth.currentUser) return "";
+    const blob = dataToBlob(dataUrl);
+    if (!blob || blob.size > 380000) return "";
+    const tok = await auth.currentUser.getIdToken();
+    const ac = new AbortController(), to = setTimeout(() => ac.abort(), 25000);
+    try {
+      const r = await fetch("/api/photo", { method: "POST", headers: { Authorization: "Bearer " + tok, "Content-Type": blob.type }, body: blob, signal: ac.signal });
+      if (!r.ok || !(r.headers.get("content-type") || "").includes("json")) return "";
+      const j = await r.json();
+      return R2_URL.test(j?.url || "") ? j.url : "";
+    } finally { clearTimeout(to); }
+  } catch { return ""; }
+}
+// url: a photo link to remove, or "all" for every photo this person ever saved. Never blocks anything.
+async function r2Delete(url) {
+  try {
+    if (url !== "all" && !R2_URL.test(url || "")) return;
+    if (!auth.currentUser) return;
+    const tok = await auth.currentUser.getIdToken();
+    await fetch(url === "all" ? "/api/photo?all=1" : url, { method: "DELETE", headers: { Authorization: "Bearer " + tok } });
+  } catch { /* the photo just stays in the bucket */ }
+}
 /* ---------- color themes ---------- */
 const THEMES = [["auto", "Auto", "Follows your phone"], ["light", "Light", "Green and orange"], ["night", "Night", "Dark green"], ["black", "Black", "Black, red and blue"]];
 const THEME_BAR = { light: "#1F5C4D", night: "#0E1B18", black: "#000000" };
@@ -1345,10 +1381,10 @@ function feedPosts() {
 /* What's new. Newest first. Add a new entry on top each time the app changes. */
 /* Bump APP_VERSION every time you change the app, and add a matching entry on top of UPDATES (with v: the same number).
    Phones check app.js every few minutes and offer the new version on their own. */
-const APP_VERSION = 79;
+const APP_VERSION = 80;
 // The number people see. APP_VERSION stays a plain counter so updates are detected. Big changes bump the first number (2.0), smaller ones the second (1.1, 1.2).
 const REL_NAMES = { 59: "1.0", 60: "1.0", 61: "1.1", 62: "1.2", 63: "1.2", 64: "1.2", 65: "1.2", 66: "1.2", 67: "1.2",
-  68: "1.3", 69: "1.3", 70: "1.3", 71: "1.4", 72: "1.4", 73: "1.5", 74: "1.5", 75: "1.5", 76: "1.5", 77: "1.8", 78: "1.8", 79: "1.9" };
+  68: "1.3", 69: "1.3", 70: "1.3", 71: "1.4", 72: "1.4", 73: "1.5", 74: "1.5", 75: "1.5", 76: "1.5", 77: "1.8", 78: "1.8", 79: "1.9", 80: "1.9" };
 const relName = (v) => REL_NAMES[v] || (v < 59 ? `0.${v}` : `1.${v - 59}`);
 try { if ((parseInt(localStorage.getItem("weighin-appv"), 10) || 0) < APP_VERSION) localStorage.setItem("weighin-appv", String(APP_VERSION)); } catch { /* private mode */ }
 const UPDATES = [
@@ -1365,7 +1401,8 @@ const UPDATES = [
     "Hearts load a lot faster. Every phone used to download every like in the whole app just to show the numbers; now each catch carries its own count.",
     "The feed no longer stops at the 40 newest catches. Swipe to the bottom and tap Load older catches to keep going back through everything.",
     "Catch photos are now about a third of the size with no difference you can see, so the feed loads faster, uses less of your data, and the app can hold far more catches.",
-    "A Download the app button in your profile, with step-by-step pictures for iPhone."] },
+    "A Download the app button in your profile, with step-by-step pictures for iPhone.",
+    "New catch photos are kept on their own photo shelf instead of inside the catch, so the app can hold many more catches and stays quick."] },
   { id: "2026-11-15f", v: 67, date: "Nov 15", title: "Log icon", items: [
     "Fishing log is now a small 📓 button by your other icons under your name."] },
   { id: "2026-11-15e", v: 66, date: "Nov 15", title: "Spot finder and chat icon", items: [
@@ -2128,6 +2165,7 @@ async function deletePost(p) {
   if (!confirm("Delete this catch? This can't be undone.")) return;
   try {
     await deleteDoc(doc(db, "posts", p.id)); cardCache.delete(p.id);
+    r2Delete(p.photo);
     if (p.vid) vidDelete(p.id, p.vid.n);
     deleteDoc(doc(db, "spots", p.id)).catch(() => {}); // its map pin, if it had one
     toast("Catch deleted.");
@@ -2201,7 +2239,7 @@ async function reportPost(p) {
 async function ownerDeletePost(r, all = []) {
   if (!can("deletePosts")) return;
   if (!confirm(`Delete @${r.postName}'s ${r.species} post for everyone?`)) return;
-  try { await deleteDoc(doc(db, "posts", r.postId)); cardCache.delete(r.postId); deleteDoc(doc(db, "spots", r.postId)).catch(() => {}); all.filter((x) => x.postId === r.postId).forEach((x) => deleteDoc(doc(db, "reports", x.id)).catch(() => {})); toast("Post deleted."); }
+  try { if (S.user.uid === OWNER_UID) { const old = await getDoc(doc(db, "posts", r.postId)).catch(() => null); r2Delete(old?.data?.()?.photo); } await deleteDoc(doc(db, "posts", r.postId)); cardCache.delete(r.postId); deleteDoc(doc(db, "spots", r.postId)).catch(() => {}); all.filter((x) => x.postId === r.postId).forEach((x) => deleteDoc(doc(db, "reports", x.id)).catch(() => {})); toast("Post deleted."); }
   catch (e) { toast(errText(e)); }
 }
 function openModEditor(uid, name, current) {
@@ -2557,12 +2595,21 @@ function viewPost(p) {
         catch (err) { vidDelete(ref.id, 8); toast("Couldn't save the video: " + errText(err)); btn.disabled = false; btn.textContent = "Post catch"; return; }
         btn.textContent = "Posting…";
       }
-      await setDoc(ref, {
+      btn.textContent = "Saving photo…";
+      const r2url = draftPhoto ? await uploadPhoto(draftPhoto) : "";
+      btn.textContent = "Posting…";
+      const saveCatch = (photo) => setDoc(ref, {
         uid: S.user.uid, name: S.name, species, lb, inches, ...(vinfo ? { vid: vinfo } : {}), ...(pb ? { pb: true, pbKind: pb } : {}),
         lure, spot: spotText, city: cityText, state: stateCode,
-        catchDate: dateStr, photo: draftPhoto || "", tournamentId: tOk ? t.id : "", tournamentName: tOk ? t.name : "",
+        catchDate: dateStr, photo: photo || "", tournamentId: tOk ? t.id : "", tournamentName: tOk ? t.name : "",
         phase: phaseIdx, createdAt: serverTimestamp(),
       });
+      try { await saveCatch(r2url || draftPhoto); }
+      catch (e) {
+        // Photo link not allowed yet (the new rules aren't published)? Save the photo inside the catch like before.
+        if (r2url && e?.code === "permission-denied") { try { await saveCatch(draftPhoto); } catch (e2) { r2Delete(r2url); throw e2; } r2Delete(r2url); }
+        else { if (r2url) r2Delete(r2url); throw e; }
+      }
       let pinFailed = false;
       if (pin) {
         const exact = fd.get("prec") === "exact";
@@ -4705,6 +4752,7 @@ async function deleteMyAccount() {
     stopAll();
     const posts = await wipe(query(collection(db, "posts"), where("uid", "==", uid)));
     for (const d of posts) { const p = d.data(); if (p.vid) await vidDelete(d.id, p.vid.n); await deleteDoc(doc(db, "spots", d.id)).catch(() => {}); }
+    await r2Delete("all");
     await wipe(query(collection(db, "likes"), where("uid", "==", uid)));
     await wipe(query(collection(db, "recaps"), where("uid", "==", uid)));
     await wipe(collection(db, "users", uid, "saved"));
