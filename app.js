@@ -4431,8 +4431,8 @@ function viewMe(p) {
     isInstalled()
       ? el("button", { class: "btn wide share-btn", type: "button", id: "me-share", onclick: shareApp }, "📤 Share Weigh-In with friends")
       : el("div", { class: "share-row" },
-          el("button", { class: "btn share-btn", type: "button", id: "me-share", onclick: shareApp }, "📤 Share with friends"),
-          el("button", { class: "btn share-btn", type: "button", id: "me-install", onclick: installApp }, "📲 Get the app")),
+          el("button", { class: "btn share-btn", type: "button", id: "me-share", onclick: shareApp }, "📤 Share Weigh-In with friends"),
+          el("button", { class: "btn share-btn", type: "button", id: "me-install", onclick: installApp }, "📲 Download the app")),
     (() => { const r = schRank(sch().xp), nx = schNext(); return card("me-school", r.icon, "Fishing school", `${r.title} · ${sch().xp} XP${nx ? " · " + nx.text : ""}`, () => { S.sch = { v: "home" }; S.meView = "school"; renderTab(); }); })(),
     card("me-game", "🎣", "Fishing game", `Level ${fcLevel()} · 🪙 ${fcCoins()} · cast, hook and reel`, openFishGame),
         card("me-spots", "📍", "Spot saver", S.saved.length ? `${S.saved.length} spot${S.saved.length === 1 ? "" : "s"} saved. Only you see them` : "Save your secret spots", open("spots")),
