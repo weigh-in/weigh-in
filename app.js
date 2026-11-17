@@ -325,7 +325,7 @@ function renderAuth(mode = "signin") {
     el("label", { class: "field" }, el("span", null, "Password"),
       el("input", { name: "pw", id: "a-pw", type: "password", autocomplete: isNew ? "new-password" : "current-password", minlength: 6, required: true })),
     el("label", { class: "row", style: "gap:8px;flex-wrap:nowrap;cursor:pointer;align-self:flex-start;font-size:.95rem" },
-      el("input", { type: "checkbox", id: "a-showpw", style: "width:20px;height:20px", onchange: (e) => { document.querySelector("#a-pw").type = e.target.checked ? "text" : "password"; } }), "Show password"),
+      el("input", { type: "checkbox", id: "a-showpw", style: "width:24px;height:24px;flex:none", onchange: (e) => { document.querySelector("#a-pw").type = e.target.checked ? "text" : "password"; } }), "Show password"),
     msg,
     el("button", { class: "btn wide", type: "submit" }, isNew ? "Create account" : "Sign in"));
   f.addEventListener("submit", async (e) => {
@@ -1393,18 +1393,20 @@ function feedPosts() {
 /* What's new. Newest first. Add a new entry on top each time the app changes. */
 /* Bump APP_VERSION every time you change the app, and add a matching entry on top of UPDATES (with v: the same number).
    Phones check app.js every few minutes and offer the new version on their own. */
-const APP_VERSION = 81;
+const APP_VERSION = 82;
 // The number people see. APP_VERSION stays a plain counter so updates are detected. Big changes bump the first number (2.0), smaller ones the second (1.1, 1.2).
 const REL_NAMES = { 59: "1.0", 60: "1.0", 61: "1.1", 62: "1.2", 63: "1.2", 64: "1.2", 65: "1.2", 66: "1.2", 67: "1.2",
-  68: "1.3", 69: "1.3", 70: "1.3", 71: "1.4", 72: "1.4", 73: "1.5", 74: "1.5", 75: "1.5", 76: "1.5", 77: "1.8", 78: "1.8", 79: "1.9", 80: "1.9", 81: "2.0" };
+  68: "1.3", 69: "1.3", 70: "1.3", 71: "1.4", 72: "1.4", 73: "1.5", 74: "1.5", 75: "1.5", 76: "1.5", 77: "1.8", 78: "1.8", 79: "1.9", 80: "1.9", 81: "2.0", 82: "2.0" };
 const relName = (v) => REL_NAMES[v] || (v < 59 ? `0.${v}` : `1.${v - 59}`);
 try { if ((parseInt(localStorage.getItem("weighin-appv"), 10) || 0) < APP_VERSION) localStorage.setItem("weighin-appv", String(APP_VERSION)); } catch { /* private mode */ }
 const UPDATES = [
-  { id: "2026-11-17a", v: 81, date: "Nov 17", title: "A map made for fishing", items: [
+  { id: "2026-11-17a", v: 82, date: "Nov 17", title: "A map made for fishing", items: [
     "The map now opens on a water map that names lakes, rivers, creeks and coves and shows the shape of the land, instead of a plain road map.",
     "Three big buttons at the top right switch between Water, Satellite and Streets. The app remembers which one you like.",
     "A distance scale sits under the zoom buttons, so you can tell how far a spot really is.",
-    "Pins that are bunched together now group into a green bubble that matches the app."] },
+    "Pins that are bunched together now group into a green bubble that matches the app.",
+    "The round buttons under your name now say what they do: Updates, Settings, Years, Chat and Log.",
+    "Buttons and filter chips all over the app are bigger, so they are easier to hit with a thumb."] },
   { id: "2026-11-16a", v: 77, date: "Nov 16", title: "Works without signal", items: [
     "Out on the water with no bars? Weigh-In now opens anyway, and you can still read your feed, your log and your saved spots.",
     "Post a catch with no signal and it goes up by itself the moment you get service again. Nothing is lost.",
@@ -2556,7 +2558,7 @@ function viewPost(p) {
       el("div", { class: "two" },
         stateSel,
         el("input", { id: "f-city", name: "city", maxlength: 40, placeholder: "City", autocomplete: "off", "aria-label": "City", oninput: onSpotInput })),
-      el("input", { id: "f-spot", name: "spot", maxlength: 40, placeholder: "Lake or spot name, like Lake Creve Coeur", autocomplete: "off", oninput: onSpotInput }),
+      el("input", { id: "f-spot", name: "spot", maxlength: 40, "aria-label": "Lake or spot name", placeholder: "Lake or spot name, like Lake Creve Coeur", autocomplete: "off", oninput: onSpotInput }),
       el("div", { class: "row" }, locBtn, pickBtn), precSel, locRemove, locNote),
     el("label", { class: "field" }, el("span", null, "Tournament"),
       el("select", { id: "f-tour", name: "tour", onchange: (e) => paintTourHint(e.target.value) }, el("option", { value: "" }, "No tournament"),
@@ -4699,21 +4701,25 @@ function viewMe(p) {
   const card = (id, icon, title, hint, fn, hot) => el("button", { class: "sch-me", type: "button", id, style: "min-height:84px;box-sizing:border-box", onclick: fn },
     el("span", { class: "sch-badge" }, icon), el("span", { class: "stack", style: "gap:2px;text-align:left;flex:1;min-width:0" }, el("b", null, title), el("span", { class: "hint", style: "white-space:nowrap;overflow:hidden;text-overflow:ellipsis" }, hint)),
     hot ? el("span", { class: "pill live" }, "New") : null, el("span", { class: "label" }, "›"));
+  const iconTile = (id, emoji, label, aria, dot, fn) => el("button", { class: "icon-tile", type: "button", id, "aria-label": aria || label, onclick: fn },
+    el("span", { class: "icon-tile-e", "aria-hidden": "true" }, emoji), el("span", { class: "icon-tile-t" }, label),
+    dot ? el("span", { class: "dot" }) : null);
   p.append(
     el("div", { class: "row", id: "me-head", style: "gap:14px;flex-wrap:nowrap;align-items:center" },
       el("button", { class: "profile-head", type: "button", id: "me-profile", "aria-label": "Open your profile", style: "background:none;border:0;padding:0;font:inherit;color:inherit;cursor:pointer;flex:none", onclick: open("profile") },
         el("div", { class: "av-edit" }, avatar(S.user.uid, S.name, 96))),
       el("div", { class: "stack", style: "gap:8px;min-width:0;flex:1" },
-        el("button", { type: "button", id: "me-profile-name", "aria-label": "Open your profile", style: "background:none;border:0;padding:0;text-align:left;font:inherit;color:inherit;cursor:pointer", onclick: open("profile") },
+        el("button", { type: "button", id: "me-profile-name", "aria-label": "Open your profile", style: "background:none;border:0;padding:0;text-align:left;font:inherit;color:inherit;cursor:pointer;min-height:44px", onclick: open("profile") },
           el("h1", { style: "overflow-wrap:anywhere;margin:0" }, "@" + S.name)),
-        el("div", { class: "row", id: "me-icons", style: "gap:8px;flex-wrap:nowrap" },
-          el("button", { class: "bell-btn", type: "button", id: "me-new", "aria-label": unseenUpdate() ? "Release notes, new" : "Release notes", style: "flex:none;position:relative;background:var(--surface, #fff);border:2px solid var(--line, #c9d6de);border-radius:50%;width:38px;height:38px;font-size:1.05rem;line-height:1;cursor:pointer;padding:0", onclick: () => openWhatsNew(renderTab) },
-            "🔔", unseenUpdate() ? el("span", { class: "dot", style: "position:absolute;top:0;right:0;width:10px;height:10px;border-radius:50%;background:#d4452a" }) : null),
-          el("button", { class: "bell-btn", type: "button", id: "me-settings", "aria-label": "Settings", style: "flex:none;position:relative;background:var(--surface, #fff);border:2px solid var(--line, #c9d6de);border-radius:50%;width:38px;height:38px;font-size:1.05rem;line-height:1;cursor:pointer;padding:0", onclick: open("settings") }, "⚙️"),
-          yearsList().ys.length ? el("button", { class: "bell-btn", type: "button", id: "me-yearsbtn", "aria-label": "Your years", style: "flex:none;position:relative;background:var(--surface, #fff);border:2px solid var(--line, #c9d6de);border-radius:50%;width:38px;height:38px;font-size:1.05rem;line-height:1;cursor:pointer;padding:0", onclick: openYears }, "🎞️") : null,
-          el("button", { class: "bell-btn", type: "button", id: "me-friends", "aria-label": S.reqIn.length + S.unread.size ? `Friends and chat, ${S.reqIn.length + S.unread.size} new` : "Friends and chat", style: "flex:none;position:relative;background:var(--surface, #fff);border:2px solid var(--line, #c9d6de);border-radius:50%;width:38px;height:38px;font-size:1.05rem;line-height:1;cursor:pointer;padding:0", onclick: open("friends") },
-            "💬", S.reqIn.length + S.unread.size ? el("span", { class: "dot", style: "position:absolute;top:0;right:0;width:10px;height:10px;border-radius:50%;background:#d4452a" }) : null),
-          el("button", { class: "bell-btn", type: "button", id: "me-log", "aria-label": "Fishing log", style: "flex:none;position:relative;background:var(--surface, #fff);border:2px solid var(--line, #c9d6de);border-radius:50%;width:38px;height:38px;font-size:1.05rem;line-height:1;cursor:pointer;padding:0", onclick: open("log") }, "📓")))),
+      )),
+    // The round emoji buttons said nothing about what they did, so each is now a tile with its name under it.
+    el("div", { class: "icon-row", id: "me-icons" }, ...[
+      iconTile("me-new", "\u{1F514}", "Updates", unseenUpdate() ? "Release notes, new" : "Release notes", unseenUpdate(), () => openWhatsNew(renderTab)),
+      iconTile("me-settings", "\u2699\uFE0F", "Settings", "Settings", false, open("settings")),
+      yearsList().ys.length ? iconTile("me-yearsbtn", "\u{1F39E}\uFE0F", "Years", "Your years", false, openYears) : null,
+      iconTile("me-friends", "\u{1F4AC}", "Chat", S.reqIn.length + S.unread.size ? `Friends and chat, ${S.reqIn.length + S.unread.size} new` : "Friends and chat", !!(S.reqIn.length + S.unread.size), open("friends")),
+      iconTile("me-log", "\u{1F4D3}", "Log", "Fishing log", false, open("log")),
+    ].filter(Boolean)),
     el("div", { class: "stats four" },
       el("div", null, el("b", null, String(mine.length)), el("span", null, "Catches")),
       el("div", null, el("b", null, String(mine.reduce((n, x) => n + likeCount(x), 0))), el("span", null, "Likes")),
@@ -4727,7 +4733,7 @@ function viewMe(p) {
     (() => { const r = schRank(sch().xp), nx = schNext(); return card("me-school", r.icon, "Fishing school", `${r.title} · ${sch().xp} XP${nx ? " · " + nx.text : ""}`, () => { S.sch = { v: "home" }; S.meView = "school"; renderTab(); }); })(),
     card("me-game", "🎣", "Fishing game", `Level ${fcLevel()} · 🪙 ${fcCoins()} · cast, hook and reel`, openFishGame),
         card("me-spots", "📍", "Spot saver", S.saved.length ? `${S.saved.length} spot${S.saved.length === 1 ? "" : "s"} saved. Only you see them` : "Save your secret spots", open("spots")),
-    card("me-water", "🔍", "Spot finder", "Narrow down lakes and spots near an area", open("water")),
+    card("me-water", "🔍", "Spot finder", "Find lakes and spots near you", open("water")),
     wrapSeason() ? card("me-wrap", "🎞️", "Your year in fish", `${wrapYear()} recap · tap to watch`, () => openWrapped(wrapYear())) : null,
   );
 }
