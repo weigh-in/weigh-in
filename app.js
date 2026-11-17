@@ -277,17 +277,24 @@ function stopAll() { unsubs.splice(0).forEach((u) => u()); stopTrade(); tourUnsu
 const NAME_RE = /^[A-Za-z0-9_]{2,20}$/;
 
 /* ---------- house rules: keep slurs out of names, posts, comments and chat ---------- */
-const BLOCK_PATTERNS = [/n+i+g{2,}[ea]+/, /f+a+g{2,}o+t/, /t+r+a+n+n+y+/, /w+e+t+b+a+c+k/];  // always bad, even inside other words
-const BLOCK_WORDS = new Set(["kike", "kikes", "spic", "spics", "chink", "chinks", "gook", "gooks", "coon", "coons", "beaner", "beaners", "dyke", "dykes", "paki", "retard", "retards", "retarded", "fag", "fags"]);
+const BLOCK_PATTERNS = [/t+r+a+n+n+y+/];   // always bad, even inside another word
+const BLOCK_WORDS = new Set(["kike", "kikes", "spic", "spics", "chink", "chinks", "gook", "gooks", "coon", "coons", "beaner", "beaners", "dyke", "dykes", "paki", "retard", "retards", "retarded", "fag", "fags", "wetback", "wetbacks"]);
 function badText(text) {
   const base = String(text || "").toLowerCase().normalize("NFKD").replace(/[\u0300-\u036f]/g, "");
   const leet = base.replace(/[013457@$!|]/g, (c) => ({ "0": "o", "1": "i", "3": "e", "4": "a", "5": "s", "7": "t", "@": "a", "$": "s", "!": "i", "|": "i" }[c]));
-  const squashed = leet.replace(/[^a-z]/g, "");
-  if (BLOCK_PATTERNS.some((re) => re.test(squashed))) return true;
-  return leet.split(/[^a-z]+/).some((w) => BLOCK_WORDS.has(w));
+  const tokens = leet.split(/[^a-z]+/).filter(Boolean);
+  // letters spaced out one at a time, like "n i g g e r" or "r.e.t.a.r.d"
+  const spaced = []; let run = "";
+  for (const w of tokens) { if (w.length === 1) run += w; else { if (run.length >= 3) spaced.push(run); run = ""; } }
+  if (run.length >= 3) spaced.push(run);
+  // the two worst words are caught even when squashed into other words, except real words like snigger
+  const sq = leet.replace(/[^a-z]/g, "").replace(/snigger/g, "");
+  if (/n+i+g{2,}[ea]+/.test(sq) || /f+a+g{2,}o+t/.test(sq)) return true;
+  // everything else is checked one word at a time, so "wet backpack" and "Grandpa's pond" are fine
+  return [...tokens, ...spaced].some((w) => BLOCK_WORDS.has(w) || BLOCK_PATTERNS.some((re) => re.test(w)));
 }
 const NO_SLURS = "That includes language that isn't allowed here. Please change it.";
-const PERMS = [["deletePosts", "Delete catches"], ["deleteComments", "Delete comments"], ["reports", "See and handle reports"], ["ban", "Ban and unban anglers"], ["warn", "Warn anglers"]];
+const PERMS = [["deletePosts", "Delete catches"], ["deleteComments", "Delete comments"], ["deleteTours", "Delete tournaments"], ["reports", "See and handle reports"], ["ban", "Ban and unban anglers"], ["warn", "Warn anglers"]];
 /* How the map looks. Water is the US Geological Survey's topographic map: it names lakes, rivers,
    creeks and coves and shows the shape of the land, which is what you want when you are sizing up a
    spot. Satellite is real pictures from above. Streets is the plain road map for getting there.
@@ -1393,13 +1400,17 @@ function feedPosts() {
 /* What's new. Newest first. Add a new entry on top each time the app changes. */
 /* Bump APP_VERSION every time you change the app, and add a matching entry on top of UPDATES (with v: the same number).
    Phones check app.js every few minutes and offer the new version on their own. */
-const APP_VERSION = 84;
+const APP_VERSION = 85;
 // The number people see. APP_VERSION stays a plain counter so updates are detected. Big changes bump the first number (2.0), smaller ones the second (1.1, 1.2).
 const REL_NAMES = { 59: "1.0", 60: "1.0", 61: "1.1", 62: "1.2", 63: "1.2", 64: "1.2", 65: "1.2", 66: "1.2", 67: "1.2",
-  68: "1.3", 69: "1.3", 70: "1.3", 71: "1.4", 72: "1.4", 73: "1.5", 74: "1.5", 75: "1.5", 76: "1.5", 77: "1.8", 78: "1.8", 79: "1.9", 80: "1.9", 81: "2.0", 82: "2.0", 83: "1.19", 84: "1.20" };
+  68: "1.3", 69: "1.3", 70: "1.3", 71: "1.4", 72: "1.4", 73: "1.5", 74: "1.5", 75: "1.5", 76: "1.5", 77: "1.8", 78: "1.8", 79: "1.9", 80: "1.9", 81: "2.0", 82: "2.0", 83: "1.19", 84: "1.20", 85: "1.21" };
 const relName = (v) => REL_NAMES[v] || (v < 59 ? `0.${v}` : `1.${v - 59}`);
 try { if ((parseInt(localStorage.getItem("weighin-appv"), 10) || 0) < APP_VERSION) localStorage.setItem("weighin-appv", String(APP_VERSION)); } catch { /* private mode */ }
 const UPDATES = [
+  { id: "2026-11-17d", v: 85, date: "Nov 17", title: "Tournament boxes, deleting and a better filter", items: [
+    "Every tournament now has its own box, and it says who made it.",
+    "The owner can delete any tournament, and can now give moderators a Delete tournaments power. Moderators can never delete or ban the owner, warn the owner, or remove the owner's catches, comments or tournaments.",
+    "The word filter is fairer: plain phrases like wet backpack are no longer blocked by accident, and letters spaced apart like r e t a r d are now caught."] },
   { id: "2026-11-17c", v: 84, date: "Nov 17", title: "Start the clock yourself", items: [
     "Private tournaments can now start when you say. Tick I'll start the clock myself, then press Start when everyone is ready.",
     "Split a tournament into sections and press Start on each one, like a different lure or spot for each part. Everyone sees a live countdown, and catches only count while a section is running.",
@@ -3097,12 +3108,14 @@ function viewTours(p) {
   const joinPanel = tourJoinPanel(); if (joinPanel) p.append(joinPanel);
   const reqPanel = tourRequestsPanel(); if (reqPanel) p.append(reqPanel);
   if (!ts.length) { p.append(el("p", { class: "empty" }, canPubTour() ? "No tournaments yet. Tap New to start one." : "No tournaments yet. Tap Request one to ask the owner to start one.")); return; }
-  p.append(el("div", { class: "list" }, ts.map((t) => {
-    const st = tourStatus(t), n = (t.members || []).length;
-    return el("button", { class: "item", type: "button", onclick: () => openTour(t.id) },
-      el("div", { class: "stack", style: "gap:2px;min-width:0" }, el("span", { class: "t" }, t.name), t.private ? el("span", { class: "pill soon", style: "align-self:flex-start" }, "🔒 Invite only") : null, speciesPill(t), tourMoneyLine(t),
-        el("span", { class: "s" }, `${SCORING[t.scoring]?.name || ""} · ${t.manual ? "Organizer starts the clock" : t.startAt ? fmtWhen(t.startAt) : fmtDay(t.start) + (t.end !== t.start ? " – " + fmtDay(t.end) : "")}${phasesOf(t).length > 1 ? " · " + phasesOf(t).length + (t.manual ? " sections" : " phases") : ""} · ${n} angler${n === 1 ? "" : "s"}`)),
-      el("span", { class: "pill " + st }, { live: "Live", soon: "Upcoming", final: "Final" }[st]));
+  p.append(el("div", { class: "list tour-cards", id: "tour-list" }, ts.map((t) => {
+    const st = tourStatus(t), n = (t.members || []).length, mine = t.createdBy === S.user.uid;
+    return el("button", { class: "item tour-card", type: "button", "data-tour": t.id, onclick: () => openTour(t.id) },
+      el("div", { class: "stack", style: "gap:4px;min-width:0;flex:1" },
+        el("div", { class: "row spread", style: "flex-wrap:nowrap;align-items:flex-start;gap:8px" }, el("span", { class: "t" }, t.name), el("span", { class: "pill " + st, style: "flex:none" }, { live: "Live", soon: "Upcoming", final: "Final" }[st])),
+        el("span", { class: "tour-by" }, mine ? "Made by you" : "Made by @" + (t.createdByName || "someone")),
+        t.private ? el("span", { class: "pill soon", style: "align-self:flex-start" }, "🔒 Invite only") : null, speciesPill(t), tourMoneyLine(t),
+        el("span", { class: "s" }, `${SCORING[t.scoring]?.name || ""} · ${t.manual ? "Organizer starts the clock" : t.startAt ? fmtWhen(t.startAt) : fmtDay(t.start) + (t.end !== t.start ? " – " + fmtDay(t.end) : "")}${phasesOf(t).length > 1 ? " · " + phasesOf(t).length + (t.manual ? " sections" : " phases") : ""} · ${n} angler${n === 1 ? "" : "s"}`)));
   })));
 }
 function viewCreateTour(p) {
@@ -3422,8 +3435,8 @@ function viewTour(p) {
     el("div", { class: "stack", style: "gap:2px;min-width:0" }, el("span", { class: "t" }, `${c.species}, ${sizeText(c)}`),
       el("span", { class: "s" }, `@${c.name} · ${c.lure ? "on " + c.lure + " · " : ""}${phasesOf(t)[c.phase] ? phasesOf(t)[c.phase].name + " · " : ""}${ago(c.createdAt)}${members.includes(c.uid) && !catchCounts(t, c) ? " · doesn't count" : ""}`)),
     c.photo ? el("img", { src: c.photo, alt: "", style: "width:56px;height:56px;object-fit:cover;border-radius:8px;flex:none" }) : null))));
-  if (t.createdBy === S.user.uid) p.append(el("button", { class: "link danger", type: "button", style: "align-self:flex-start", onclick: async () => {
-    if (!confirm("Delete this tournament? Catches stay on the feed.")) return;
+  if (t.createdBy === S.user.uid || S.owner || (S.mod?.deleteTours && t.createdBy !== OWNER_UID)) p.append(el("button", { class: "link danger", type: "button", id: "t-delete", style: "align-self:flex-start", onclick: async () => {
+    if (!confirm(t.createdBy === S.user.uid ? "Delete this tournament? Catches stay on the feed." : `Delete @${t.createdByName || "someone"}'s tournament? Catches stay on the feed.`)) return;
     try { await deleteDoc(doc(db, "tournaments", t.id)); S.openTournament = null; toast("Tournament deleted."); renderTab(); } catch (err) { toast(errText(err)); }
   } }, "Delete tournament"));
 }
