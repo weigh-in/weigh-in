@@ -478,3 +478,7 @@ nav.tabs{border-top:1px solid var(--line);box-shadow:0 -6px 20px rgba(16,48,42,.
 .auth .share-btn{color:#fff}
 @media (max-height:680px){.auth.compact .box>p{display:none}.auth.compact h1{font-size:1.7rem}}
 @media (max-height:680px){.auth.compact .box{gap:6px}.auth.compact .btn{min-height:40px;padding-top:7px;padding-bottom:7px}.auth.compact .field input{padding-top:6px;padding-bottom:6px}.auth.compact .field>span{font-size:.85rem}}
+
+/* Profile: Share and Get the app sit side by side, same look, so the page stays short */
+.share-row{display:flex;gap:10px}
+.share-row .share-btn{flex:1;min-width:0;padding-left:8px;padding-right:8px;font-size:15px;white-space:nowrap}
