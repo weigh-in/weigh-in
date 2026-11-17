@@ -545,3 +545,8 @@ nav.tabs{border-top:1px solid var(--line);box-shadow:0 -6px 20px rgba(16,48,42,.
 .trip-place{display:flex;flex-direction:column;gap:6px;padding:12px 14px;border:1px solid var(--line);border-radius:14px;background:var(--surface)}
 .trip-cost{padding:14px;border:2px solid var(--line);border-radius:14px;background:var(--water)}
 .trip-total{margin:0;font-weight:800;font-size:1.1rem;line-height:1.35}
+
+.list.tour-cards{background:none;border:0;box-shadow:none;padding:0;overflow:visible;gap:12px}
+.tour-card{padding:14px!important;border:1px solid var(--line)!important;border-radius:var(--r);background:var(--surface);box-shadow:var(--shadow);align-items:flex-start;width:100%}
+.list>.tour-card:last-child{border-bottom:1px solid var(--line)!important}
+.tour-by{font-size:.9rem;font-weight:600;color:var(--lake,var(--ink))}
