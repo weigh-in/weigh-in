@@ -4769,6 +4769,21 @@ function viewMe(p) {
 const TRIP_Q = (r, la, ln) => `(nwr["amenity"~"^(restaurant|fast_food|cafe|pub|bar)$"]["name"](around:${r},${la},${ln});nwr["tourism"~"^(hotel|motel|guest_house|chalet|hostel|camp_site|caravan_site|apartment)$"]["name"](around:${r},${la},${ln});nwr["shop"~"^(fishing|outdoor|sports|hunting|marine)$"]["name"](around:${r},${la},${ln}););out center 500;`;
 const tripKm = (a, b) => { const R = 6371, rad = Math.PI / 180, dLa = (b.lat - a.lat) * rad, dLn = (b.lng - a.lng) * rad, h = Math.sin(dLa / 2) ** 2 + Math.cos(a.lat * rad) * Math.cos(b.lat * rad) * Math.sin(dLn / 2) ** 2; return 2 * R * Math.asin(Math.sqrt(h)); };
 const tripMi = (km) => { const m = km * 0.621371; return m < 10 ? m.toFixed(1) + " mi" : Math.round(m) + " mi"; };
+async function tripNominatim(loc) {      // quick backup when the main map server is slow or down: fewer details, but it answers fast
+  const d = 0.25, vb = `${loc.lng - d},${loc.lat + d},${loc.lng + d},${loc.lat - d}`, seen = new Map();
+  for (const q of ["restaurant", "motel", "hotel", "campground", "cabins", "fishing tackle"]) {
+    const ctl = new AbortController(), t = setTimeout(() => ctl.abort(), 12000);
+    try {
+      const r = await fetch(`https://nominatim.openstreetmap.org/search?format=jsonv2&limit=20&bounded=1&extratags=1&viewbox=${vb}&q=${encodeURIComponent(q)}`, { signal: ctl.signal, headers: { Accept: "application/json" } });
+      if (r.ok) for (const x of await r.json()) {
+        if (!x.name || !["amenity", "tourism", "shop"].includes(x.category)) continue;
+        seen.set(x.osm_type + "/" + x.osm_id, { lat: +x.lat, lng: +x.lon, name: x.name, id: x.osm_type + "/" + x.osm_id, tags: { ...(x.extratags || {}), name: x.name, [x.category]: x.type } });
+      }
+    } catch { /* skip this one */ } finally { clearTimeout(t); }
+    await wfSleep(1100);      // the free server asks for one question a second
+  }
+  return [...seen.values()].filter((e) => Number.isFinite(e.lat) && Number.isFinite(e.lng));
+}
 function tripSort(rows, loc) {
   const eat = [], stay = [], shops = [];
   for (const r of rows) {
@@ -4798,17 +4813,19 @@ function tripPlace(x, kind) {
       web ? el("a", { class: "btn small ghost", href: web, target: "_blank", rel: "noopener" }, "🌐 Website") : null));
 }
 function viewTrip(p) {
-  const T = S.trip || (S.trip = { loc: null, ppl: 2, nights: 1, room: "", food: "", res: null, busy: false, err: "" });
+  const T = S.trip || (S.trip = { loc: null, ppl: 2, nights: 1, room: "", food: "", res: null, busy: false, err: "", tok: 0, src: "" });
   if (!T.loc) { try { const l = JSON.parse(getPref("tripLoc", "null")); if (l && typeof l.lat === "number") T.loc = l; } catch { /* none saved */ } }
   const box = el("div", { class: "stack", id: "trip-box" }); p.append(box);
   const num = (v) => { const n = parseFloat(String(v).replace(/[$,]/g, "")); return Number.isFinite(n) && n >= 0 ? n : 0; };
-  const pick = (loc) => { T.loc = loc; T.res = null; T.err = ""; setPref("tripLoc", JSON.stringify(loc)); paint(); run(); };
+  const pick = (loc) => { T.loc = loc; T.res = null; T.err = ""; T.busy = false; setPref("tripLoc", JSON.stringify(loc)); paint(); run(); };
   const run = async () => {
-    if (!T.loc || T.busy) return; T.busy = true; T.err = ""; T.res = null; paint();
-    const rows = await wfAsk(TRIP_Q(25000, T.loc.lat, T.loc.lng), (m) => { const n = box.querySelector("#trip-status"); if (n) n.textContent = m; });
-    T.busy = false;
-    if (!rows) T.err = "The free map servers are busy right now. Tap Try again in a minute."; else T.res = tripSort(rows, T.loc);
-    paint();
+    if (!T.loc || T.busy) return; T.busy = true; T.err = ""; T.res = null; const me = ++T.tok; paint();
+    const show = (rows, src) => { if (me !== T.tok || !rows || !rows.length) return; T.res = tripSort(rows, T.loc); T.src = src; T.busy = false; paint(); };
+    // two servers at once: the quick one fills the page in seconds, the detailed one swaps in when it answers
+    const slow = wfAsk(TRIP_Q(20000, T.loc.lat, T.loc.lng), (m) => { const n = box.querySelector("#trip-status"); if (n && !T.res) n.textContent = m; }).then((r) => show(r, "full"), () => {});
+    const quick = tripNominatim(T.loc).then((r) => { if (!T.res) show(r, "quick"); }, () => {});
+    await Promise.race([Promise.allSettled([slow, quick]), wfSleep(75000)]);
+    if (me === T.tok && !T.res) { T.busy = false; T.err = "Couldn't find places right now. The free map servers may be busy. Tap Try again in a minute, or pick a bigger town nearby."; paint(); }
   };
   const cost = () => {
     const rooms = Math.max(1, Math.ceil(T.ppl / 2)), rm = num(T.room), fd = num(T.food);
@@ -4825,7 +4842,7 @@ function viewTrip(p) {
     const kids = [el("h1", null, "Trip planner"), el("p", { class: "hint" }, "Pick where you're going and how many are coming. I'll find places to eat and stay, tackle shops, and what lures to bring.")];
     if (!T.loc) { kids.push(wxPicker(pick, "Where are you fishing?")); box.replaceChildren(...kids); return; }
     kids.push(el("div", { class: "row spread", style: "align-items:center" }, el("strong", { id: "trip-where" }, "📍 " + T.loc.name),
-      el("button", { class: "link", type: "button", id: "trip-change", onclick: () => { T.loc = null; T.res = null; paint(); } }, "Change place")),
+      el("button", { class: "link", type: "button", id: "trip-change", onclick: () => { T.tok++; T.busy = false; T.loc = null; T.res = null; T.err = ""; paint(); } }, "Change place")),
       el("div", { class: "field" }, el("span", null, "How many people?"), people));
     if (T.busy) kids.push(el("p", { class: "muted", id: "trip-status", role: "status" }, "Looking up places near " + T.loc.name + "…"));
     if (T.err) kids.push(el("p", { class: "muted", id: "trip-err" }, T.err), el("button", { class: "btn wide", type: "button", id: "trip-retry", onclick: run }, "Try again"));
@@ -4839,6 +4856,7 @@ function viewTrip(p) {
         el("div", { class: "stack", id: "trip-stay-box" }, sect("trip-stay", "🛏️ Places to stay", T.res.stay, "stay", "No lodging listed within about 15 miles. Try a bigger town nearby."),
           el("p", { class: "hint", id: "trip-rooms" }, `${T.ppl} ${T.ppl === 1 ? "person needs" : "people need"} about ${c.rooms} ${c.rooms === 1 ? "room" : "rooms"} (two to a room), or one cabin or a few campsites. Call ahead for prices and open dates.`)),
         sect("trip-shops", "🪱 Tackle and bait shops", T.res.shops, "shop", "No tackle shops listed nearby. Check a Walmart or sporting goods store in town."),
+        T.src === "quick" ? el("p", { class: "muted small", id: "trip-quick" }, "These are quick results, so phone numbers and hours may be missing. More detail will fill in if the map server answers.") : null,
         el("p", { class: "muted small" }, "Places come from OpenStreetMap, which volunteers keep up to date. Some may be closed or missing, so call before you go."));
     }
     kids.push(el("h2", null, "🎣 What lures to bring"), lureBox);
