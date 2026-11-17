@@ -8,7 +8,7 @@ import {
 import {
   getFirestore, initializeFirestore, persistentLocalCache, persistentMultipleTabManager,
   collection, doc, setDoc, getDoc, getDocs, addDoc, deleteDoc, updateDoc, onSnapshot,
-  query, where, orderBy, limit, serverTimestamp, arrayUnion, documentId
+  query, where, orderBy, limit, startAfter, serverTimestamp, arrayUnion, documentId, writeBatch, increment
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
 const $app = document.getElementById("app");
@@ -214,8 +214,10 @@ function setPref(k, v) { try { localStorage.setItem("weighin-" + k, v); } catch 
 
 /* ======================= app state ======================= */
 const S = {
-  user: null, name: "", tab: (() => { try { const g = new URLSearchParams(location.search).get("go"); return ["post", "bite", "me", "feed", "map", "trade", "tour"].includes(g) ? g : "feed"; } catch { return "feed"; } })(),
+  user: null, name: "", tab: (() => { try { const g = new URLSearchParams(location.search).get("go"); return ["post", "bite", "me", "feed", "map", "trade", "tours"].includes(g) ? g : "feed"; } catch { return "feed"; } })(),
   posts: [], tournaments: [], log: [], saved: [],
+  myLikes: new Set(), lcount: new Map(), likeNMode: false,
+  live: [], older: [], moreLeft: true, loadingMore: false, scrollTo: null,
   reqIn: [], reqOut: [], friendships: [], unread: new Set(), chatOpen: null, recaps: [], offIn: [], offOut: [], tradeAll: [], tradeMine: [], tourReqs: [], joinIn: [], joinOut: [],
   openTournament: null, tourPosts: [], viewing: null, creatingTour: false,
   meView: "main", mine: [], spots: [], map: null, markers: null, likes: new Map(), mod: null,
@@ -469,6 +471,57 @@ async function authedEntry(user) {
   }
 }
 
+/* ---------- hearts ----------
+   Until the counts have been moved onto the catches themselves, every phone loads every like,
+   the way it always did. Once the move is done (the owner's phone does it once, by itself),
+   each phone only loads its own likes, which is a few dozen instead of a thousand. */
+async function watchLikes(uid) {
+  const run = ++likeRun;
+  let on = false;
+  try { const m = await getDoc(doc(db, "meta", "app")); on = m.exists() && m.data().likeN === true; } catch { /* no signal: use the old way */ }
+  if (run !== likeRun || S.user?.uid !== uid) return;   // signed out or switched accounts while we waited
+  S.likeNMode = on;
+  if (on) {
+    unsubs.push(onSnapshot(query(collection(db, "likes"), where("uid", "==", uid), limit(1000)), (s) => {
+      S.myLikes = new Set(s.docs.map((d) => d.data().postId));
+      paintLikes(); if (S.tab === "me" && (S.meView === "main" || S.meView === "profile")) renderTab();
+    }, () => {}));
+  } else {
+    unsubs.push(onSnapshot(query(collection(db, "likes"), orderBy("createdAt", "desc"), limit(1000)), (s) => {
+      const m = new Map();
+      for (const d of s.docs) { const x = d.data({ serverTimestamps: "estimate" }); if (!m.has(x.postId)) m.set(x.postId, new Set()); m.get(x.postId).add(x.uid); }
+      S.likes = m; paintLikes(); if (S.tab === "me" && (S.meView === "main" || S.meView === "profile")) renderTab();
+    }, () => {}));
+    if (S.owner && Date.now() - (+getPref("likeMoveAt", "0") || 0) > 864e5) { setPref("likeMoveAt", String(Date.now())); moveLikeCounts(); }
+  }
+}
+
+// One-time move, run by the owner's phone. Counts every like once, writes the total onto each
+// catch, then flips the switch so every phone can stop downloading the whole like list.
+let movingLikes = false, likeRun = 0;
+async function moveLikeCounts(loud) {
+  if (movingLikes || !S.owner) return;
+  movingLikes = true;
+  try {
+    const counts = new Map();
+    const all = await getDocs(collection(db, "likes"));
+    all.forEach((d) => { const pid = d.data().postId; if (pid) counts.set(pid, (counts.get(pid) || 0) + 1); });
+    const posts = await getDocs(collection(db, "posts"));
+    let batch = writeBatch(db), n = 0, done = 0;
+    for (const d of posts.docs) {
+      const want = counts.get(d.id) || 0;
+      if ((+d.data().likeN || 0) === want) continue;
+      batch.update(doc(db, "posts", d.id), { likeN: want });
+      if (++n >= 400) { await batch.commit(); done += n; batch = writeBatch(db); n = 0; }
+    }
+    if (n) { await batch.commit(); done += n; }
+    await setDoc(doc(db, "meta", "app"), { likeN: true, movedAt: serverTimestamp() }, { merge: true });
+    if (loud) toast(`Heart counts moved onto ${done} catches. The app is much lighter now.`);
+  } catch (e) {
+    if (loud) toast(errText(e) + " Publish the security rules in Firebase first.");
+  } finally { movingLikes = false; }
+}
+
 /* ======================= main app ======================= */
 function startApp() {
   stopAll(); S.postsSeen = false; S.cash = ""; getUser(S.user.uid).then((u) => { S.cash = cashTag(u?.cash); if (S.tab === "me") renderTab(); }); S.trade = null; S.tradeAll = []; S.tradeMine = []; S.offIn = []; S.offOut = []; S.tradeErr = false;
@@ -484,7 +537,8 @@ function startApp() {
   unsubs.push(() => { msgUns.forEach((u) => u()); msgUns.clear(); S.unread.clear(); S.chatOpen = null; });
   setTimeout(() => { if (S.user && S.user.uid === uid && wrapSeason() && !getPref("wrapped" + wrapYear(), "")) openWrapped(wrapYear(), true); }, 6000);
   unsubs.push(onSnapshot(query(collection(db, "posts"), orderBy("createdAt", "desc"), limit(40)), (s) => {
-    S.posts = s.docs.map((d) => ({ id: d.id, ...d.data({ serverTimestamps: "estimate" }) }));
+    S.live = s.docs.map((d) => ({ id: d.id, ...d.data({ serverTimestamps: "estimate" }) }));
+    mergePosts();
     if (S.postsSeen) s.docChanges().forEach((ch) => { if (ch.type !== "added") return; const p = { id: ch.doc.id, ...ch.doc.data({ serverTimestamps: "estimate" }) }; if (p.pb && p.uid !== uid) pbAlert(p); });
     if (S.postsSeen) s.docChanges().forEach((ch) => { if (ch.type === "added") checkBeaten([{ id: ch.doc.id, ...ch.doc.data({ serverTimestamps: "estimate" }) }]); });
     else setTimeout(() => { const since = +getPref("pbseenAt", "0"); if (since) checkBeaten(S.posts.filter((x) => (x.createdAt?.toMillis?.() || 0) > since)); setPref("pbseenAt", String(Date.now())); }, 3500);
@@ -539,11 +593,7 @@ function startApp() {
     if (S.tab === "map" && S.map) { S.paintMapBar?.(); drawSpots(false); }
     if (S.tab === "feed") paintSpotBtns();
   }, () => {}));
-  unsubs.push(onSnapshot(query(collection(db, "likes"), orderBy("createdAt", "desc"), limit(1000)), (s) => {
-    const m = new Map();
-    for (const d of s.docs) { const x = d.data({ serverTimestamps: "estimate" }); if (!m.has(x.postId)) m.set(x.postId, new Set()); m.get(x.postId).add(x.uid); }
-    S.likes = m; paintLikes(); if (S.tab === "me" && (S.meView === "main" || S.meView === "profile")) renderTab();
-  }, () => {}));
+  watchLikes(uid);
   unsubs.push(onSnapshot(doc(db, "mods", uid), (d) => {
     const next = d.exists() ? (d.data().perms || {}) : null;
     if (JSON.stringify(next) === JSON.stringify(S.mod)) return;
@@ -1244,6 +1294,31 @@ function scopeLabel() {
   return "Everyone";
 }
 function myFeedLoc() { try { const l = JSON.parse(getPref("feedLoc", "null")); return l && typeof l.lat === "number" ? l : null; } catch { return null; } }
+// The newest 40 catches arrive live. Older ones are added underneath as you ask for them,
+// so the feed is no longer stuck at the 40 most recent catches in the whole app.
+function mergePosts() {
+  const seen = new Map();
+  for (const p of S.live) seen.set(p.id, p);
+  for (const p of S.older) if (!seen.has(p.id)) seen.set(p.id, p);
+  S.posts = [...seen.values()].sort((a, b) => (b.createdAt?.toMillis?.() || 0) - (a.createdAt?.toMillis?.() || 0));
+}
+const FEED_PAGE = 20, FEED_MAX = 400;
+async function loadOlderPosts() {
+  if (S.loadingMore || !S.moreLeft || S.posts.length >= FEED_MAX) return;
+  const last = S.posts[S.posts.length - 1]?.createdAt;
+  if (!last) return;
+  S.loadingMore = true; if (S.tab === "feed") renderFeedCards();
+  try {
+    const snap = await getDocs(query(collection(db, "posts"), orderBy("createdAt", "desc"), startAfter(last), limit(FEED_PAGE)));
+    const rows = snap.docs.map((d) => ({ id: d.id, ...d.data({ serverTimestamps: "estimate" }) }));
+    if (rows.length < FEED_PAGE) S.moreLeft = false;
+    S.older = S.older.concat(rows);
+    mergePosts();
+    if (rows.length) S.scrollTo = rows[0].id;   // drop them straight onto the first older catch
+  } catch (e) { toast(navigator.onLine ? "Couldn't load older catches." : "No connection."); }
+  finally { S.loadingMore = false; if (S.tab === "feed") renderFeedCards(); }
+}
+
 function feedPosts() {
   const sc = getPref("feedScope", "all");
   if (sc === "state") { const st = getPref("feedState", ""); if (st) return S.posts.filter((x) => x.state === st); }
@@ -1259,10 +1334,10 @@ function feedPosts() {
 /* What's new. Newest first. Add a new entry on top each time the app changes. */
 /* Bump APP_VERSION every time you change the app, and add a matching entry on top of UPDATES (with v: the same number).
    Phones check app.js every few minutes and offer the new version on their own. */
-const APP_VERSION = 77;
+const APP_VERSION = 78;
 // The number people see. APP_VERSION stays a plain counter so updates are detected. Big changes bump the first number (2.0), smaller ones the second (1.1, 1.2).
 const REL_NAMES = { 59: "1.0", 60: "1.0", 61: "1.1", 62: "1.2", 63: "1.2", 64: "1.2", 65: "1.2", 66: "1.2", 67: "1.2",
-  68: "1.3", 69: "1.3", 70: "1.3", 71: "1.4", 72: "1.4", 73: "1.5", 74: "1.5", 75: "1.5", 76: "1.5", 77: "1.8" };
+  68: "1.3", 69: "1.3", 70: "1.3", 71: "1.4", 72: "1.4", 73: "1.5", 74: "1.5", 75: "1.5", 76: "1.5", 77: "1.8", 78: "1.8" };
 const relName = (v) => REL_NAMES[v] || (v < 59 ? `0.${v}` : `1.${v - 59}`);
 try { if ((parseInt(localStorage.getItem("weighin-appv"), 10) || 0) < APP_VERSION) localStorage.setItem("weighin-appv", String(APP_VERSION)); } catch { /* private mode */ }
 const UPDATES = [
@@ -1276,6 +1351,8 @@ const UPDATES = [
     "If the app ever gets stuck, Settings now has Fix the app to reload a clean copy.",
     "Brand new accounts have to confirm their email, which keeps fake sign-ups out.",
     "Long-press the Weigh-In icon on your home screen to jump straight to Post a catch, the bite forecast or your profile.",
+    "Hearts load a lot faster. Every phone used to download every like in the whole app just to show the numbers; now each catch carries its own count.",
+    "The feed no longer stops at the 40 newest catches. Swipe to the bottom and tap Load older catches to keep going back through everything.",
     "A Download the app button in your profile, with step-by-step pictures for iPhone."] },
   { id: "2026-11-15f", v: 67, date: "Nov 15", title: "Log icon", items: [
     "Fishing log is now a small 📓 button by your other icons under your name."] },
@@ -1574,16 +1651,23 @@ function renderFeedCards() {
     return;
   }
   // Keep the card you're looking at in view when new posts arrive.
-  const cards = [...$feed.querySelectorAll(".card")];
+  const cards = [...$feed.querySelectorAll(".card[data-id]")];  // the end card is not a catch
   const h = $feed.clientHeight || 1;
-  const currentId = cards[Math.round($feed.scrollTop / h)]?.dataset.id;
+  const was = $feed.scrollTop;
+  const currentId = cards[Math.round(was / h)]?.dataset.id;
   const nodes = list.map((p) => { let n = cardCache.get(p.id); if (!n) { n = makeCard(p); cardCache.set(p.id, n); } return n; });
+  const end = feedEndCard(list.length);
+  if (end) nodes.push(end);
   // Moving a video in the page pauses it, so remember which ones were playing and start them again.
   const wasPlaying = [...$feed.querySelectorAll("video.vid-feed")].filter((v) => !v.paused);
   $feed.replaceChildren(...nodes);
   wasPlaying.forEach((v) => v.play().catch(() => {}));
-  const idx = currentId ? list.findIndex((p) => p.id === currentId) : 0;
+  // Where to leave them: on the first newly loaded catch after "Load older catches",
+  // otherwise on the same card they were reading, otherwise wherever they already were.
+  const want = S.scrollTo; S.scrollTo = null;
+  const idx = want ? list.findIndex((p) => p.id === want) : currentId ? list.findIndex((p) => p.id === currentId) : -1;
   if (idx > 0) $feed.scrollTop = idx * $feed.clientHeight;
+  else if (idx < 0 && was > 0) $feed.scrollTop = was;   // they were on the end card: stay there
   paintLikes(); paintSpotBtns();
 }
 function makeCard(p) {
@@ -1599,7 +1683,7 @@ function makeCard(p) {
       el("div", { class: "size" }, sizeText(p)),
       el("div", { class: "meta" }, [p.lure ? "Caught on " + p.lure : null, p.spot || null, placeLabel(p) || null, p.tournamentName ? "🏆 " + p.tournamentName : null].filter(Boolean).join("  ·  "))),
     el("div", { class: "side" },
-      el("div", null, el("button", { type: "button", class: "like", "data-like": p.id, "aria-pressed": "false", "aria-label": "Like", html: ICON.heart, onclick: () => toggleLike(p) }), el("small", { "data-like-n": p.id }, "0")),
+      el("div", null, el("button", { type: "button", class: "like", "data-like": p.id, "aria-pressed": "false", "aria-label": "Like", html: ICON.heart, onclick: () => toggleLike(p) }), el("small", { "data-like-n": p.id }, String(likeCount(p)))),
       el("div", { "data-spotbtn": p.id, hidden: true }, el("button", { type: "button", "aria-label": "See where this was caught on the map", html: ICON.map, onclick: () => seeOnMap(p) }), el("small", null, "Map")),
       el("div", null, el("button", { type: "button", "aria-label": "Comments", html: ICON.chat, onclick: () => openComments(p) }), el("small", null, "Comments")),
       mine || (editOn() && canOn("deletePosts", p.uid)) ? el("div", null, el("button", { type: "button", "aria-label": "Delete this post", html: ICON.trash, onclick: () => deletePost(p) }), el("small", null, "Delete")) : null,
@@ -1611,18 +1695,70 @@ function makeCard(p) {
 function paintLikes() {
   const me = S.user?.uid;
   document.querySelectorAll("[data-like]").forEach((b) => {
-    const set = S.likes.get(b.dataset.like), on = !!(set && set.has(me));
+    const id = b.dataset.like, on = iLike(id);
     b.setAttribute("aria-pressed", String(on)); b.setAttribute("aria-label", on ? "Unlike" : "Like");
-    const n = document.querySelector(`[data-like-n="${CSS.escape(b.dataset.like)}"]`); if (n) n.textContent = String(set ? set.size : 0);
+    const c = S.likeNMode ? (S.lcount.get(id) || 0) : (S.likes.get(id)?.size || 0);
+    const n = document.querySelector(`[data-like-n="${CSS.escape(id)}"]`); if (n) n.textContent = String(c);
   });
 }
+// How many hearts a catch has, and whether you are one of them.
+// Old way: every phone downloaded every like in the whole app to count them, which does not
+// scale and quietly went wrong past a thousand likes. New way: the count lives on the catch
+// itself and each phone only loads its own likes.
+function likeCount(p) {
+  const n = S.likeNMode ? (+p.likeN || 0) : (S.likes.get(p.id)?.size || 0);
+  S.lcount.set(p.id, n);
+  return n;
+}
+function iLike(id) { return S.likeNMode ? S.myLikes.has(id) : !!S.likes.get(id)?.has(S.user?.uid); }
+
+// The card at the very bottom of the feed: bring in older catches, or say there are no more.
+function feedEndCard(shown) {
+  const scoped = getPref("feedScope", "all") !== "all";
+  if (S.loadingMore) {
+    return el("div", { class: "card feed-end" }, el("div", { class: "stack" },
+      el("span", { class: "vid-ring spin", "aria-hidden": "true" }), el("p", null, "Loading older catches...")));
+  }
+  if (S.moreLeft && S.posts.length < FEED_MAX) {
+    return el("div", { class: "card feed-end" }, el("div", { class: "stack" },
+      el("h2", null, "That's the recent ones"),
+      el("p", null, scoped ? "There may be older catches further back. Filters still apply." : "Keep going back through everything that's been caught."),
+      el("button", { class: "btn wide", type: "button", id: "feed-more", onclick: loadOlderPosts }, "Load older catches")));
+  }
+  return el("div", { class: "card feed-end" }, el("div", { class: "stack" },
+    el("h2", null, "You've reached the end"),
+    el("p", null, shown === 1 ? "That's the only catch here." : `That's all ${shown} catches here. Go catch something and post it.`),
+    el("button", { class: "btn wide", type: "button", onclick: () => go("post") }, "Post a catch")));
+}
+
 function paintSpotBtns() { document.querySelectorAll("[data-spotbtn]").forEach((d) => { d.hidden = !S.spots.some((x) => x.id === d.dataset.spotbtn); }); }
 function seeOnMap(p) { S.mapFilter = { species: "", lure: "", mine: false }; S.focusSpot = p.id; go("map"); }
 async function toggleLike(p) {
-  const id = p.id + "_" + S.user.uid, set = S.likes.get(p.id) || new Set(), on = set.has(S.user.uid);
-  const next = new Set(set); on ? next.delete(S.user.uid) : next.add(S.user.uid); S.likes.set(p.id, next); paintLikes(); // show it right away
-  try { on ? await deleteDoc(doc(db, "likes", id)) : await setDoc(doc(db, "likes", id), { postId: p.id, uid: S.user.uid, createdAt: serverTimestamp() }); }
-  catch (e) { S.likes.set(p.id, set); paintLikes(); toast(errText(e)); }
+  const lid = p.id + "_" + S.user.uid, on = iLike(p.id);
+  const before = { set: S.likes.get(p.id), mine: S.myLikes.has(p.id), n: S.lcount.get(p.id) || 0 };
+  // show it the instant they tap, then put it back if the save fails
+  const next = new Set(before.set || []); on ? next.delete(S.user.uid) : next.add(S.user.uid); S.likes.set(p.id, next);
+  on ? S.myLikes.delete(p.id) : S.myLikes.add(p.id);
+  S.lcount.set(p.id, Math.max(0, before.n + (on ? -1 : 1)));
+  paintLikes();
+  try {
+    const batch = writeBatch(db);
+    if (on) batch.delete(doc(db, "likes", lid));
+    else batch.set(doc(db, "likes", lid), { postId: p.id, uid: S.user.uid, createdAt: serverTimestamp() });
+    batch.update(doc(db, "posts", p.id), { likeN: increment(on ? -1 : 1) });
+    try { await batch.commit(); }
+    catch (e1) {
+      if (S.likeNMode) throw e1;   // counts live on the catch now, so this has to work
+      // Older security rules: save the like on its own, the way the app used to.
+      if (on) await deleteDoc(doc(db, "likes", lid));
+      else await setDoc(doc(db, "likes", lid), { postId: p.id, uid: S.user.uid, createdAt: serverTimestamp() });
+    }
+    if (p.likeN != null || S.likeNMode) p.likeN = Math.max(0, (+p.likeN || 0) + (on ? -1 : 1));
+  } catch (e) {
+    if (before.set) S.likes.set(p.id, before.set); else S.likes.delete(p.id);
+    before.mine ? S.myLikes.add(p.id) : S.myLikes.delete(p.id);
+    S.lcount.set(p.id, before.n); paintLikes(); toast(errText(e));
+  }
 }
 /* ======================= VIDEOS (up to 30 seconds) ======================= */
 // The free plan has no file storage, so a clip is squeezed small and saved in pieces inside the database.
@@ -1826,7 +1962,7 @@ async function openWrapped(yr, auto) {
   const count = (f) => { const m = new Map(); for (const p of ps) { const k = f(p); if (k) m.set(k, (m.get(k) || 0) + 1); } return [...m.entries()].sort((a, b) => b[1] - a[1]); };
   const spec = count((p) => sk(p.species)), mons = count((p) => MONTHS[new Date(catchMs(p)).getMonth()]);
   const nice = (k) => String(ps.find((x) => sk(x.species) === k)?.species || k).trim();
-  const likeN = (p) => S.likes.get(p.id)?.size || 0;
+  const likeN = (p) => likeCount(p);
   const byLb = [...ps].sort((a, b) => (+b.lb || 0) - (+a.lb || 0))[0];
   const liked = [...ps].sort((a, b) => likeN(b) - likeN(a))[0];
   const withPhoto = ps.filter((p) => p.photo);
@@ -2157,7 +2293,7 @@ function openAngler(uid, name) {
   Promise.all([getDocs(query(collection(db, "posts"), where("uid", "==", uid), limit(20))), getUser(uid)]).then(([snap, u0]) => {
     const rows = snap.docs.map((d) => ({ id: d.id, ...d.data({ serverTimestamps: "estimate" }) })).sort((a, b) => (b.createdAt?.toMillis?.() || 0) - (a.createdAt?.toMillis?.() || 0));
     const biggest = Math.max(0, ...rows.map((x) => x.lb || 0));
-    const likes = rows.reduce((n, x) => n + (S.likes.get(x.id)?.size || 0), 0);
+    const likes = rows.reduce((n, x) => n + likeCount(x), 0);
     const pins = S.spots.filter((x) => x.uid === uid).length;
     const lureCount = new Map();
     rows.forEach((x) => { const t = String(x.lure || "").trim(); if (t) lureCount.set(t.toLowerCase(), (lureCount.get(t.toLowerCase()) || 0) + 1); });
@@ -2175,7 +2311,7 @@ function openAngler(uid, name) {
         c.photo ? el("img", { src: c.photo, alt: `${c.species} photo`, style: "width:72px;height:72px;object-fit:cover;border-radius:10px;flex:none" }) : null,
         el("div", { class: "stack", style: "gap:2px;min-width:0" }, el("b", null, `${c.species}, ${sizeText(c)}`),
           el("span", { class: "hint" }, `${c.lure ? "on " + c.lure + " · " : ""}${catchLabel(c)}${c.spot ? " · " + c.spot : ""}`),
-          el("span", { class: "hint" }, `♥ ${S.likes.get(c.id)?.size || 0}`)))) : [el("p", { class: "empty" }, "No catches yet.")])].filter(Boolean));
+          el("span", { class: "hint" }, `♥ ${likeCount(c)}`)))) : [el("p", { class: "empty" }, "No catches yet.")])].filter(Boolean));
   }).catch(() => body.replaceChildren(el("p", { class: "muted" }, "Couldn't load their catches.")));
 }
 
@@ -3443,7 +3579,7 @@ function showSpotCard(sp) {
   const lures = new Map();
   near.forEach((x) => { const k = lureKey(x); if (!k) return; const g = lures.get(k) || { name: nameCase(k), n: 0 }; g.n++; lures.set(k, g); });
   const top = [...lures.values()].sort((a, b) => b.n - a.n).slice(0, 4);
-  const likeN = S.likes.get(sp.id)?.size || 0;
+  const likeN = post ? likeCount(post) : (S.likes.get(sp.id)?.size || 0);
   const photo = post?.photo || sp.thumb;
   note.className = "map-note open";
   const fab = document.getElementById("map-locate"); if (fab) fab.hidden = true;
@@ -4486,7 +4622,7 @@ function viewMe(p) {
           el("button", { class: "bell-btn", type: "button", id: "me-log", "aria-label": "Fishing log", style: "flex:none;position:relative;background:var(--surface, #fff);border:2px solid var(--line, #c9d6de);border-radius:50%;width:38px;height:38px;font-size:1.05rem;line-height:1;cursor:pointer;padding:0", onclick: open("log") }, "📓")))),
     el("div", { class: "stats four" },
       el("div", null, el("b", null, String(mine.length)), el("span", null, "Catches")),
-      el("div", null, el("b", null, String(mine.reduce((n, x) => n + (S.likes.get(x.id)?.size || 0), 0))), el("span", null, "Likes")),
+      el("div", null, el("b", null, String(mine.reduce((n, x) => n + likeCount(x), 0))), el("span", null, "Likes")),
       el("div", null, el("b", null, biggest ? fmtLb(biggest) : "–"), el("span", null, "Biggest")),
       el("div", null, el("b", null, String(pins)), el("span", null, "Map pins"))),
     isInstalled()
@@ -4527,7 +4663,7 @@ function viewProfile(p) {
         el("span", { class: "hint" }, "Tap your picture to change it"))),
     el("div", { class: "stats four" },
       el("div", null, el("b", null, String(mine.length)), el("span", null, "Catches")),
-      el("div", null, el("b", null, String(mine.reduce((n, x) => n + (S.likes.get(x.id)?.size || 0), 0))), el("span", null, "Likes")),
+      el("div", null, el("b", null, String(mine.reduce((n, x) => n + likeCount(x), 0))), el("span", null, "Likes")),
       el("div", null, el("b", null, biggest ? fmtLb(biggest) : "–"), el("span", null, "Biggest")),
       el("div", null, el("b", null, String(pins)), el("span", null, "Map pins"))),
     el("div", { class: "list" },
@@ -4539,7 +4675,7 @@ function viewProfile(p) {
     el("div", { class: "row", style: "gap:12px;flex-wrap:nowrap;min-width:0" },
       c.photo ? el("img", { src: c.photo, alt: "", style: "width:56px;height:56px;object-fit:cover;border-radius:8px;flex:none" }) : null,
       el("div", { class: "stack", style: "gap:2px;min-width:0" }, el("span", { class: "t" }, `${c.species}, ${sizeText(c)}`),
-        el("span", { class: "s" }, `${c.lure ? "on " + c.lure + " · " : ""}${catchLabel(c)} · ♥ ${S.likes.get(c.id)?.size || 0}`))),
+        el("span", { class: "s" }, `${c.lure ? "on " + c.lure + " · " : ""}${catchLabel(c)} · ♥ ${likeCount(c)}`))),
     el("button", { class: "link danger small", type: "button", onclick: () => deletePost(c) }, "Delete")))));
 }
 
@@ -4604,6 +4740,7 @@ function viewSettings(p) {
     el("section", { class: "stack" },
       el("button", { class: "btn ghost wide", type: "button", id: "s-about", onclick: openPrivacy }, "About and privacy"),
       el("button", { class: "btn ghost wide", type: "button", id: "s-fix", onclick: fixTheApp }, "Fix the app (reload a clean copy)"),
+      S.owner ? el("button", { class: "btn ghost wide", type: "button", id: "s-movelikes", onclick: () => moveLikeCounts(true) }, "Owner: rebuild heart counts") : null,
       el("button", { class: "btn wide", type: "button", onclick: () => { if (confirm("Sign out of Weigh-In?")) signOut(auth); } }, "Sign out"),
       el("button", { class: "link danger small", type: "button", id: "s-delacct", style: "align-self:center", onclick: deleteMyAccount }, "Delete my account")),
     el("p", { class: "hint", id: "s-ver" }, `Weigh-In version ${relName(APP_VERSION)}`),
