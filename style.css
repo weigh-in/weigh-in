@@ -40,7 +40,13 @@ h1{font-size:1.7rem} h2{font-size:1.15rem}
 /* ---------- controls ---------- */
 .btn{appearance:none;border:0;border-radius:999px;padding:12px 20px;font-weight:700;cursor:pointer;background:var(--bobber);color:var(--bobber-ink);min-height:46px}
 .btn.ghost{background:transparent;color:var(--lake);border:2px solid var(--lake)}
-.btn.small{padding:6px 14px;min-height:34px;font-size:.9rem}
+.btn.small{padding:6px 14px;min-height:44px;font-size:.9rem}
+/* The buttons under your name: an icon with its name under it, so nobody has to guess. */
+.icon-row{display:flex;gap:8px;width:100%}
+.icon-tile{position:relative;flex:1;min-width:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;min-height:58px;padding:6px 2px;background:var(--surface);border:2px solid var(--line);border-radius:14px;color:var(--ink);font:inherit;cursor:pointer}
+.icon-tile-e{font-size:1.15rem;line-height:1}
+.icon-tile-t{font-size:.66rem;font-weight:700;letter-spacing:.02em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%}
+.icon-tile .dot{position:absolute;top:5px;right:5px;width:10px;height:10px;border-radius:50%;background:#d4452a}
 .btn.wide{width:100%}
 .btn:disabled{opacity:.5}
 .link{background:none;border:0;color:var(--lake);font-weight:600;padding:4px 0;cursor:pointer;text-decoration:underline;text-underline-offset:3px}
@@ -97,7 +103,7 @@ form{display:flex;flex-direction:column;gap:14px}
 .side button svg{width:26px;height:26px}
 .side small{display:block;text-align:center;font-size:.72rem;margin-top:3px;opacity:.9}
 .feed-top{position:absolute;top:0;left:0;right:0;padding:calc(12px + env(safe-area-inset-top)) 18px 10px;display:flex;justify-content:space-between;align-items:center;z-index:2;pointer-events:none;color:#fff}
-.feed-top .scope-btn{pointer-events:auto;border:0;border-radius:999px;background:rgba(0,0,0,.45);color:#fff;font-weight:700;padding:7px 14px;min-height:36px;cursor:pointer;backdrop-filter:blur(4px)}
+.feed-top .scope-btn{pointer-events:auto;border:0;border-radius:999px;background:rgba(0,0,0,.45);color:#fff;font-weight:700;padding:7px 14px;min-height:44px;cursor:pointer;backdrop-filter:blur(4px)}
 .feed-top .brand{font-family:var(--display);font-size:1.3rem;text-shadow:0 1px 6px rgba(0,0,0,.5)}
 .feed-wrap{position:relative;flex:1;min-height:0;display:flex;flex-direction:column}
 .feed-empty{height:100%;display:grid;place-items:center;text-align:center;color:#cfe3dc;padding:24px}
@@ -174,7 +180,7 @@ section.stack{gap:12px}
 .phase-card{display:flex;flex-direction:column;gap:8px;background:var(--surface);border:2px solid var(--line);border-radius:12px;padding:12px}
 .phase-card input{border:2px solid var(--line);background:var(--water);border-radius:10px;padding:10px 12px;min-height:44px;width:100%}
 .chips{display:flex;gap:8px;flex-wrap:wrap}
-.chip{border:2px solid var(--lake);background:transparent;color:var(--lake);border-radius:999px;padding:6px 14px;font-weight:700;cursor:pointer;min-height:36px}
+.chip{border:2px solid var(--lake);background:transparent;color:var(--lake);border-radius:999px;padding:6px 14px;font-weight:700;cursor:pointer;min-height:44px}
 .chip[aria-pressed="true"]{background:var(--lake);color:var(--surface)}
 .awards{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
 .awards>div{background:var(--surface);border:2px solid var(--ink);border-radius:12px;padding:10px 8px;display:flex;flex-direction:column;gap:2px;min-width:0;overflow-wrap:anywhere}
@@ -213,7 +219,7 @@ input[type=checkbox]{width:22px;height:22px;flex:none;accent-color:var(--lake)}
 .stats.wx b{font-size:1.25rem}
 
 /* likes, tappable names, map popup extras, profile sheet */
-button.who{background:none;border:0;padding:0;color:inherit;text-align:left;cursor:pointer;font:inherit;font-weight:700;font-size:1.05rem}
+button.who{background:none;border:0;padding:0;color:inherit;text-align:left;cursor:pointer;font:inherit;font-weight:700;font-size:1.05rem;min-height:44px}
 .side .like[aria-pressed="true"]{background:var(--bobber);color:#fff}
 .side .like[aria-pressed="true"] svg{fill:currentColor}
 .pop-near{display:flex;flex-direction:column;gap:2px;margin-top:6px;padding-top:6px;border-top:1px solid #C9D6CF;font-size:.88rem}
@@ -223,11 +229,12 @@ button.who{background:none;border:0;padding:0;color:inherit;text-align:left;curs
 /* better map, place picker, 4-up profile stats */
 .map-filters{flex:none;display:flex;gap:8px;align-items:center;padding:8px 10px;padding-top:calc(8px + env(safe-area-inset-top));background:var(--surface);border-bottom:2px solid var(--ink)}
 .map-filters select{flex:1;min-width:0;border:2px solid var(--line);background:var(--water);border-radius:10px;padding:6px 8px;min-height:38px}
-.map-filters .chip{flex:none;min-height:38px}
+.map-filters .chip{flex:none;min-height:44px}
+.map-filters select{min-height:44px}
 .map-fab{position:absolute;z-index:1000;right:12px;bottom:96px;width:46px;height:46px;border-radius:50%;border:2px solid var(--ink);background:var(--surface);color:var(--ink);font-size:1.25rem;box-shadow:0 2px 8px rgba(0,0,0,.3);cursor:pointer}
 /* The Water / Satellite / Streets switcher that sits on top of the map. */
 .map-styles{position:absolute;z-index:1000;top:10px;right:10px;display:flex;background:var(--surface);border:2px solid var(--ink);border-radius:999px;overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,.3)}
-.map-styles button{appearance:none;border:0;background:none;color:var(--ink);font:inherit;font-weight:700;font-size:.78rem;padding:0 11px;min-height:38px;cursor:pointer;white-space:nowrap}
+.map-styles button{appearance:none;border:0;background:none;color:var(--ink);font:inherit;font-weight:700;font-size:.78rem;padding:0 11px;min-height:44px;cursor:pointer;white-space:nowrap}
 .map-styles button + button{border-left:2px solid var(--ink)}
 .map-styles button.on{background:var(--lake);color:var(--surface)}
 /* Pins bunched together become one bubble with the count in it. */
@@ -279,7 +286,7 @@ button.who{background:none;border:0;padding:0;color:inherit;text-align:left;curs
 .gear{display:flex;flex-direction:column;gap:7px;padding:11px;border:1px solid var(--line);border-radius:12px;background:var(--surface)}
 .gear.maxed{border-color:var(--lake)}
 .gear-i{font-size:1.4rem;line-height:1}
-.gear .btn.small{width:100%;font-size:.82rem;padding:7px 8px;min-height:38px}
+.gear .btn.small{width:100%;font-size:.82rem;padding:7px 8px;min-height:44px}
 .gear-eff{font-size:.82rem;color:var(--muted,#667);flex:1}
 .pips{display:flex;gap:4px}
 .pips i{width:100%;height:5px;border-radius:3px;background:var(--line)}
@@ -321,7 +328,7 @@ a.btn.small{text-decoration:none;display:inline-flex;align-items:center}
 .adv-obs{border:1px solid var(--line);border-radius:12px;padding:8px 12px;background:var(--water)}
 .adv-obs summary{cursor:pointer;font-weight:600}
 .adv-hot{margin:0;padding:8px 10px;border-radius:10px;background:rgba(231,111,61,.15);font-weight:600}
-.adv-vote{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:2px}.adv-vote .chip{padding:2px 10px;min-height:30px}
+.adv-vote{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:2px}.adv-vote .chip{padding:2px 10px;min-height:38px}
 .adv-feature{border:2px solid var(--accent,#1F5C4D);border-radius:12px;padding:10px;background:rgba(31,92,77,.08)}
 /* fishing school */
 .sch-me{display:flex;align-items:center;gap:12px;width:100%;padding:12px;border-radius:14px;border:2px solid var(--line);background:var(--water);font:inherit;color:inherit;cursor:pointer}
