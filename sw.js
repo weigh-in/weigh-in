@@ -1,12 +1,14 @@
 // Weigh-In service worker: makes the app open instantly and keep working with no signal.
 //
 // How it decides:
-//   The app's own code (page, app.js, sw.js) -> try the internet first, fall back to the saved copy.
+//   The app's own code (page, app.js, style.css) -> try the internet first, fall back to the saved copy.
 //     That way a new version always wins when you have signal, and you still get in when you don't.
 //   Pictures, icons and fonts -> use the saved copy first, since they almost never change.
-//   Everything else (Firebase, maps, photos people post) -> straight through, never saved.
+//   Catch photos (/api/photo) -> saved copy first, since a photo never changes.
+//   Everything else (Firebase, maps) -> straight through, never saved.
 const CACHE = "weighin-shell-v3";
-const SHELL = ["./", "./index.html", "./sw.js", "./app.js", "./bobber-192.png", "./bobber-180.png", "./manifest.webmanifest"];
+const PHOTOS = "weighin-photos-v1";   // catch photos you have looked at, so they show again with no signal
+const SHELL = ["./", "./index.html", "./style.css", "./app.js", "./bobber-192.png", "./bobber-180.png", "./manifest.webmanifest"];
 // Firebase's own code. Saved on the first visit so the app can start with no signal from then on.
 const FB = "https://www.gstatic.com/firebasejs/10.12.2/";
 const SDK = [FB + "firebase-app.js", FB + "firebase-auth.js", FB + "firebase-firestore.js"];
@@ -26,7 +28,7 @@ self.addEventListener("install", (e) => {
 self.addEventListener("activate", (e) => {
   e.waitUntil((async () => {
     const keys = await caches.keys();
-    await Promise.all(keys.filter((k) => k.startsWith("weighin-") && k !== CACHE).map((k) => caches.delete(k)));
+    await Promise.all(keys.filter((k) => k.startsWith("weighin-") && k !== CACHE && k !== PHOTOS).map((k) => caches.delete(k)));
     await self.clients.claim();
   })());
 });
@@ -59,6 +61,22 @@ async function cacheFirst(req) {
   return fresh;
 }
 
+// A catch photo's link is its name and a photo never changes, so a saved copy is always right.
+// Keep the newest 150 so this never fills the phone.
+async function photoFirst(req) {
+  const c = await caches.open(PHOTOS);
+  const hit = await c.match(req);
+  if (hit) return hit;
+  const fresh = await fetch(req);
+  if (fresh && fresh.status === 200) {
+    c.put(req, fresh.clone()).then(async () => {
+      const ks = await c.keys();
+      if (ks.length > 150) await Promise.all(ks.slice(0, ks.length - 150).map((k) => c.delete(k)));
+    }).catch(() => {});
+  }
+  return fresh;
+}
+
 self.addEventListener("fetch", (e) => {
   const req = e.request;
   if (req.method !== "GET") return;
@@ -78,12 +96,13 @@ self.addEventListener("fetch", (e) => {
     return;
   }
   if (sameSite && /\.(js|css)$/.test(url.pathname)) { e.respondWith(netFirst(req)); return; }
+  if (sameSite && url.pathname === "/api/photo" && url.searchParams.has("id")) { e.respondWith(photoFirst(req)); return; }
   if (sdk) { e.respondWith(cacheFirst(req)); return; }
   if (fonts || (sameSite && /\.(png|jpg|jpeg|webp|svg|ico|webmanifest)$/.test(url.pathname))) {
     e.respondWith(cacheFirst(req).catch(() => caches.match(req, { ignoreSearch: true })));
     return;
   }
-  // Firebase, maps, posted photos and everything else: never saved, so they are always live.
+  // Firebase, maps and everything else: never saved, so they are always live.
 });
 
 // The app can ask for the saved copies to be thrown away (Settings has a "Fix the app" button).
