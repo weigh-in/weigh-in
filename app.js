@@ -630,18 +630,37 @@ function startApp() {
     S.joinOut = s.docs.map((d) => ({ id: d.id, ...d.data() }));
     if (S.tab === "tours" && !S.creatingTour) renderTab();
   }, () => {}));
+  // Private tournaments are only readable by people in them or invited, so the list is put together from three places.
+  const tourParts = { all: [], pub: [], mine: [], inv: new Map() }, migrated = new Set();
+  const mergeTours = () => {
+    const m = new Map();
+    for (const t of [...tourParts.all, ...tourParts.pub, ...tourParts.mine]) m.set(t.id, t);
+    for (const [id, t] of tourParts.inv) if (S.inviteIn.some((i) => i.tid === id && i.status === "pending")) m.set(id, t);
+    S.tournaments = [...m.values()];
+    if (TLINK.id && S.tournaments.some((x) => x.id === TLINK.id)) { const id = TLINK.id; TLINK.id = ""; try { history.replaceState(null, "", location.pathname); } catch { /* fine */ } S.tab = "tours"; openTour(id); return; }
+    if (S.tab === "tours") renderTab();
+  };
+  const loadInvited = async () => {
+    for (const i of S.inviteIn.filter((x) => x.status === "pending")) {
+      if (tourParts.inv.has(i.tid) || tourParts.mine.some((t) => t.id === i.tid)) continue;
+      try { const d = await getDoc(doc(db, "tournaments", i.tid)); if (d.exists()) tourParts.inv.set(i.tid, { id: d.id, ...d.data() }); } catch { /* not allowed or gone */ }
+    }
+    mergeTours();
+  };
   unsubs.push(onSnapshot(query(collection(db, "tourInvites"), where("to", "==", uid)), (s) => {
-    S.inviteIn = s.docs.map((d) => ({ id: d.id, ...d.data() })); updateDot();
-    if (S.tab === "tours" && !S.creatingTour && !S.openTournament) renderTab();
+    S.inviteIn = s.docs.map((d) => ({ id: d.id, ...d.data() })); updateDot(); loadInvited();
   }, () => {}));
   unsubs.push(onSnapshot(query(collection(db, "tourInvites"), where("from", "==", uid)), (s) => {
     S.inviteOut = s.docs.map((d) => ({ id: d.id, ...d.data() })); S.invitePaint?.();
   }, () => {}));
-  unsubs.push(onSnapshot(collection(db, "tournaments"), (s) => {
-    S.tournaments = s.docs.map((d) => ({ id: d.id, ...d.data() }));
-    if (TLINK.id && S.tournaments.some((x) => x.id === TLINK.id)) { const id = TLINK.id; TLINK.id = ""; try { history.replaceState(null, "", location.pathname); } catch { /* fine */ } S.tab = "tours"; openTour(id); return; }
-    if (S.tab === "tours") renderTab();
+  if (S.owner) unsubs.push(onSnapshot(collection(db, "tournaments"), (s) => {
+    tourParts.all = s.docs.map((d) => ({ id: d.id, ...d.data() })); mergeTours();
+    for (const t of tourParts.all) if (t.private === undefined && !migrated.has(t.id)) { migrated.add(t.id); updateDoc(doc(db, "tournaments", t.id), { private: false }).catch(() => {}); }   // older public tournaments get the new flag
   }, () => {}));
+  else {
+    unsubs.push(onSnapshot(query(collection(db, "tournaments"), where("private", "==", false)), (s) => { tourParts.pub = s.docs.map((d) => ({ id: d.id, ...d.data() })); mergeTours(); }, () => {}));
+    unsubs.push(onSnapshot(query(collection(db, "tournaments"), where("members", "array-contains", uid)), (s) => { tourParts.mine = s.docs.map((d) => ({ id: d.id, ...d.data() })); mergeTours(); }, () => {}));
+  }
   unsubs.push(onSnapshot(query(collection(db, "users", uid, "log"), orderBy("date", "desc")), (s) => {
     S.log = s.docs.map((d) => ({ id: d.id, ...d.data() }));
     refreshMe("log");
@@ -1410,13 +1429,18 @@ function feedPosts() {
 /* What's new. Newest first. Add a new entry on top each time the app changes. */
 /* Bump APP_VERSION every time you change the app, and add a matching entry on top of UPDATES (with v: the same number).
    Phones check app.js every few minutes and offer the new version on their own. */
-const APP_VERSION = 86;
+const APP_VERSION = 87;
 // The number people see. APP_VERSION stays a plain counter so updates are detected. Big changes bump the first number (2.0), smaller ones the second (1.1, 1.2).
 const REL_NAMES = { 59: "1.0", 60: "1.0", 61: "1.1", 62: "1.2", 63: "1.2", 64: "1.2", 65: "1.2", 66: "1.2", 67: "1.2",
-  68: "1.3", 69: "1.3", 70: "1.3", 71: "1.4", 72: "1.4", 73: "1.5", 74: "1.5", 75: "1.5", 76: "1.5", 77: "1.8", 78: "1.8", 79: "1.9", 80: "1.9", 81: "2.0", 82: "2.0", 83: "1.19", 84: "1.20", 85: "1.21", 86: "1.22" };
+  68: "1.3", 69: "1.3", 70: "1.3", 71: "1.4", 72: "1.4", 73: "1.5", 74: "1.5", 75: "1.5", 76: "1.5", 77: "1.8", 78: "1.8", 79: "1.9", 80: "1.9", 81: "2.0", 82: "2.0", 83: "1.19", 84: "1.20", 85: "1.21", 86: "1.22", 87: "1.23" };
 const relName = (v) => REL_NAMES[v] || (v < 59 ? `0.${v}` : `1.${v - 59}`);
 try { if ((parseInt(localStorage.getItem("weighin-appv"), 10) || 0) < APP_VERSION) localStorage.setItem("weighin-appv", String(APP_VERSION)); } catch { /* private mode */ }
 const UPDATES = [
+  { id: "2026-11-17f", v: 87, date: "Nov 17", title: "Private means private", items: [
+    "Private tournaments are now hidden. Only the people in them, and anyone you invite, can see them. They no longer show in the list for everyone.",
+    "To add someone, open your tournament and tap Invite people. They get the invite on their Tourneys tab.",
+    "If your private tournament has an entry fee, invite people after they pay you, or let them join and tick them off as paid.",
+    "Needs the new Firebase rules."] },
   { id: "2026-11-17e", v: 86, date: "Nov 17", title: "Invite people to a tournament", items: [
     "Open a tournament and tap Invite people. Pick a friend or search a username, and they get an invite on their Tourneys tab. One tap on Join and they're in, with no approval needed.",
     "The Tourneys tab gets a red dot when you have an invite or a join request waiting.",
@@ -3147,11 +3171,11 @@ function openTourInvite(t) {
     el("div", { class: "sheet", role: "dialog", "aria-label": "Invite people" },
       el("div", { class: "sheet-h" }, el("h2", null, "Invite people"), el("button", { class: "link", type: "button", id: "inv-close", onclick: close }, "Done")),
       el("div", { class: "stack", style: "padding:12px 16px 20px;gap:14px" },
-        el("p", { class: "hint", style: "margin:0" }, t.private ? "They get an invite on their Tourneys tab and tap Join. You don't have to approve them." : "They get an invite on their Tourneys tab."),
+        el("p", { class: "hint", style: "margin:0" }, t.private ? "They get an invite on their Tourneys tab and tap Join. Nobody else can see this tournament." : "They get an invite on their Tourneys tab."),
         list,
         el("h3", { style: "margin:0" }, "Find someone"), q, found,
-        el("button", { class: "btn ghost wide", type: "button", id: "inv-share", onclick: share }, "🔗 Share a link"),
-        el("p", { class: "hint", style: "margin:0" }, t.private ? "Anyone who opens the link still has to be approved, unless you invited them by name." : "Anyone with the link can open the tournament and join."))));
+        t.private ? el("p", { class: "hint", style: "margin:0" }, "Nobody else can see this tournament. Only the people you invite.") : el("button", { class: "btn ghost wide", type: "button", id: "inv-share", onclick: share }, "🔗 Share a link"),
+        t.private ? null : el("p", { class: "hint", style: "margin:0" }, "Anyone with the link can open the tournament and join."))));
   document.body.append(bg); paint();
 }
 function tourJoinPanel() {
@@ -3185,7 +3209,7 @@ async function approveTour(r) {
   const dur = sp.endAt - sp.startAt, now = Math.floor(Date.now() / 60000) * 60000;
   if (sp.startAt < now) { sp.startAt = now; sp.endAt = now + dur; sp.start = localDate(new Date(sp.startAt)); sp.end = localDate(new Date(sp.endAt)); }   // its start time already passed, so it starts now
   try {
-    await addDoc(collection(db, "tournaments"), { ...sp, createdBy: r.uid, createdByName: r.name, members: [r.uid], paid: [r.uid], createdAt: serverTimestamp() });
+    await addDoc(collection(db, "tournaments"), { ...sp, private: false, createdBy: r.uid, createdByName: r.name, members: [r.uid], paid: [r.uid], createdAt: serverTimestamp() });
     await updateDoc(doc(db, "tourRequests", r.id), { status: "approved" });
     toast(`Approved. @${r.name} runs it now.`);
   } catch (err) { toast(errText(err)); }
@@ -3335,19 +3359,19 @@ function viewCreateTour(p) {
       if (phases.length) data.phases = phases;
       if (manual) { delete data.startAt; delete data.endAt; data.manual = true; data.pstart = phases.map(() => 0); data.pend = phases.map(() => 0); }
       if (spNames.length) data.species = spNames;
-      if (priv) data.private = true;
+      data.private = !!priv;
       if (!canPubTour() && !priv) {   // only the owner makes public tournaments, so everyone else asks first
         const { createdBy, createdByName, members, createdAt, paid, ...spec } = data;
         await addDoc(collection(db, "tourRequests"), { uid: S.user.uid, name: S.name, tname: name, spec, status: "pending", createdAt: serverTimestamp() });
         S.creatingTour = false; toast("Request sent. The owner will take a look."); renderTab(); return;
       }
       const ref = await addDoc(collection(db, "tournaments"), data);
-      S.creatingTour = false; toast(priv ? "Private tournament created. People ask to join and you say yes." : "Tournament created. You're in!"); openTour(ref.id);
+      S.creatingTour = false; toast(priv ? "Private tournament created. Tap Invite people to add anglers." : "Tournament created. You're in!"); openTour(ref.id);
     } catch (err) { toast(errText(err)); }
   });
   p.append(el("button", { class: "link", type: "button", style: "align-self:flex-start", onclick: () => { S.creatingTour = false; renderTab(); } }, "‹ Back"),
     el("h1", null, priv ? "New private tournament" : canPubTour() ? "New tournament" : "Request a tournament"),
-    priv ? el("p", { class: "muted", style: "margin:0" }, "Invite only. Everyone can see it in the list, but people have to ask to join and you say yes or no. Turn on an entry fee and people pay you first, then ask to join. You check you got it and let them in. You run it.") : canPubTour() ? null : el("p", { class: "muted", style: "margin:0" }, "Public tournaments are set up by the owner. Fill this in and send it. If the owner says yes, it goes live and you run it."), f);
+    priv ? el("p", { class: "muted", style: "margin:0" }, "Invite only. Nobody can see it unless you invite them. After you make it, tap Invite people. Turn on an entry fee and people pay you first, then ask to join. You check you got it and let them in. You run it.") : canPubTour() ? null : el("p", { class: "muted", style: "margin:0" }, "Public tournaments are set up by the owner. Fill this in and send it. If the owner says yes, it goes live and you run it."), f);
 }
 let phaseFilter = null;
 function openTour(id) {
