@@ -146,13 +146,13 @@ async function squarePhoto(file, size = 256) {
     return encodePic(c, 0.82);
   } finally { URL.revokeObjectURL(url); }
 }
-async function thumbFrom(dataUrl, max = 160) {
+async function thumbFrom(dataUrl, max = 160, q = 0.6) {
   try {
     const i = await loadImage(dataUrl);
     const sc = Math.min(1, max / Math.max(i.width, i.height));
     const c = document.createElement("canvas"); c.width = Math.round(i.width * sc); c.height = Math.round(i.height * sc);
     c.getContext("2d").drawImage(i, 0, 0, c.width, c.height);
-    return encodePic(c, 0.6);
+    return encodePic(c, q);
   } catch { return ""; }
 }
 /* ---------- catch photos in Cloudflare R2 ----------
@@ -1429,13 +1429,16 @@ function feedPosts() {
 /* What's new. Newest first. Add a new entry on top each time the app changes. */
 /* Bump APP_VERSION every time you change the app, and add a matching entry on top of UPDATES (with v: the same number).
    Phones check app.js every few minutes and offer the new version on their own. */
-const APP_VERSION = 87;
+const APP_VERSION = 88;
 // The number people see. APP_VERSION stays a plain counter so updates are detected. Big changes bump the first number (2.0), smaller ones the second (1.1, 1.2).
 const REL_NAMES = { 59: "1.0", 60: "1.0", 61: "1.1", 62: "1.2", 63: "1.2", 64: "1.2", 65: "1.2", 66: "1.2", 67: "1.2",
-  68: "1.3", 69: "1.3", 70: "1.3", 71: "1.4", 72: "1.4", 73: "1.5", 74: "1.5", 75: "1.5", 76: "1.5", 77: "1.8", 78: "1.8", 79: "1.9", 80: "1.9", 81: "2.0", 82: "2.0", 83: "1.19", 84: "1.20", 85: "1.21", 86: "1.22", 87: "1.23" };
+  68: "1.3", 69: "1.3", 70: "1.3", 71: "1.4", 72: "1.4", 73: "1.5", 74: "1.5", 75: "1.5", 76: "1.5", 77: "1.8", 78: "1.8", 79: "1.9", 80: "1.9", 81: "2.0", 82: "2.0", 83: "1.19", 84: "1.20", 85: "1.21", 86: "1.22", 87: "1.23", 88: "1.24" };
 const relName = (v) => REL_NAMES[v] || (v < 59 ? `0.${v}` : `1.${v - 59}`);
 try { if ((parseInt(localStorage.getItem("weighin-appv"), 10) || 0) < APP_VERSION) localStorage.setItem("weighin-appv", String(APP_VERSION)); } catch { /* private mode */ }
 const UPDATES = [
+  { id: "2026-11-18a", v: 88, date: "Nov 18", title: "Sharp photos in Your year", items: [
+    "Fixed: the photos in a posted Your year were blurry. They are now saved sharp, so they look as good as the catch itself.",
+    "If you posted your year before this, tap Post to feed to take it down, then post it again to get the sharp photos."] },
   { id: "2026-11-17f", v: 87, date: "Nov 17", title: "Private means private", items: [
     "Private tournaments are now hidden. Only the people in them, and anyone you invite, can see them. They no longer show in the list for everyone.",
     "To add someone, open your tournament and tap Invite people. They get the invite on their Tourneys tab.",
@@ -2139,7 +2142,13 @@ function playWrap(d, own) {
       if (mine()) { await deleteDoc(doc(db, "recaps", rid)); S.recaps = S.recaps.filter((r) => r.id !== rid); toast("Taken down."); }
       else {
         const th = [];
-        for (const x of photos) th.push({ p: (await thumbFrom(x.p, 420)) || "", s: x.s, z: x.z, d: x.d });
+        // Full screen photos need real detail. A photo that's already in the photo bucket is reused as is, a new one is saved there
+        // sharp (1080 px), and only if that can't work does it go inside the recap, smaller but still clear (760 px).
+        for (const x of photos) {
+          let p = R2_URL.test(x.p || "") ? x.p : "";
+          if (!p) { const hi = await thumbFrom(x.p, 1080, 0.82); p = (hi && await uploadPhoto(hi)) || (await thumbFrom(x.p, 760, 0.7)) || ""; }
+          th.push({ p, s: x.s, z: x.z, d: x.d });
+        }
         const { uid, name, year, n, kinds, topSp, topN, bigLb, bigSp, bigIn, bigIdx, likedN, likedSp, likedIdx, likes, month, monthN } = d;
         await setDoc(doc(db, "recaps", rid), { uid, name, year, n, kinds, topSp, topN, bigLb, bigSp, bigIn, bigIdx, likedN, likedSp, likedIdx, likes, month, monthN, photos: th.filter((x) => x.p), createdAt: serverTimestamp() });
         S.recaps = [{ id: rid, uid, name, year, n }, ...S.recaps.filter((r) => r.id !== rid)];
