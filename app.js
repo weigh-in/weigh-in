@@ -1430,13 +1430,16 @@ function feedPosts() {
 /* What's new. Newest first. Add a new entry on top each time the app changes. */
 /* Bump APP_VERSION every time you change the app, and add a matching entry on top of UPDATES (with v: the same number).
    Phones check app.js every few minutes and offer the new version on their own. */
-const APP_VERSION = 89;
+const APP_VERSION = 90;
 // The number people see. APP_VERSION stays a plain counter so updates are detected. Big changes bump the first number (2.0), smaller ones the second (1.1, 1.2).
 const REL_NAMES = { 59: "1.0", 60: "1.0", 61: "1.1", 62: "1.2", 63: "1.2", 64: "1.2", 65: "1.2", 66: "1.2", 67: "1.2",
-  68: "1.3", 69: "1.3", 70: "1.3", 71: "1.4", 72: "1.4", 73: "1.5", 74: "1.5", 75: "1.5", 76: "1.5", 77: "1.8", 78: "1.8", 79: "1.9", 80: "1.9", 81: "2.0", 82: "2.0", 83: "1.19", 84: "1.20", 85: "1.21", 86: "1.22", 87: "1.23", 88: "1.24", 89: "1.25" };
+  68: "1.3", 69: "1.3", 70: "1.3", 71: "1.4", 72: "1.4", 73: "1.5", 74: "1.5", 75: "1.5", 76: "1.5", 77: "1.8", 78: "1.8", 79: "1.9", 80: "1.9", 81: "2.0", 82: "2.0", 83: "1.19", 84: "1.20", 85: "1.21", 86: "1.22", 87: "1.23", 88: "1.24", 89: "1.25", 90: "1.26" };
 const relName = (v) => REL_NAMES[v] || (v < 59 ? `0.${v}` : `1.${v - 59}`);
 try { if ((parseInt(localStorage.getItem("weighin-appv"), 10) || 0) < APP_VERSION) localStorage.setItem("weighin-appv", String(APP_VERSION)); } catch { /* private mode */ }
 const UPDATES = [
+  { id: "2026-11-18c", v: 90, date: "Nov 18", title: "Sharper photos in the slideshow", items: [
+    "Slideshow photos now show whole at their real size instead of being stretched over the whole screen, so they look sharp.",
+    "New catch photos are saved bigger (1280 across) so they stay clear full screen. Older photos keep the size they were saved at."] },
   { id: "2026-11-18b", v: 89, date: "Nov 18", title: "Your year shows up in the feed", items: [
     "A posted Your year is now a picture card right in the feed, with your biggest catch, your numbers and a Watch the slideshow button. It's no longer hidden behind the 🎞️ button in the corner.",
     "The card sits in the feed in order, next to the catches posted around the same time.",
@@ -2199,16 +2202,23 @@ function playWrap(d, own) {
     staffBtn,
     el("button", { class: "btn ghost", type: "button", id: "wrap-done", style: "margin-top:6px", onclick: (e) => { e.stopPropagation(); close(); } }, "Done"));
   let i = 0, timer = 0;
-  const bars = el("div", { style: "display:flex;gap:4px;width:100%" }, slides.map(() => el("i", { style: "flex:1;height:3px;border-radius:2px;background:rgba(255,255,255,.3)" })));
-  const body = el("div", { style: "flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;text-align:center;padding:10px 0;min-height:0" });
+  const bars = el("div", { style: "position:relative;display:flex;gap:4px;width:100%" }, slides.map(() => el("i", { style: "flex:1;height:3px;border-radius:2px;background:rgba(255,255,255,.3)" })));
+  const body = el("div", { style: "position:relative;z-index:1;flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;text-align:center;padding:10px 0;min-height:0" });
   const closeBtn = el("button", { type: "button", id: "wrap-x", "aria-label": "Close", style: "background:none;border:0;color:#fff;font-size:26px;line-height:1;padding:4px 8px;cursor:pointer", onclick: (e) => { e.stopPropagation(); close(); } }, "✕");
+  const layer = el("div", { style: "position:absolute;inset:0;overflow:hidden;z-index:0;pointer-events:none" });
   const ov = el("div", { class: "wrap-ov", role: "dialog", "aria-label": `${yr} in fish`, style: "position:fixed;inset:0;z-index:9999;color:#fff;display:flex;flex-direction:column;padding:calc(12px + env(safe-area-inset-top,0px)) 16px calc(16px + env(safe-area-inset-bottom,0px));gap:8px;font-family:inherit;user-select:none;transition:background .3s" },
-    bars, el("div", { style: "display:flex;justify-content:flex-end" }, closeBtn), body);
+    layer, bars, el("div", { style: "display:flex;justify-content:flex-end;position:relative" }, closeBtn), body);
   const close = () => { clearTimeout(timer); ov.remove(); };
   const show = (n) => {
     clearTimeout(timer); i = Math.max(0, Math.min(slides.length - 1, n));
     const sl = slides[i];
-    ov.style.background = sl.photo ? `linear-gradient(rgba(0,0,0,.35),rgba(0,0,0,.15) 40%,rgba(0,0,0,.75)), url("${sl.photo}") center/cover no-repeat, ${sl.bg}` : sl.bg;
+    // The photo is shown whole at its real size in a frame (stretching a phone-sized photo over the whole screen is what made it look soft).
+    // A blurred copy of it fills the rest of the screen behind.
+    ov.style.background = sl.photo ? `linear-gradient(rgba(0,0,0,.45),rgba(0,0,0,.2) 40%,rgba(0,0,0,.8)), ${sl.bg}` : sl.bg;
+    layer.replaceChildren(...(sl.photo ? [
+      el("div", { style: `position:absolute;inset:-30px;background:url("${sl.photo}") center/cover no-repeat;filter:blur(26px) brightness(.55);` }),
+      el("img", { class: "wrap-pic", src: sl.photo, alt: "", style: "position:absolute;left:16px;right:16px;top:calc(64px + env(safe-area-inset-top,0px));bottom:36%;width:calc(100% - 32px);height:auto;max-height:calc(64% - 64px);margin:auto;object-fit:contain;border-radius:14px;box-shadow:0 8px 28px rgba(0,0,0,.55);image-rendering:auto" }),
+    ] : []));
     body.style.justifyContent = sl.photo ? "flex-end" : "center"; body.style.paddingBottom = sl.photo ? "28px" : "10px";
     body.style.textShadow = sl.photo ? "0 2px 12px rgba(0,0,0,.7)" : "none";
     body.replaceChildren(...sl.kids.filter(Boolean));
@@ -2526,14 +2536,14 @@ async function shrinkPhoto(file) {
     const img = await new Promise((res, rej) => { const i = new Image(); i.onload = () => res(i); i.onerror = rej; i.src = url; });
     // 820 across is as much as a phone screen can actually show, and in WebP that is roughly
     // a third of what the app used to store and send for every catch.
-    let max = 820, q = canWebp() ? 0.72 : 0.72, out = "";
+    let max = 1280, q = 0.74, out = "";
     for (let tries = 0; tries < 6; tries++) {
       const scale = Math.min(1, max / Math.max(img.width, img.height));
       const c = document.createElement("canvas");
       c.width = Math.round(img.width * scale); c.height = Math.round(img.height * scale);
       c.getContext("2d").drawImage(img, 0, 0, c.width, c.height);
       out = encodePic(c, q);
-      if (out.length < 300000) return out;
+      if (out.length < 330000) return out;
       max = Math.round(max * 0.82); q = Math.max(0.5, q - 0.07);
     }
     return out.length < 880000 ? out : "";
