@@ -598,6 +598,7 @@ function startApp() {
   unsubs.push(onSnapshot(query(collection(db, "recaps"), orderBy("createdAt", "desc"), limit(30)), (sn) => {
     S.recaps = sn.docs.map((d) => ({ id: d.id, ...d.data({ serverTimestamps: "estimate" }) }));
     const b = document.querySelector("#rc-btn"); if (b) b.hidden = !S.recaps.length;
+    if (S.tab === "feed") renderFeedCards();
     if (document.querySelector("#rc-list")) paintRecaps();
   }, () => {}));
   unsubs.push(onSnapshot(query(collection(db, "warnings"), where("to", "==", uid)), (sn) => showWarnings(sn.docs.map((d) => ({ id: d.id, ...d.data({ serverTimestamps: "estimate" }) }))), () => {}));
@@ -1429,13 +1430,17 @@ function feedPosts() {
 /* What's new. Newest first. Add a new entry on top each time the app changes. */
 /* Bump APP_VERSION every time you change the app, and add a matching entry on top of UPDATES (with v: the same number).
    Phones check app.js every few minutes and offer the new version on their own. */
-const APP_VERSION = 88;
+const APP_VERSION = 89;
 // The number people see. APP_VERSION stays a plain counter so updates are detected. Big changes bump the first number (2.0), smaller ones the second (1.1, 1.2).
 const REL_NAMES = { 59: "1.0", 60: "1.0", 61: "1.1", 62: "1.2", 63: "1.2", 64: "1.2", 65: "1.2", 66: "1.2", 67: "1.2",
-  68: "1.3", 69: "1.3", 70: "1.3", 71: "1.4", 72: "1.4", 73: "1.5", 74: "1.5", 75: "1.5", 76: "1.5", 77: "1.8", 78: "1.8", 79: "1.9", 80: "1.9", 81: "2.0", 82: "2.0", 83: "1.19", 84: "1.20", 85: "1.21", 86: "1.22", 87: "1.23", 88: "1.24" };
+  68: "1.3", 69: "1.3", 70: "1.3", 71: "1.4", 72: "1.4", 73: "1.5", 74: "1.5", 75: "1.5", 76: "1.5", 77: "1.8", 78: "1.8", 79: "1.9", 80: "1.9", 81: "2.0", 82: "2.0", 83: "1.19", 84: "1.20", 85: "1.21", 86: "1.22", 87: "1.23", 88: "1.24", 89: "1.25" };
 const relName = (v) => REL_NAMES[v] || (v < 59 ? `0.${v}` : `1.${v - 59}`);
 try { if ((parseInt(localStorage.getItem("weighin-appv"), 10) || 0) < APP_VERSION) localStorage.setItem("weighin-appv", String(APP_VERSION)); } catch { /* private mode */ }
 const UPDATES = [
+  { id: "2026-11-18b", v: 89, date: "Nov 18", title: "Your year shows up in the feed", items: [
+    "A posted Your year is now a picture card right in the feed, with your biggest catch, your numbers and a Watch the slideshow button. It's no longer hidden behind the 🎞️ button in the corner.",
+    "The card sits in the feed in order, next to the catches posted around the same time.",
+    "Photos in a posted year are saved sharp. If yours still looks soft, take it down and post it again."] },
   { id: "2026-11-18a", v: 88, date: "Nov 18", title: "Sharp photos in Your year", items: [
     "Fixed: the photos in a posted Your year were blurry. They are now saved sharp, so they look as good as the catch itself.",
     "If you posted your year before this, tap Post to feed to take it down, then post it again to get the sharp photos."] },
@@ -1787,7 +1792,8 @@ function renderFeedCards() {
   const h = $feed.clientHeight || 1;
   const was = $feed.scrollTop;
   const currentId = cards[Math.round(was / h)]?.dataset.id;
-  const nodes = list.map((p) => { let n = cardCache.get(p.id); if (!n) { n = makeCard(p); cardCache.set(p.id, n); } return n; });
+  const entries = feedEntries(list);   // catches, with a posted "year in fish" card among them where it belongs
+  const nodes = entries.map((e) => e.node);
   const end = feedEndCard(list.length);
   if (end) nodes.push(end);
   // Moving a video in the page pauses it, so remember which ones were playing and start them again.
@@ -1797,10 +1803,39 @@ function renderFeedCards() {
   // Where to leave them: on the first newly loaded catch after "Load older catches",
   // otherwise on the same card they were reading, otherwise wherever they already were.
   const want = S.scrollTo; S.scrollTo = null;
-  const idx = want ? list.findIndex((p) => p.id === want) : currentId ? list.findIndex((p) => p.id === currentId) : -1;
+  const ids = entries.map((e) => e.id);
+  const idx = want ? ids.indexOf(want) : currentId ? ids.indexOf(currentId) : -1;
   if (idx > 0) $feed.scrollTop = idx * $feed.clientHeight;
   else if (idx < 0 && was > 0) $feed.scrollTop = was;   // they were on the end card: stay there
   paintLikes(); paintSpotBtns();
+}
+const recapCache = new Map();
+function recapCard(r) {
+  const key = r.id + "|" + (r.photos?.length || 0) + "|" + r.n;
+  let n = recapCache.get(key); if (n) return n;
+  const ph = r.photos || [], cover = ph[r.bigIdx]?.p || ph[0]?.p || "", mine = r.uid === S.user.uid;
+  n = el("article", { class: "card recap-card", "data-id": "recap_" + r.id, "data-recap": r.id },
+    cover ? el("img", { src: cover, alt: `${r.year} in fish by ${r.name}`, loading: "lazy" }) : el("div", { class: "nophoto" }, "🎞️"),
+    el("div", { class: "shade" }),
+    el("div", { class: "info" },
+      el("button", { class: "who", type: "button", "aria-label": `See ${r.name}'s catches`, onclick: () => openAngler(r.uid, r.name) }, avatar(r.uid, r.name, 30), el("span", null, "@" + r.name)),
+      el("div", { class: "species" }, `🎞️ ${mine ? "Your" : "@" + r.name + "'s"} ${r.year} in fish`),
+      el("div", { class: "size" }, `${r.n} ${r.n === 1 ? "catch" : "catches"}${r.kinds ? " · " + r.kinds + (r.kinds === 1 ? " kind" : " kinds") : ""}`),
+      el("div", { class: "meta" }, [r.bigLb ? `Biggest: ${fmtLb(r.bigLb)} ${r.bigSp || ""}`.trim() : null, r.month ? "Best month: " + r.month : null].filter(Boolean).join("  ·  ")),
+      el("button", { class: "btn", type: "button", "data-act": "recap-play", style: "margin-top:12px;align-self:flex-start", onclick: () => playWrap(r, mine) }, "▶ Watch the slideshow")));
+  recapCache.set(key, n); return n;
+}
+function feedEntries(list) {
+  const sc = getPref("feedScope", "all"), me = S.user.uid, ms = (x) => x.createdAt?.toMillis?.() ?? 0;
+  const recs = S.recaps.filter((r) => r.photos && (sc === "all" || r.uid === me)).sort((a, b) => ms(b) - ms(a));
+  const out = []; let ri = 0;
+  for (const p of list) {
+    while (ri < recs.length && ms(recs[ri]) >= ms(p)) { out.push({ id: "recap_" + recs[ri].id, node: recapCard(recs[ri]) }); ri++; }
+    let n = cardCache.get(p.id); if (!n) { n = makeCard(p); cardCache.set(p.id, n); }
+    out.push({ id: p.id, node: n });
+  }
+  while (ri < recs.length) { out.push({ id: "recap_" + recs[ri].id, node: recapCard(recs[ri]) }); ri++; }
+  return out;
 }
 function makeCard(p) {
   const mine = p.uid === S.user.uid;
