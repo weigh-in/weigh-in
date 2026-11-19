@@ -1430,13 +1430,16 @@ function feedPosts() {
 /* What's new. Newest first. Add a new entry on top each time the app changes. */
 /* Bump APP_VERSION every time you change the app, and add a matching entry on top of UPDATES (with v: the same number).
    Phones check app.js every few minutes and offer the new version on their own. */
-const APP_VERSION = 90;
+const APP_VERSION = 91;
 // The number people see. APP_VERSION stays a plain counter so updates are detected. Big changes bump the first number (2.0), smaller ones the second (1.1, 1.2).
 const REL_NAMES = { 59: "1.0", 60: "1.0", 61: "1.1", 62: "1.2", 63: "1.2", 64: "1.2", 65: "1.2", 66: "1.2", 67: "1.2",
-  68: "1.3", 69: "1.3", 70: "1.3", 71: "1.4", 72: "1.4", 73: "1.5", 74: "1.5", 75: "1.5", 76: "1.5", 77: "1.8", 78: "1.8", 79: "1.9", 80: "1.9", 81: "2.0", 82: "2.0", 83: "1.19", 84: "1.20", 85: "1.21", 86: "1.22", 87: "1.23", 88: "1.24", 89: "1.25", 90: "1.26" };
+  68: "1.3", 69: "1.3", 70: "1.3", 71: "1.4", 72: "1.4", 73: "1.5", 74: "1.5", 75: "1.5", 76: "1.5", 77: "1.8", 78: "1.8", 79: "1.9", 80: "1.9", 81: "2.0", 82: "2.0", 83: "1.19", 84: "1.20", 85: "1.21", 86: "1.22", 87: "1.23", 88: "1.24", 89: "1.25", 90: "1.26", 91: "1.27" };
 const relName = (v) => REL_NAMES[v] || (v < 59 ? `0.${v}` : `1.${v - 59}`);
 try { if ((parseInt(localStorage.getItem("weighin-appv"), 10) || 0) < APP_VERSION) localStorage.setItem("weighin-appv", String(APP_VERSION)); } catch { /* private mode */ }
 const UPDATES = [
+  { id: "2026-11-18d", v: 91, date: "Nov 18", title: "Replace a blurry photo", items: [
+    "Every catch you posted now has a 📷 Photo button on its feed card. Pick the original photo from your phone and it swaps in sharp (1280 across), keeping its likes, comments and date.",
+    "After you swap photos, take your year down and post it again so the slideshow picks up the sharp ones."] },
   { id: "2026-11-18c", v: 90, date: "Nov 18", title: "Sharper photos in the slideshow", items: [
     "Slideshow photos now show whole at their real size instead of being stretched over the whole screen, so they look sharp.",
     "New catch photos are saved bigger (1280 across) so they stay clear full screen. Older photos keep the size they were saved at."] },
@@ -1856,6 +1859,7 @@ function makeCard(p) {
       el("div", null, el("button", { type: "button", class: "like", "data-like": p.id, "aria-pressed": "false", "aria-label": "Like", html: ICON.heart, onclick: () => toggleLike(p) }), el("small", { "data-like-n": p.id }, String(likeCount(p)))),
       el("div", { "data-spotbtn": p.id, hidden: true }, el("button", { type: "button", "aria-label": "See where this was caught on the map", html: ICON.map, onclick: () => seeOnMap(p) }), el("small", null, "Map")),
       el("div", null, el("button", { type: "button", "aria-label": "Comments", html: ICON.chat, onclick: () => openComments(p) }), el("small", null, "Comments")),
+      mine ? el("div", null, el("button", { type: "button", "aria-label": "Replace this photo with a sharper one", "data-swap-photo": p.id, style: "font-size:20px", onclick: () => swapPhoto(p) }, "📷"), el("small", null, "Photo")) : null,
       mine || (editOn() && canOn("deletePosts", p.uid)) ? el("div", null, el("button", { type: "button", "aria-label": "Delete this post", html: ICON.trash, onclick: () => deletePost(p) }), el("small", null, "Delete")) : null,
       !mine ? el("div", null, el("button", { type: "button", "aria-label": "Report this post", html: ICON.flag, onclick: () => reportPost(p) }), el("small", null, "Report")) : null,
       editOn() && S.owner ? el("div", null, el("button", { type: "button", "aria-label": "Rename this catch", "data-rename-post": p.id, html: ICON.edit || "✏️", onclick: () => openPostEdit(p.id, p.species) }), el("small", null, "Rename")) : null,
@@ -2295,6 +2299,25 @@ const vidObs = ("IntersectionObserver" in window) ? new IntersectionObserver((es
 function vidWatch(v) { vidObs?.observe(v); }
 document.addEventListener("visibilitychange", () => { if (document.hidden) document.querySelectorAll("video.vid-feed").forEach((v) => v.pause()); });
 async function vidDelete(pid, n) { for (let i = 0; i < (n || 12); i++) await deleteDoc(doc(db, "vids", `${pid}_${i}`)).catch(() => {}); }
+// Put a sharper copy of a catch's photo on a catch you already posted. Likes, comments and date stay.
+function swapPhoto(p) {
+  const inp = el("input", { type: "file", accept: "image/*", style: "position:fixed;left:-999px" });
+  inp.addEventListener("change", async () => {
+    const f = inp.files?.[0]; inp.remove(); if (!f) return;
+    toast("Saving the sharper photo…");
+    try {
+      const big = await shrinkPhoto(f); if (!big) { toast("That photo is too big. Try another."); return; }
+      const link = await uploadPhoto(big), next = link || big;
+      await updateDoc(doc(db, "posts", p.id), { photo: next });
+      if (R2_URL.test(p.photo || "")) r2Delete(p.photo);
+      p.photo = next; cardCache.delete(p.id);
+      const i = Math.max(0, S.mine.findIndex((x) => x.id === p.id)); if (S.mine[i] && S.mine[i].id === p.id) S.mine[i].photo = next;
+      document.querySelectorAll(`.card[data-id="${CSS.escape(p.id)}"] > img`).forEach((im) => { im.src = next; });
+      toast("Photo replaced. It stays sharp now.");
+    } catch (err) { toast(errText(err)); }
+  });
+  document.body.append(inp); inp.click();
+}
 async function deletePost(p) {
   if (!confirm("Delete this catch? This can't be undone.")) return;
   try {
