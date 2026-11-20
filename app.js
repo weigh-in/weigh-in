@@ -600,6 +600,7 @@ function startApp() {
     const b = document.querySelector("#rc-btn"); if (b) b.hidden = !S.recaps.length;
     if (S.tab === "feed") renderFeedCards();
     if (document.querySelector("#rc-list")) paintRecaps();
+    setTimeout(maybeFriendYear, 2500);
   }, () => {}));
   unsubs.push(onSnapshot(query(collection(db, "warnings"), where("to", "==", uid)), (sn) => showWarnings(sn.docs.map((d) => ({ id: d.id, ...d.data({ serverTimestamps: "estimate" }) }))), () => {}));
   unsubs.push(() => { msgUns.forEach((u) => u()); msgUns.clear(); S.unread.clear(); S.chatOpen = null; });
@@ -680,7 +681,7 @@ function startApp() {
   }, () => {}));
   unsubs.push(onSnapshot(query(collection(db, "friendships"), where("members", "array-contains", uid)), (s) => {
     S.friendships = s.docs.map((d) => ({ id: d.id, ...d.data() }));
-    syncMsgWatch();
+    syncMsgWatch(); syncPush();
     refreshMe("friends");
   }, () => {}));
   unsubs.push(onSnapshot(query(collection(db, "spots"), orderBy("createdAt", "desc"), limit(300)), (s) => {
@@ -1430,13 +1431,18 @@ function feedPosts() {
 /* What's new. Newest first. Add a new entry on top each time the app changes. */
 /* Bump APP_VERSION every time you change the app, and add a matching entry on top of UPDATES (with v: the same number).
    Phones check app.js every few minutes and offer the new version on their own. */
-const APP_VERSION = 91;
+const APP_VERSION = 92;
 // The number people see. APP_VERSION stays a plain counter so updates are detected. Big changes bump the first number (2.0), smaller ones the second (1.1, 1.2).
 const REL_NAMES = { 59: "1.0", 60: "1.0", 61: "1.1", 62: "1.2", 63: "1.2", 64: "1.2", 65: "1.2", 66: "1.2", 67: "1.2",
-  68: "1.3", 69: "1.3", 70: "1.3", 71: "1.4", 72: "1.4", 73: "1.5", 74: "1.5", 75: "1.5", 76: "1.5", 77: "1.8", 78: "1.8", 79: "1.9", 80: "1.9", 81: "2.0", 82: "2.0", 83: "1.19", 84: "1.20", 85: "1.21", 86: "1.22", 87: "1.23", 88: "1.24", 89: "1.25", 90: "1.26", 91: "1.27" };
+  68: "1.3", 69: "1.3", 70: "1.3", 71: "1.4", 72: "1.4", 73: "1.5", 74: "1.5", 75: "1.5", 76: "1.5", 77: "1.8", 78: "1.8", 79: "1.9", 80: "1.9", 81: "2.0", 82: "2.0", 83: "1.19", 84: "1.20", 85: "1.21", 86: "1.22", 87: "1.23", 88: "1.24", 89: "1.25", 90: "1.26", 91: "1.27", 92: "1.28" };
 const relName = (v) => REL_NAMES[v] || (v < 59 ? `0.${v}` : `1.${v - 59}`);
 try { if ((parseInt(localStorage.getItem("weighin-appv"), 10) || 0) < APP_VERSION) localStorage.setItem("weighin-appv", String(APP_VERSION)); } catch { /* private mode */ }
 const UPDATES = [
+  { id: "2026-11-19a", v: 92, date: "Nov 19", title: "Notifications, a new slideshow and sharing", items: [
+    "Notifications that reach you even when Weigh-In is closed. Tap 🔔 Notifications on your profile to turn them on. You'll get one when a friend posts a catch or their year.",
+    "Your year slideshow is rebuilt: rolling numbers, a month chart, your top fish, floating photos with a slow zoom, confetti on your biggest fish, and hold to pause or swipe to move.",
+    "New 🖼️ Share as a picture on your year, and a 📤 Share button on every catch, to send a picture with the Weigh-In name on it.",
+    "Every so often a friend's posted year pops up so you don't miss it."] },
   { id: "2026-11-18d", v: 91, date: "Nov 18", title: "Replace a blurry photo", items: [
     "Every catch you posted now has a 📷 Photo button on its feed card. Pick the original photo from your phone and it swaps in sharp (1280 across), keeping its likes, comments and date.",
     "After you swap photos, take your year down and post it again so the slideshow picks up the sharp ones."] },
@@ -1859,6 +1865,7 @@ function makeCard(p) {
       el("div", null, el("button", { type: "button", class: "like", "data-like": p.id, "aria-pressed": "false", "aria-label": "Like", html: ICON.heart, onclick: () => toggleLike(p) }), el("small", { "data-like-n": p.id }, String(likeCount(p)))),
       el("div", { "data-spotbtn": p.id, hidden: true }, el("button", { type: "button", "aria-label": "See where this was caught on the map", html: ICON.map, onclick: () => seeOnMap(p) }), el("small", null, "Map")),
       el("div", null, el("button", { type: "button", "aria-label": "Comments", html: ICON.chat, onclick: () => openComments(p) }), el("small", null, "Comments")),
+      p.photo ? el("div", null, el("button", { type: "button", "aria-label": "Share this catch as a picture", "data-share-catch": p.id, style: "font-size:20px", onclick: () => shareCatchImage(p) }, "📤"), el("small", null, "Share")) : null,
       mine ? el("div", null, el("button", { type: "button", "aria-label": "Replace this photo with a sharper one", "data-swap-photo": p.id, style: "font-size:20px", onclick: () => swapPhoto(p) }, "📷"), el("small", null, "Photo")) : null,
       mine || (editOn() && canOn("deletePosts", p.uid)) ? el("div", null, el("button", { type: "button", "aria-label": "Delete this post", html: ICON.trash, onclick: () => deletePost(p) }), el("small", null, "Delete")) : null,
       !mine ? el("div", null, el("button", { type: "button", "aria-label": "Report this post", html: ICON.flag, onclick: () => reportPost(p) }), el("small", null, "Report")) : null,
@@ -2148,34 +2155,123 @@ async function openWrapped(yr, auto) {
     bigLb: +byLb?.lb || 0, bigSp: byLb?.species || "", bigIn: +byLb?.inches || 0, bigIdx: chosen.indexOf(byLb),
     likedN: liked ? likeN(liked) : 0, likedSp: liked?.species || "", likedIdx: liked ? chosen.indexOf(liked) : -1,
     likes: ps.reduce((n, p) => n + likeN(p), 0), month: mons[0]?.[0] || "", monthN: mons[0]?.[1] || 0,
+    top: spec.slice(0, 4).map(([k, c]) => [nice(k).slice(0, 24), c]), mc: MONTHS.map((_, m) => ps.filter((p) => new Date(catchMs(p)).getMonth() === m).length),
+    days: new Set(ps.map((p) => p.catchDate || new Date(catchMs(p)).toISOString().slice(0, 10))).size, lbs: Math.round(ps.reduce((n, p) => n + (+p.lb || 0), 0) * 10) / 10,
     photos: chosen.map((p) => ({ p: p.photo, s: String(p.species || "Fish").slice(0, 40), z: sizeText(p) === "Size not entered" ? "" : sizeText(p), d: fmtDayY(p.catchDate || new Date(catchMs(p)).toISOString().slice(0, 10)) })),
   };
   playWrap(d, true);
 }
+/* ---- the Your year slideshow ---- */
+const reduceMotion = () => { try { return matchMedia("(prefers-reduced-motion: reduce)").matches; } catch { return false; } };
+// Numbers roll up from zero. The finished number is what screen readers and copy/paste see.
+function countUp(node, to, o = {}) {
+  const fmt = o.fmt || ((v) => String(Math.round(v)));
+  node.setAttribute("aria-label", fmt(to));
+  if (reduceMotion() || !(to > 0)) { node.textContent = fmt(to); return; }
+  const t0 = performance.now(), ms = o.ms || 1300; node.textContent = fmt(0);
+  const step = (t) => { if (!node.isConnected) return; const k = Math.min(1, (t - t0) / ms), e = 1 - Math.pow(1 - k, 3); node.textContent = fmt(to * e); if (k < 1) requestAnimationFrame(step); };
+  requestAnimationFrame(step);
+}
+const wrIn = (node, i = 0) => { node.classList.add("wr-in"); node.style.setProperty("--i", String(i)); return node; };
+const WR_COLORS = ["#f5c542", "#e8742a", "#1b8fd1", "#3cc47c", "#ff5d73", "#ffffff"];
+function wrConfetti(n = 54) {
+  const f = el("div", { class: "wr-fx", "aria-hidden": "true" });
+  for (let i = 0; i < n; i++) f.append(el("i", { class: "pb-bit", style: `left:${Math.random() * 100}%;background:${WR_COLORS[i % WR_COLORS.length]};animation-delay:${(Math.random() * 0.9).toFixed(2)}s;animation-duration:${(2.4 + Math.random() * 1.8).toFixed(2)}s;transform:rotate(${Math.round(Math.random() * 360)}deg)` }));
+  return f;
+}
+function wrHearts(n = 16) {
+  const f = el("div", { class: "wr-fx", "aria-hidden": "true" });
+  for (let i = 0; i < n; i++) f.append(el("span", { class: "wr-heart", style: `left:${6 + Math.random() * 88}%;font-size:${16 + Math.round(Math.random() * 22)}px;animation-delay:${(Math.random() * 3.2).toFixed(2)}s;animation-duration:${(3.4 + Math.random() * 2.4).toFixed(2)}s` }));
+  return f;
+}
+function wrBubbles(n = 14) {
+  const f = el("div", { class: "wr-fx", "aria-hidden": "true" });
+  for (let i = 0; i < n; i++) { const s = 6 + Math.round(Math.random() * 16); f.append(el("i", { class: "wr-bub", style: `left:${Math.random() * 100}%;width:${s}px;height:${s}px;animation-delay:${(Math.random() * 6).toFixed(2)}s;animation-duration:${(6 + Math.random() * 6).toFixed(2)}s` })); }
+  return f;
+}
+const WR_WAVE = '<svg viewBox="0 0 1200 90" preserveAspectRatio="none" aria-hidden="true"><path fill="#fff" d="M0 45 Q 150 0 300 45 T 600 45 T 900 45 T 1200 45 V90 H0Z"/></svg>';
+// A photo shown like a print held in a hand: slightly tilted, slowly zooming, white edge.
+const wrPhoto = (src, tilt, i = 0) => wrIn(el("div", { class: "wr-pol", style: `--tilt:${tilt}deg;--ox:${30 + Math.round(Math.random() * 40)}%;--oy:${30 + Math.round(Math.random() * 40)}%` }, el("img", { src, alt: "" })), i);
+function wrBars(months, hi) {
+  const mx = Math.max(1, ...months), L = ["J", "F", "M", "A", "M", "J", "J", "A", "S", "O", "N", "D"];
+  return wrIn(el("div", { class: "wr-months" }, months.map((v, k) => el("div", { class: "wr-mcol" + (k === hi ? " hi" : "") },
+    el("span", { class: "wr-mnum" }, v ? String(v) : ""), el("i", { style: `height:${Math.max(4, Math.round((v / mx) * 100))}%;--k:${k}` }), el("b", null, L[k])))), 3);
+}
+function wrSpecies(top) {
+  const mx = Math.max(1, ...top.map((x) => x[1]));
+  return wrIn(el("div", { class: "wr-sp" }, top.map((x, k) => el("div", { class: "wr-sprow" },
+    el("span", { class: "wr-spn" }, String(x[0])), el("span", { class: "wr-spbar" }, el("i", { style: `width:${Math.max(8, Math.round((x[1] / mx) * 100))}%;--k:${k}` })), el("b", null, String(x[1]))))), 3);
+}
+function wrCompare(lb) {   // a friendly way to picture the weight
+  if (lb >= 400) return `about ${Math.round(lb / 400)} grizzly bear${lb >= 800 ? "s" : ""}`;
+  if (lb >= 150) return `about ${Math.round(lb / 150)} full-grown ${lb >= 225 ? "men" : "man"}`;
+  if (lb >= 40) return `about ${Math.round(lb / 40)} bag${lb >= 60 ? "s" : ""} of dog food`;
+  if (lb >= 14) return `about ${Math.round(lb / 14)} bowling ball${lb >= 21 ? "s" : ""}`;
+  return "";
+}
 function playWrap(d, own) {
   document.querySelector(".wrap-ov")?.remove();
   const yr = d.year, photos = d.photos || [];
-  const H = (t, sz = 28, extra = "") => el("div", { style: `font-size:${sz}px;font-weight:800;line-height:1.1;text-wrap:balance;${extra}` }, t);
-  const S2 = (t) => el("div", { style: "font-size:17px;opacity:.9;max-width:320px" }, t);
-  const pool = photos.map((x) => x.p);
-  let pi = 0; const nextPhoto = () => (pool.length ? pool[pi++ % pool.length] : "");
-  const slides = [];
+  const who = own ? "Your" : "@" + d.name + "'s";
   const bk = getPref("theme", "auto") === "black";
-  const tint = (g) => (bk ? g.replace("#e8742a,#7a2a0a", "#e11d2e,#4a0710").replace("#1f9d6a,#0a3b2a", "#2a5fd0,#0a1a4a").replace("#d6336c,#5a0f2b", "#c4182a,#3a050b").replace("#7b3fc4,#2a0f55", "#1e3a8a,#0a1230").replace("#1b8fd1,#08304f", "#2a5fd0,#0a1230") : g);
-  const add = (bg, ...kids) => slides.push({ bg: tint(bg), kids, photo: nextPhoto() });
-  const addP = (bg, photo, ...kids) => slides.push({ bg: tint(bg), kids, photo: photo || nextPhoto() });
-  add("linear-gradient(160deg,#0b5fa5,#0a2a4a)", H("🎣", 72), H(`${own ? "Your" : "@" + d.name + "'s"} ${yr} in fish`, 38), S2(own ? `@${d.name}, here's your year on the water.` : "A year on the water."));
-  add("linear-gradient(160deg,#e8742a,#7a2a0a)", S2(own ? "You logged" : "Logged"), H(String(d.n), 96), S2(d.n === 1 ? "catch this year" : "catches this year"));
-  add("linear-gradient(160deg,#1f9d6a,#0a3b2a)", S2(own ? "You caught" : "Caught"), H(String(d.kinds), 80), S2(d.kinds === 1 ? "kind of fish" : "different kinds of fish"),
-    el("div", { style: "font-size:20px;font-weight:700;margin-top:6px" }, `Most often: ${d.topSp} (${d.topN})`));
-  if (d.bigLb) addP("linear-gradient(160deg,#7b3fc4,#2a0f55)", photos[d.bigIdx]?.p, S2(own ? "Your biggest fish" : "Biggest fish"), H(fmtLb(d.bigLb), 56), S2(`${d.bigSp || "Fish"}${d.bigIn ? " · " + fmtIn(d.bigIn) : ""}`));
-  if (d.likedN > 0) addP("linear-gradient(160deg,#d6336c,#5a0f2b)", photos[d.likedIdx]?.p, S2(own ? "Your most liked catch" : "Most liked catch"), H(`❤️ ${d.likedN}`, 48), S2(`${d.likedSp || "Fish"} · ${d.likes} ${d.likes === 1 ? "like" : "likes"} in all`));
-  if (d.month) add("linear-gradient(160deg,#1b8fd1,#08304f)", S2(own ? "Your best month" : "Best month"), H(d.month, 44), S2(`${d.monthN} ${d.monthN === 1 ? "catch" : "catches"}`));
-  for (const x of photos) addP("linear-gradient(160deg,#222,#000)", x.p, H(x.s || "Fish", 30), S2([x.z, x.d].filter(Boolean).join(" · ")));
+  const tint = (g) => (bk ? g.replace("#e8742a,#7a2a0a", "#e11d2e,#4a0710").replace("#1f9d6a,#0a3b2a", "#2a5fd0,#0a1a4a").replace("#d6336c,#5a0f2b", "#c4182a,#3a050b").replace("#7b3fc4,#2a0f55", "#1e3a8a,#0a1230").replace("#1b8fd1,#08304f", "#2a5fd0,#0a1230").replace("#f5a524,#7a3d05", "#e11d2e,#4a0710").replace("#12a4a4,#073a3a", "#2a5fd0,#0a1a4a") : g);
+  const G = (a, b, deg = 160) => tint(`linear-gradient(${deg}deg,${a},${b})`);
+  const slides = [];
+  const T = (cls, text, i) => wrIn(el("div", { class: cls }, text), i);
+  const push = (s) => slides.push({ dur: 5000, tilt: 0, ...s, bg: s.bg || G("#0b5fa5", "#0a2a4a") });
+  let ti = 0; const tilt = () => [-2.5, 2, -1.5, 3][ti++ % 4];
+  const cover = photos[d.bigIdx]?.p || photos[0]?.p || "";
+
+  // 1. hello
+  push({ bg: G("#0b5fa5", "#0a2a4a"), photo: cover && photos.length ? cover : "", dur: 4600, fx: "bubbles", kids: [
+    wrIn(el("div", { class: "wr-emoji" }, "🎣"), 0),
+    T("wr-eyebrow", own ? "Weigh-In wrapped" : "@" + d.name + " on Weigh-In", 1),
+    T("wr-year", String(yr), 2),
+    T("wr-h", "in fish", 3),
+    T("wr-sub", own ? `@${d.name}, here's your year on the water.` : "A year on the water.", 4)] });
+  // 2. how many
+  const nNode = el("div", { class: "wr-big", "data-count": String(d.n) });
+  push({ bg: G("#e8742a", "#7a2a0a"), dur: 4600, fx: "bubbles", kids: [T("wr-sub", own ? "You logged" : "Logged", 0), wrIn(nNode, 1), T("wr-h", d.n === 1 ? "catch this year" : "catches this year", 2),
+    d.days > 1 ? T("wr-sub", `on ${d.days} different days on the water`, 3) : null], after: () => countUp(nNode, d.n) });
+  // 3. kinds
+  const kNode = el("div", { class: "wr-big", "data-count": String(d.kinds) });
+  push({ bg: G("#1f9d6a", "#0a3b2a"), dur: 5600, fx: "bubbles", kids: [T("wr-sub", own ? "You caught" : "Caught", 0), wrIn(kNode, 1), T("wr-h", d.kinds === 1 ? "kind of fish" : "different kinds of fish", 2),
+    d.top && d.top.length > 1 ? wrSpecies(d.top) : null,
+    T("wr-pill", `Most often: ${d.topSp} (${d.topN})`, 4)], after: () => countUp(kNode, d.kinds) });
+  // 4. biggest
+  if (d.bigLb) {
+    const bp = photos[d.bigIdx]?.p, lNode = el("div", { class: "wr-big sm" });
+    push({ bg: G("#7b3fc4", "#2a0f55"), photo: bp, dur: 6400, fx: "confetti", tilt: tilt(), kids: [
+      T("wr-sub", own ? "Your biggest fish" : "Biggest fish", 0), bp ? wrPhoto(bp, -2.5, 1) : null,
+      wrIn(lNode, bp ? 2 : 1), T("wr-h sm", `${d.bigSp || "Fish"}${d.bigIn ? " · " + fmtIn(d.bigIn) : ""}`, 3)], after: () => countUp(lNode, d.bigLb, { dec: 1, fmt: (v) => fmtLb(Math.round(v * 10) / 10), ms: 1500 }) });
+  }
+  // 5. most liked
+  if (d.likedN > 0) {
+    const lp = photos[d.likedIdx]?.p, hNode = el("div", { class: "wr-big sm" });
+    push({ bg: G("#d6336c", "#5a0f2b"), photo: lp, dur: 5600, fx: "hearts", kids: [
+      T("wr-sub", own ? "Your most liked catch" : "Most liked catch", 0), lp ? wrPhoto(lp, 2, 1) : null,
+      wrIn(hNode, lp ? 2 : 1), T("wr-h sm", `❤️ ${d.likedSp || "Fish"} · ${d.likes} ${d.likes === 1 ? "like" : "likes"} in all`, 3)], after: () => countUp(hNode, d.likedN) });
+  }
+  // 6. busiest month
+  if (d.month) {
+    const hi = d.mc && d.mc.length === 12 ? d.mc.indexOf(Math.max(...d.mc)) : -1;
+    push({ bg: G("#1b8fd1", "#08304f"), dur: 5400, kids: [T("wr-sub", own ? "Your best month" : "Best month", 0), T("wr-h big2", d.month, 1), T("wr-sub", `${d.monthN} ${d.monthN === 1 ? "catch" : "catches"}`, 2), d.mc && d.mc.length === 12 ? wrBars(d.mc, hi) : null] });
+  }
+  // 7. weight
+  if (d.lbs >= 5) {
+    const wNode = el("div", { class: "wr-big sm" }), cmp = wrCompare(d.lbs);
+    push({ bg: G("#f5a524", "#7a3d05"), dur: 4800, fx: "bubbles", kids: [T("wr-sub", own ? "Everything you caught weighed" : "Everything caught weighed", 0), wrIn(wNode, 1), cmp ? T("wr-h sm", cmp, 2) : null, T("wr-sub", "(for the catches with a weight logged)", 3)],
+      after: () => countUp(wNode, d.lbs, { fmt: (v) => fmtLb(Math.round(v * 10) / 10), ms: 1600 }) });
+  }
+  // 8. the rest of the photos, each on its own
+  const skip = new Set([d.bigIdx, d.likedIdx].filter((x) => x >= 0));
+  photos.forEach((x, k) => { if (skip.has(k) && photos.length > skip.size) return; push({ bg: G("#12a4a4", "#073a3a"), photo: x.p, dur: 5200, tilt: tilt(), kids: [wrPhoto(x.p, tilt(), 0), T("wr-h sm", x.s || "Fish", 1), T("wr-sub", [x.z, x.d].filter(Boolean).join(" · "), 2)] }); });
+
+  // the end
   const shareText = `${own ? "My" : "@" + d.name + "'s"} ${yr} in fish on Weigh-In: ${d.n} catches, ${d.kinds} kinds of fish${d.bigLb ? ", biggest " + fmtLb(d.bigLb) + " " + (d.bigSp || "") : ""}. 🎣`;
   const rid = d.uid + "_" + yr;
   const mine = () => S.recaps.some((r) => r.id === rid);
-  const postBtn = el("button", { class: "btn", type: "button", id: "wrap-post", style: "margin-top:10px" });
+  const postBtn = el("button", { class: "btn", type: "button", id: "wrap-post" });
   const paintPost = () => { postBtn.textContent = mine() ? "✓ Posted. Tap to take down" : "📣 Post to feed"; };
   paintPost();
   postBtn.onclick = async (e) => {
@@ -2192,45 +2288,116 @@ function playWrap(d, own) {
           th.push({ p, s: x.s, z: x.z, d: x.d });
         }
         const { uid, name, year, n, kinds, topSp, topN, bigLb, bigSp, bigIn, bigIdx, likedN, likedSp, likedIdx, likes, month, monthN } = d;
-        await setDoc(doc(db, "recaps", rid), { uid, name, year, n, kinds, topSp, topN, bigLb, bigSp, bigIn, bigIdx, likedN, likedSp, likedIdx, likes, month, monthN, photos: th.filter((x) => x.p), createdAt: serverTimestamp() });
+        const base = { uid, name, year, n, kinds, topSp, topN, bigLb, bigSp, bigIn, bigIdx, likedN, likedSp, likedIdx, likes, month, monthN, photos: th.filter((x) => x.p), createdAt: serverTimestamp() };
+        const extra = { top: d.top || [], mc: d.mc || [], days: d.days || 0, lbs: d.lbs || 0 };
+        try { await setDoc(doc(db, "recaps", rid), { ...base, ...extra }); }
+        catch (err) { if (err?.code === "permission-denied") await setDoc(doc(db, "recaps", rid), base); else throw err; }   // the newest rules aren't published yet: the plain slideshow still posts
         S.recaps = [{ id: rid, uid, name, year, n }, ...S.recaps.filter((r) => r.id !== rid)];
         toast("Posted! Everyone can watch it from the 🎞️ button on the feed.");
+        notifyFriends("recap", { year });
       }
     } catch (err) { toast(errText(err)); }
     postBtn.disabled = false; paintPost();
   };
-  const staffBtn = !own && isStaff() ? el("button", { class: "btn ghost", type: "button", id: "wrap-remove", style: "margin-top:6px", onclick: async (e) => { e.stopPropagation(); if (!confirm("Remove this slideshow from the feed?")) return; try { await deleteDoc(doc(db, "recaps", rid)); toast("Removed."); close(); } catch (err) { toast(errText(err)); } } }, "Remove from feed") : null;
-  add("linear-gradient(160deg,#0b5fa5,#0a2a4a)", H("🏆", 64), H(`That's ${own ? "your" : "@" + d.name + "'s"} ${yr}!`, 34), S2(`See you on the water in ${yr + 1}.`),
-    own ? postBtn : null,
-    el("button", { class: "btn" + (own ? " ghost" : ""), type: "button", id: "wrap-share", style: "margin-top:6px", onclick: async (e) => { e.stopPropagation(); try { if (navigator.share) await navigator.share({ text: shareText }); else { await navigator.clipboard.writeText(shareText); toast("Copied. Paste it anywhere."); } } catch { /* cancelled */ } } }, "Share"),
-    staffBtn,
-    el("button", { class: "btn ghost", type: "button", id: "wrap-done", style: "margin-top:6px", onclick: (e) => { e.stopPropagation(); close(); } }, "Done"));
-  let i = 0, timer = 0;
-  const bars = el("div", { style: "position:relative;display:flex;gap:4px;width:100%" }, slides.map(() => el("i", { style: "flex:1;height:3px;border-radius:2px;background:rgba(255,255,255,.3)" })));
-  const body = el("div", { style: "position:relative;z-index:1;flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;text-align:center;padding:10px 0;min-height:0" });
-  const closeBtn = el("button", { type: "button", id: "wrap-x", "aria-label": "Close", style: "background:none;border:0;color:#fff;font-size:26px;line-height:1;padding:4px 8px;cursor:pointer", onclick: (e) => { e.stopPropagation(); close(); } }, "✕");
-  const layer = el("div", { style: "position:absolute;inset:0;overflow:hidden;z-index:0;pointer-events:none" });
-  const ov = el("div", { class: "wrap-ov", role: "dialog", "aria-label": `${yr} in fish`, style: "position:fixed;inset:0;z-index:9999;color:#fff;display:flex;flex-direction:column;padding:calc(12px + env(safe-area-inset-top,0px)) 16px calc(16px + env(safe-area-inset-bottom,0px));gap:8px;font-family:inherit;user-select:none;transition:background .3s" },
-    layer, bars, el("div", { style: "display:flex;justify-content:flex-end;position:relative" }, closeBtn), body);
-  const close = () => { clearTimeout(timer); ov.remove(); };
+  const staffBtn = !own && isStaff() ? el("button", { class: "btn ghost", type: "button", id: "wrap-remove", onclick: async (e) => { e.stopPropagation(); if (!confirm("Remove this slideshow from the feed?")) return; try { await deleteDoc(doc(db, "recaps", rid)); toast("Removed."); close(); } catch (err) { toast(errText(err)); } } }, "Remove from feed") : null;
+  const tiles = photos.slice(0, 6);
+  push({ bg: G("#0b5fa5", "#0a2a4a"), dur: Infinity, fx: "confetti", kids: [
+    tiles.length ? wrIn(el("div", { class: "wr-grid n" + tiles.length }, tiles.map((x, k) => el("div", { class: "wr-tile", style: `--k:${k}` }, el("img", { src: x.p, alt: "" })))), 0) : wrIn(el("div", { class: "wr-emoji" }, "🏆"), 0),
+    T("wr-h", `That's ${own ? "your" : "@" + d.name + "'s"} ${yr}!`, 1),
+    T("wr-sub", `${d.n} ${d.n === 1 ? "catch" : "catches"} · ${d.kinds} ${d.kinds === 1 ? "kind" : "kinds"}${d.bigLb ? " · biggest " + fmtLb(d.bigLb) : ""}`, 2),
+    wrIn(el("div", { class: "wr-btns" },
+      own ? postBtn : null,
+      el("button", { class: "btn", type: "button", id: "wrap-img", onclick: async (e) => { e.stopPropagation(); const btn = e.currentTarget; btn.disabled = true; await shareRecapImage(d, own, shareText); btn.disabled = false; } }, "🖼️ Share as a picture"),
+      el("button", { class: "btn ghost", type: "button", id: "wrap-share", onclick: async (e) => { e.stopPropagation(); try { if (navigator.share) await navigator.share({ text: shareText, url: location.origin }); else { await navigator.clipboard.writeText(shareText + " " + location.origin); toast("Copied. Paste it anywhere."); } } catch { /* cancelled */ } } }, "Share a link"),
+      staffBtn,
+      el("button", { class: "btn ghost", type: "button", id: "wrap-done", onclick: (e) => { e.stopPropagation(); close(); } }, "Done")), 3)] });
+
+  // ---- the player ----
+  let i = -1, elapsed = 0, last = 0, raf = 0, held = false, swallow = false, cur = 0;
+  const bars = el("div", { class: "wr-bars" }, slides.map(() => el("div", { class: "wr-bar" }, el("i"))));
+  const stage = el("div", { class: "wr-stage" });
+  const mkLayer = () => el("div", { class: "wr-layer" });
+  const layers = [mkLayer(), mkLayer()];
+  const orbs = el("div", { class: "wr-orbs", "aria-hidden": "true" }, el("i", { class: "wr-orb", style: "left:-10%;top:8%;width:60vmin;height:60vmin;background:#6ec6ff" }), el("i", { class: "wr-orb", style: "right:-18%;top:42%;width:70vmin;height:70vmin;background:#ffd27a;animation-delay:-5s" }), el("i", { class: "wr-orb", style: "left:10%;bottom:-12%;width:55vmin;height:55vmin;background:#c79bff;animation-delay:-9s" }));
+  const wave = el("div", { class: "wr-wave", "aria-hidden": "true", html: WR_WAVE + WR_WAVE });
+  const closeBtn = el("button", { type: "button", id: "wrap-x", class: "wr-x", "aria-label": "Close", onclick: (e) => { e.stopPropagation(); close(); } }, "✕");
+  const ov = el("div", { class: "wrap-ov wr", role: "dialog", "aria-label": `${yr} in fish` },
+    ...layers, orbs, wave, el("div", { class: "wr-top" }, bars, el("div", { class: "wr-topr" }, closeBtn)), stage,
+    el("div", { class: "wr-brand", "aria-hidden": "true" }, "🎣 Weigh-In"));
+  const close = () => { cancelAnimationFrame(raf); ov.remove(); };
   const show = (n) => {
-    clearTimeout(timer); i = Math.max(0, Math.min(slides.length - 1, n));
+    i = Math.max(0, Math.min(slides.length - 1, n)); elapsed = 0; last = 0;
     const sl = slides[i];
-    // The photo is shown whole at its real size in a frame (stretching a phone-sized photo over the whole screen is what made it look soft).
-    // A blurred copy of it fills the rest of the screen behind.
-    ov.style.background = sl.photo ? `linear-gradient(rgba(0,0,0,.45),rgba(0,0,0,.2) 40%,rgba(0,0,0,.8)), ${sl.bg}` : sl.bg;
-    layer.replaceChildren(...(sl.photo ? [
-      el("div", { style: `position:absolute;inset:-30px;background:url("${sl.photo}") center/cover no-repeat;filter:blur(26px) brightness(.55);` }),
-      el("img", { class: "wrap-pic", src: sl.photo, alt: "", style: "position:absolute;left:16px;right:16px;top:calc(64px + env(safe-area-inset-top,0px));bottom:36%;width:calc(100% - 32px);height:auto;max-height:calc(64% - 64px);margin:auto;object-fit:contain;border-radius:14px;box-shadow:0 8px 28px rgba(0,0,0,.55);image-rendering:auto" }),
-    ] : []));
-    body.style.justifyContent = sl.photo ? "flex-end" : "center"; body.style.paddingBottom = sl.photo ? "28px" : "10px";
-    body.style.textShadow = sl.photo ? "0 2px 12px rgba(0,0,0,.7)" : "none";
-    body.replaceChildren(...sl.kids.filter(Boolean));
-    [...bars.children].forEach((b, k) => { b.style.background = k <= i ? "#fff" : "rgba(255,255,255,.3)"; });
-    if (i < slides.length - 1) timer = setTimeout(() => show(i + 1), 5200);
+    const nx = layers[1 - cur], pv = layers[cur]; cur = 1 - cur;
+    nx.replaceChildren(el("div", { class: "wr-bg", style: `background:${sl.bg}` }), ...(sl.photo ? [el("div", { class: "wr-blur", style: `background-image:url("${sl.photo}")` })] : []), el("div", { class: "wr-shade" }));
+    nx.style.zIndex = "1"; pv.style.zIndex = "0"; nx.classList.add("on");
+    setTimeout(() => { if (pv !== layers[cur]) pv.classList.remove("on"); }, 700);
+    const fx = sl.fx === "confetti" ? wrConfetti() : sl.fx === "hearts" ? wrHearts() : sl.fx === "bubbles" ? wrBubbles() : null;
+    stage.className = "wr-stage" + (i === slides.length - 1 ? " last" : "");
+    stage.replaceChildren(...[fx, ...sl.kids].filter(Boolean));
+    [...bars.children].forEach((b, k) => { b.firstChild.style.width = k < i ? "100%" : "0%"; });
+    sl.after?.();
   };
-  ov.addEventListener("click", (e) => { if (e.target.closest("button")) return; e.clientX < innerWidth / 3 ? show(i - 1) : show(i + 1); });
-  document.body.append(ov); show(0);
+  const tick = (t) => {
+    if (!ov.isConnected) return;
+    raf = requestAnimationFrame(tick);
+    if (!last) last = t; const dt = Math.min(120, t - last); last = t;
+    if (held || document.hidden) return;
+    const sl = slides[i]; elapsed += dt;
+    bars.children[i].firstChild.style.width = (sl.dur === Infinity ? 100 : Math.min(100, (elapsed / sl.dur) * 100)) + "%";
+    if (elapsed >= sl.dur && i < slides.length - 1) show(i + 1);
+  };
+  // tap = next/back, hold = pause, swipe = next/back
+  let px = 0, py = 0, pt = 0, holdT = 0, moved = false;
+  ov.addEventListener("pointerdown", (e) => {
+    if (e.target.closest("button")) return;
+    swallow = false; moved = false; px = e.clientX; py = e.clientY; pt = Date.now();
+    clearTimeout(holdT); holdT = setTimeout(() => { held = true; swallow = true; ov.classList.add("paused"); }, 280);
+  });
+  const release = (e) => {
+    clearTimeout(holdT);
+    if (held) { held = false; ov.classList.remove("paused"); swallow = true; return; }
+    if (e && e.type === "pointerup" && !e.target.closest("button")) {
+      const dx = e.clientX - px, dy = e.clientY - py;
+      if (Math.abs(dx) > 55 && Math.abs(dx) > Math.abs(dy) * 1.4) { swallow = true; show(i + (dx < 0 ? 1 : -1)); }
+    }
+  };
+  ov.addEventListener("pointerup", release); ov.addEventListener("pointercancel", () => { clearTimeout(holdT); held = false; ov.classList.remove("paused"); });
+  ov.addEventListener("click", (e) => { if (e.target.closest("button")) return; if (swallow) { swallow = false; return; } e.clientX < innerWidth / 3 ? show(i - 1) : show(i + 1); });
+  document.body.append(ov); show(0); raf = requestAnimationFrame(tick);
+  if (!own) { try { const seen = JSON.parse(getPref("fyseen", "[]") || "[]"); if (!seen.includes(rid)) setPref("fyseen", JSON.stringify([...seen, rid].slice(-40))); } catch { /* fine */ } }
+}
+// A picture of the year to send in a text or post anywhere (made on the phone, nothing is uploaded).
+async function shareRecapImage(d, own, text) {
+  try {
+    const W = 1080, H = 1920, c = document.createElement("canvas"); c.width = W; c.height = H; const g = c.getContext("2d");
+    const bgG = g.createLinearGradient(0, 0, W * 0.4, H); bgG.addColorStop(0, "#0b5fa5"); bgG.addColorStop(1, "#0a2a4a"); g.fillStyle = bgG; g.fillRect(0, 0, W, H);
+    const glow = g.createRadialGradient(W * 0.8, H * 0.2, 40, W * 0.8, H * 0.2, 700); glow.addColorStop(0, "rgba(255,210,122,.35)"); glow.addColorStop(1, "rgba(255,210,122,0)"); g.fillStyle = glow; g.fillRect(0, 0, W, H);
+    const rr = (x, y, w, h, r) => { g.beginPath(); g.moveTo(x + r, y); g.arcTo(x + w, y, x + w, y + h, r); g.arcTo(x + w, y + h, x, y + h, r); g.arcTo(x, y + h, x, y, r); g.arcTo(x, y, x + w, y, r); g.closePath(); };
+    g.textAlign = "center"; g.fillStyle = "#fff"; g.font = "700 44px system-ui,sans-serif"; g.globalAlpha = 0.85; g.fillText(own ? "MY YEAR ON THE WATER" : ("@" + d.name).toUpperCase() + " ON THE WATER", W / 2, 150); g.globalAlpha = 1;
+    g.font = "900 250px system-ui,sans-serif"; g.fillText(String(d.year), W / 2, 380);
+    g.font = "800 80px system-ui,sans-serif"; g.fillText("in fish", W / 2, 470);
+    const src = (d.photos || [])[d.bigIdx]?.p || (d.photos || [])[0]?.p;
+    if (src) {
+      try {
+        const im = await loadImage(src), x = 130, y = 540, w = 820, h = 920;
+        g.save(); g.translate(W / 2, y + h / 2); g.rotate(-0.025); g.translate(-W / 2, -(y + h / 2));
+        g.shadowColor = "rgba(0,0,0,.5)"; g.shadowBlur = 50; g.shadowOffsetY = 20; g.fillStyle = "#fff"; rr(x - 16, y - 16, w + 32, h + 32, 36); g.fill(); g.shadowColor = "transparent";
+        rr(x, y, w, h, 24); g.clip();
+        const s = Math.max(w / im.width, h / im.height), iw = im.width * s, ih = im.height * s; g.drawImage(im, x + (w - iw) / 2, y + (h - ih) / 2, iw, ih); g.restore();
+      } catch { /* the stats still make a good picture */ }
+    }
+    g.fillStyle = "#fff"; g.textAlign = "center";
+    g.font = "900 120px system-ui,sans-serif"; g.fillText(`${d.n} ${d.n === 1 ? "catch" : "catches"}`, W / 2, 1640);
+    g.font = "600 56px system-ui,sans-serif"; g.globalAlpha = 0.92;
+    g.fillText([d.kinds ? `${d.kinds} kinds of fish` : "", d.bigLb ? `biggest ${fmtLb(d.bigLb)}` : ""].filter(Boolean).join("  ·  "), W / 2, 1720); g.globalAlpha = 1;
+    g.font = "800 50px system-ui,sans-serif"; g.fillText("🎣 Weigh-In", W / 2, 1840); g.font = "500 36px system-ui,sans-serif"; g.globalAlpha = 0.8; g.fillText(location.host, W / 2, 1888); g.globalAlpha = 1;
+    const blob = await new Promise((res) => c.toBlob(res, "image/jpeg", 0.92));
+    if (!blob) throw new Error("no picture");
+    const file = new File([blob], `weighin-${d.year}.jpg`, { type: "image/jpeg" });
+    if (navigator.canShare?.({ files: [file] })) { try { await navigator.share({ files: [file], text }); return; } catch (e) { if (e?.name === "AbortError") return; } }
+    const a = el("a", { href: URL.createObjectURL(blob), download: file.name }); document.body.append(a); a.click(); a.remove(); toast("Picture saved to your phone.");
+  } catch { toast("Couldn't make the picture. Try again."); }
 }
 function paintRecaps() {
   const box = document.querySelector("#rc-list"); if (!box) return;
@@ -2299,6 +2466,27 @@ const vidObs = ("IntersectionObserver" in window) ? new IntersectionObserver((es
 function vidWatch(v) { vidObs?.observe(v); }
 document.addEventListener("visibilitychange", () => { if (document.hidden) document.querySelectorAll("video.vid-feed").forEach((v) => v.pause()); });
 async function vidDelete(pid, n) { for (let i = 0; i < (n || 12); i++) await deleteDoc(doc(db, "vids", `${pid}_${i}`)).catch(() => {}); }
+// A picture of one catch to send in a text or post anywhere, with the Weigh-In name on it. Made on the phone, nothing is uploaded.
+async function shareCatchImage(p) {
+  try {
+    const W = 1080, H = 1350, c = document.createElement("canvas"); c.width = W; c.height = H; const g = c.getContext("2d");
+    g.fillStyle = "#0a2a4a"; g.fillRect(0, 0, W, H);
+    try { const im = await loadImage(p.photo), s = Math.max(W / im.width, H / im.height), iw = im.width * s, ih = im.height * s; g.drawImage(im, (W - iw) / 2, (H - ih) / 2, iw, ih); } catch { /* the words still make a picture */ }
+    const sh = g.createLinearGradient(0, H * 0.5, 0, H); sh.addColorStop(0, "rgba(0,0,0,0)"); sh.addColorStop(1, "rgba(0,0,0,.82)"); g.fillStyle = sh; g.fillRect(0, H * 0.45, W, H * 0.55);
+    const top = g.createLinearGradient(0, 0, 0, 200); top.addColorStop(0, "rgba(0,0,0,.45)"); top.addColorStop(1, "rgba(0,0,0,0)"); g.fillStyle = top; g.fillRect(0, 0, W, 200);
+    g.fillStyle = "#fff"; g.textAlign = "left"; g.shadowColor = "rgba(0,0,0,.5)"; g.shadowBlur = 18;
+    g.font = "800 46px system-ui,sans-serif"; g.fillText("🎣 Weigh-In", 56, 92);
+    g.font = "900 110px system-ui,sans-serif"; let sp = String(p.species || "Fish"); while (g.measureText(sp).width > W - 112 && sp.length > 4) sp = sp.slice(0, -2); g.fillText(sp, 56, H - 230);
+    g.font = "800 84px system-ui,sans-serif"; g.fillText(sizeText(p) === "Size not entered" ? "" : sizeText(p), 56, H - 130);
+    g.font = "600 44px system-ui,sans-serif"; g.globalAlpha = 0.92; g.fillText(`@${p.name}${p.spot ? "  ·  " + p.spot : ""}`.slice(0, 44), 56, H - 64); g.globalAlpha = 1;
+    g.textAlign = "right"; g.font = "600 36px system-ui,sans-serif"; g.fillText(location.host, W - 56, H - 64);
+    const blob = await new Promise((res) => c.toBlob(res, "image/jpeg", 0.92));
+    if (!blob) throw new Error("no picture");
+    const file = new File([blob], "weighin-catch.jpg", { type: "image/jpeg" }), text = `${p.species} on Weigh-In 🎣 ${location.origin}`;
+    if (navigator.canShare?.({ files: [file] })) { try { await navigator.share({ files: [file], text }); return; } catch (e) { if (e?.name === "AbortError") return; } }
+    const a = el("a", { href: URL.createObjectURL(blob), download: file.name }); document.body.append(a); a.click(); a.remove(); toast("Picture saved to your phone.");
+  } catch { toast("Couldn't make the picture. Try again."); }
+}
 // Put a sharper copy of a catch's photo on a catch you already posted. Likes, comments and date stay.
 function swapPhoto(p) {
   const inp = el("input", { type: "file", accept: "image/*", style: "position:fixed;left:-999px" });
@@ -2792,6 +2980,7 @@ function viewPost(p) {
         } catch { pinFailed = true; }
       }
       draftPhoto = ""; draftVid = null; draftLoc = null; draftSrc = ""; draftWhere = "";
+      notifyFriends("post", { species });
       if (pb) celebrate(species, sizeText({ lb, inches })); else toast(pinFailed ? `Posted your ${species}, but the map pin didn't save.` : pin ? `Posted your ${species} and put it on the map!` : `Posted your ${species}!`);
       go("feed");
     } catch (err) { toast(errText(err)); btn.disabled = false; btn.textContent = "Post catch"; }
@@ -2799,6 +2988,70 @@ function viewPost(p) {
   p.append(el("h1", null, "Post a catch"), f);
 }
 
+/* ======================= NOTIFICATIONS (outside the app) ======================= */
+// Turning these on lets a phone show "@Sam just posted a catch" even when Weigh-In is closed. The phone is saved on the site
+// (functions/api/push.js) along with the list of friends it may hear from. If anything isn't set up, nothing breaks: it just stays off.
+const PUSH_OK = () => { try { return "serviceWorker" in navigator && "PushManager" in window && "Notification" in window; } catch { return false; } };
+const pushOn = () => PUSH_OK() && Notification.permission === "granted" && getPref("push", "0") === "1";
+async function pushApi(body) {
+  const tok = await auth.currentUser.getIdToken();
+  const r = await fetch("/api/push", { method: "POST", headers: { Authorization: "Bearer " + tok, "Content-Type": "application/json" }, body: JSON.stringify(body) });
+  if (!r.ok) throw new Error("push " + r.status);
+  return r.json();
+}
+const friendUids = () => [...new Set(S.friendships.map((f) => friendOf(f).uid).filter(Boolean))];
+const keyBytes = (b64) => { const s = atob(b64.replace(/-/g, "+").replace(/_/g, "/") + "=".repeat((4 - b64.length % 4) % 4)); return Uint8Array.from(s, (c) => c.charCodeAt(0)); };
+async function pushSubscription(make) {
+  const reg = await navigator.serviceWorker.ready;
+  let sub = await reg.pushManager.getSubscription();
+  if (!sub && make) {
+    const r = await fetch("/api/push?key"); if (!r.ok) throw new Error("no key");
+    sub = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: keyBytes((await r.json()).key) });
+  }
+  return sub;
+}
+async function enablePush() {
+  if (!PUSH_OK()) { toast("This phone's browser can't show notifications from here."); return false; }
+  if (/iPhone|iPad|iPod/.test(navigator.userAgent) && !isInstalled()) { toast("On iPhone, first tap Share, then Add to Home Screen, and open Weigh-In from there."); return false; }
+  try {
+    const perm = Notification.permission === "granted" ? "granted" : await Notification.requestPermission();
+    if (perm !== "granted") { toast("Notifications are blocked. Turn them on for Weigh-In in your phone's settings."); return false; }
+    const sub = await pushSubscription(true);
+    await pushApi({ action: "sub", sub: sub.toJSON(), friends: friendUids() });
+    setPref("push", "1"); setPref("pushsync", String(Date.now())); S.pushKey = friendUids().join();
+    toast("Notifications are on. You'll hear when your friends post.");
+    return true;
+  } catch { toast("Couldn't turn notifications on right now. Try again in a bit."); return false; }
+}
+async function disablePush() {
+  try { const sub = await pushSubscription(false); if (sub) { const ep = sub.endpoint; await sub.unsubscribe(); await pushApi({ action: "unsub", endpoint: ep }).catch(() => {}); } } catch { /* already gone */ }
+  setPref("push", "0"); toast("Notifications are off.");
+}
+// Keep the site's copy of "who this phone may hear from" fresh: when friends change, and at least once a day.
+async function syncPush() {
+  if (!S.user || !pushOn()) return;
+  const k = friendUids().join();
+  if (k === S.pushKey && Date.now() - (+getPref("pushsync", "0") || 0) < 864e5) return;
+  try { const sub = await pushSubscription(false); if (!sub) return; await pushApi({ action: "sub", sub: sub.toJSON(), friends: friendUids() }); S.pushKey = k; setPref("pushsync", String(Date.now())); } catch { /* try again next time */ }
+}
+function notifyFriends(kind, extra) {
+  try { const to = friendUids().slice(0, 100); if (!to.length || !auth.currentUser) return; pushApi({ action: "notify", kind, to, name: S.name, ...extra }).catch(() => {}); } catch { /* never blocks posting */ }
+}
+// Once in a while, show one of your friends' posted years so it doesn't get missed. At most one every 3 days, and never the same one twice.
+function maybeFriendYear() {
+  try {
+    if (!S.user || S.fyDone || !S.friendships.length || !S.recaps.length) return;
+    const last = +getPref("fylast", "0") || 0; if (Date.now() - last < 3 * 864e5) return;
+    const fr = new Set(friendUids()), seen = JSON.parse(getPref("fyseen", "[]") || "[]");
+    const r = S.recaps.find((x) => fr.has(x.uid) && x.photos && !seen.includes(x.id));
+    if (!r) return;
+    S.fyDone = true; setPref("fylast", String(Date.now())); setPref("fyseen", JSON.stringify([...seen, r.id].slice(-40)));
+    document.querySelector("#fy-alert")?.remove();
+    const a = el("button", { class: "pb-alert fy-alert", type: "button", id: "fy-alert", onclick: () => { a.remove(); playWrap(r, false); } },
+      el("span", null, "🎞️"), el("span", { class: "stack", style: "gap:0;text-align:left" }, el("b", null, `@${r.name}'s ${r.year} in fish`), el("span", null, "Your friend posted their year. Tap to watch.")));
+    document.body.append(a); setTimeout(() => a.remove(), 12000);
+  } catch { /* a missed banner is fine */ }
+}
 /* ======================= CASH APP ======================= */
 // Cash App has no way for another app to link to your account. Weigh-In only keeps your public $cashtag so people can tap a pay link.
 const cashTag = (v) => { const t = String(v || "").trim().replace(/^\$/, ""); return /^(?=.*[A-Za-z])[A-Za-z0-9_]{1,20}$/.test(t) ? "$" + t : ""; };
@@ -5052,6 +5305,7 @@ function viewMe(p) {
     card("me-game", "🎣", "Fishing game", `Level ${fcLevel()} · 🪙 ${fcCoins()}`, openFishGame),
         card("me-spots", "📍", "Spot saver", S.saved.length ? `${S.saved.length} saved, private` : "Your secret spots", open("spots")),
     card("me-water", "🔍", "Spot finder", "Lakes near you", open("water")),
+    PUSH_OK() ? card("me-notify", pushOn() ? "🔔" : "🔕", "Notifications", pushOn() ? "On. Tap to turn off" : "Hear when friends post", async () => { if (pushOn()) await disablePush(); else await enablePush(); renderTab(); }) : null,
     wrapSeason() ? card("me-wrap", "🎞️", "Your year", `${wrapYear()} recap`, () => openWrapped(wrapYear())) : null),
   );
 }
@@ -5219,6 +5473,7 @@ async function deleteMyAccount() {
     stopAll();
     const posts = await wipe(query(collection(db, "posts"), where("uid", "==", uid)));
     for (const d of posts) { const p = d.data(); if (p.vid) await vidDelete(d.id, p.vid.n); await deleteDoc(doc(db, "spots", d.id)).catch(() => {}); }
+    try { if (pushOn()) await disablePush(); } catch { /* ok */ }
     await r2Delete("all");
     await wipe(query(collection(db, "likes"), where("uid", "==", uid)));
     await wipe(query(collection(db, "recaps"), where("uid", "==", uid)));
