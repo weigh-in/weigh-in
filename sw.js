@@ -111,3 +111,27 @@ self.addEventListener("message", (e) => {
     e.waitUntil(caches.keys().then((ks) => Promise.all(ks.map((k) => caches.delete(k)))));
   }
 });
+
+// Notifications from friends (sent by functions/api/push.js). Shown even when Weigh-In is closed.
+self.addEventListener("push", (e) => {
+  let d = {};
+  try { d = e.data ? e.data.json() : {}; } catch { /* plain text */ }
+  e.waitUntil((async () => {
+    // If Weigh-In is open and on screen, the feed already shows the new catch, so no pop-up.
+    const cs = await self.clients.matchAll({ type: "window", includeUncontrolled: true });
+    if (cs.some((c) => c.visibilityState === "visible")) return;
+    await self.registration.showNotification(String(d.t || "Weigh-In").slice(0, 80), {
+      body: String(d.b || "").slice(0, 140), icon: "./bobber-192.png", badge: "./bobber-192.png", tag: d.tag || "weighin", renotify: true,
+      data: { u: typeof d.u === "string" && d.u.startsWith("/") ? d.u : "/" },
+    });
+  })());
+});
+self.addEventListener("notificationclick", (e) => {
+  e.notification.close();
+  const u = (e.notification.data && e.notification.data.u) || "/";
+  e.waitUntil((async () => {
+    const cs = await self.clients.matchAll({ type: "window", includeUncontrolled: true });
+    for (const c of cs) { if ("focus" in c) { try { await c.focus(); return; } catch { /* try next */ } } }
+    await self.clients.openWindow(u);
+  })());
+});
