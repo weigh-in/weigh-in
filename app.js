@@ -1376,7 +1376,7 @@ function renderFeed() {
   $screen.className = "screen feed-wrap";
   $feed = el("div", { class: "feed", "aria-label": "Catch feed. Swipe up for the next catch." });
   $screen.replaceChildren(el("div", { class: "feed-top" }, el("div", { class: "row", style: "gap:10px;flex-wrap:nowrap;align-items:center" },
-      el("button", { class: "scope-btn", type: "button", id: "feed-share", "aria-label": "Share Weigh-In with friends", onclick: shareApp }, "📤"),
+      el("button", { class: "scope-btn", type: "button", id: "feed-share", "aria-label": "Share the catch on screen", onclick: shareFeedCatch }, "📤"),
       el("span", { class: "brand" }, "Weigh-In")),
     el("div", { class: "row", style: "gap:8px;flex-wrap:nowrap" },
       el("button", { class: "scope-btn", type: "button", id: "lb-btn", "aria-label": "Biggest catches leaderboard", onclick: () => openLeaderboard() }, "🏆"),
@@ -1432,13 +1432,14 @@ function feedPosts() {
 /* What's new. Newest first. Add a new entry on top each time the app changes. */
 /* Bump APP_VERSION every time you change the app, and add a matching entry on top of UPDATES (with v: the same number).
    Phones check app.js every few minutes and offer the new version on their own. */
-const APP_VERSION = 94;
+const APP_VERSION = 95;
 // The number people see. APP_VERSION stays a plain counter so updates are detected. Big changes bump the first number (2.0), smaller ones the second (1.1, 1.2).
 const REL_NAMES = { 59: "1.0", 60: "1.0", 61: "1.1", 62: "1.2", 63: "1.2", 64: "1.2", 65: "1.2", 66: "1.2", 67: "1.2",
-  68: "1.3", 69: "1.3", 70: "1.3", 71: "1.4", 72: "1.4", 73: "1.5", 74: "1.5", 75: "1.5", 76: "1.5", 77: "1.8", 78: "1.8", 79: "1.9", 80: "1.9", 81: "2.0", 82: "2.0", 83: "1.19", 84: "1.20", 85: "1.21", 86: "1.22", 87: "1.23", 88: "1.24", 89: "1.25", 90: "1.26", 91: "1.27", 92: "1.28", 93: "1.29", 94: "1.30" };
+  68: "1.3", 69: "1.3", 70: "1.3", 71: "1.4", 72: "1.4", 73: "1.5", 74: "1.5", 75: "1.5", 76: "1.5", 77: "1.8", 78: "1.8", 79: "1.9", 80: "1.9", 81: "2.0", 82: "2.0", 83: "1.19", 84: "1.20", 85: "1.21", 86: "1.22", 87: "1.23", 88: "1.24", 89: "1.25", 90: "1.26", 91: "1.27", 92: "1.28", 93: "1.29", 94: "1.30", 95: "1.31" };
 const relName = (v) => REL_NAMES[v] || (v < 59 ? `0.${v}` : `1.${v - 59}`);
 try { if ((parseInt(localStorage.getItem("weighin-appv"), 10) || 0) < APP_VERSION) localStorage.setItem("weighin-appv", String(APP_VERSION)); } catch { /* private mode */ }
 const UPDATES = [
+  { id: "2026-11-20c", v: 95, date: "Nov 20", title: "Feed buttons", items: ["The 📤 at the top left of the feed now shares a picture of the catch you're looking at.", "The 📷 Photo and 📤 buttons are off the catch cards. To swap in a sharper photo, tap your picture on Me, then 📷 Photo next to the catch."] },
   { id: "2026-11-20b", v: 94, date: "Nov 20", title: "Share on the feed, tidier buttons", items: ["A 📤 Share button is now at the top left of the feed.", "The 🎞️ button is gone from the top of the feed. Posted years still show up as cards in the feed.", "Notifications moved: tap your picture on Me, then Notifications."] },
   { id: "2026-11-20a", v: 93, date: "Nov 20", title: "Take down your slideshow", items: ["Your year card in the feed now has a 🗑 Take down button, so you can remove it without opening the slideshow."] },
   { id: "2026-11-19a", v: 92, date: "Nov 19", title: "Notifications, a new slideshow and sharing", items: [
@@ -1874,8 +1875,6 @@ function makeCard(p) {
       el("div", null, el("button", { type: "button", class: "like", "data-like": p.id, "aria-pressed": "false", "aria-label": "Like", html: ICON.heart, onclick: () => toggleLike(p) }), el("small", { "data-like-n": p.id }, String(likeCount(p)))),
       el("div", { "data-spotbtn": p.id, hidden: true }, el("button", { type: "button", "aria-label": "See where this was caught on the map", html: ICON.map, onclick: () => seeOnMap(p) }), el("small", null, "Map")),
       el("div", null, el("button", { type: "button", "aria-label": "Comments", html: ICON.chat, onclick: () => openComments(p) }), el("small", null, "Comments")),
-      p.photo ? el("div", null, el("button", { type: "button", "aria-label": "Share this catch as a picture", "data-share-catch": p.id, style: "font-size:20px", onclick: () => shareCatchImage(p) }, "📤"), el("small", null, "Share")) : null,
-      mine ? el("div", null, el("button", { type: "button", "aria-label": "Replace this photo with a sharper one", "data-swap-photo": p.id, style: "font-size:20px", onclick: () => swapPhoto(p) }, "📷"), el("small", null, "Photo")) : null,
       mine || (editOn() && canOn("deletePosts", p.uid)) ? el("div", null, el("button", { type: "button", "aria-label": "Delete this post", html: ICON.trash, onclick: () => deletePost(p) }), el("small", null, "Delete")) : null,
       !mine ? el("div", null, el("button", { type: "button", "aria-label": "Report this post", html: ICON.flag, onclick: () => reportPost(p) }), el("small", null, "Report")) : null,
       editOn() && S.owner ? el("div", null, el("button", { type: "button", "aria-label": "Rename this catch", "data-rename-post": p.id, html: ICON.edit || "✏️", onclick: () => openPostEdit(p.id, p.species) }), el("small", null, "Rename")) : null,
@@ -5253,6 +5252,14 @@ const photoInput = (id, label) => el("input", { type: "file", accept: "image/*",
 const backBtn = (text) => el("button", { class: "link", type: "button", style: "align-self:flex-start", onclick: () => { S.meView = "main"; renderTab(); } }, text);
 
 /* Share the app: the phone's own share sheet when there is one, otherwise the link is copied. */
+// The 📤 at the top left of the feed sends a picture of the catch you're looking at (or the app link when it's a year card).
+function shareFeedCatch() {
+  const cards = [...($feed?.querySelectorAll(".card[data-id]") || [])], h = $feed?.clientHeight || 1;
+  const id = cards[Math.round(($feed?.scrollTop || 0) / h)]?.dataset.id;
+  const p = id && [...S.posts, ...S.mine].find((x) => x.id === id);
+  if (p && p.photo) return shareCatchImage(p);
+  return shareApp();
+}
 async function shareApp() {
   const url = location.origin + location.pathname.replace(/index\.html$/, ""), data = { title: "Weigh-In", text: "Come fish with me on Weigh-In. It's a free fishing app: post catches, learn, trade gear and join tournaments.", url };
   try { if (navigator.share) { await navigator.share(data); return; } } catch (e) { if (e && e.name === "AbortError") return; }
@@ -5467,7 +5474,9 @@ function viewProfile(p) {
       c.photo ? el("img", { src: c.photo, alt: "", style: "width:56px;height:56px;object-fit:cover;border-radius:8px;flex:none" }) : null,
       el("div", { class: "stack", style: "gap:2px;min-width:0" }, el("span", { class: "t" }, `${c.species}, ${sizeText(c)}`),
         el("span", { class: "s" }, `${c.lure ? "on " + c.lure + " · " : ""}${catchLabel(c)} · ♥ ${likeCount(c)}`))),
-    el("button", { class: "link danger small", type: "button", onclick: () => deletePost(c) }, "Delete")))));
+    el("div", { class: "row", style: "gap:10px;flex:none" },
+      c.photo ? el("button", { class: "link small", type: "button", "data-swap-photo": c.id, onclick: () => swapPhoto(c) }, "📷 Photo") : null,
+      el("button", { class: "link danger small", type: "button", onclick: () => deletePost(c) }, "Delete"))))));
 }
 
 async function deleteMyAccount() {
