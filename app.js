@@ -1375,9 +1375,10 @@ let $feed;
 function renderFeed() {
   $screen.className = "screen feed-wrap";
   $feed = el("div", { class: "feed", "aria-label": "Catch feed. Swipe up for the next catch." });
-  $screen.replaceChildren(el("div", { class: "feed-top" }, el("span", { class: "brand" }, "Weigh-In"),
+  $screen.replaceChildren(el("div", { class: "feed-top" }, el("div", { class: "row", style: "gap:10px;flex-wrap:nowrap;align-items:center" },
+      el("button", { class: "scope-btn", type: "button", id: "feed-share", "aria-label": "Share Weigh-In with friends", onclick: shareApp }, "📤"),
+      el("span", { class: "brand" }, "Weigh-In")),
     el("div", { class: "row", style: "gap:8px;flex-wrap:nowrap" },
-      el("button", { class: "scope-btn", type: "button", id: "rc-btn", "aria-label": "Year in fish slideshows", hidden: S.recaps.length ? null : "", onclick: openRecaps }, "🎞️"),
       el("button", { class: "scope-btn", type: "button", id: "lb-btn", "aria-label": "Biggest catches leaderboard", onclick: () => openLeaderboard() }, "🏆"),
       el("button", { class: "scope-btn", type: "button", id: "scope-btn", "aria-label": "Choose whose catches to show", onclick: openScopeSheet }, scopeLabel() + " ▾"))), $feed);
   renderFeedCards();
@@ -1431,13 +1432,14 @@ function feedPosts() {
 /* What's new. Newest first. Add a new entry on top each time the app changes. */
 /* Bump APP_VERSION every time you change the app, and add a matching entry on top of UPDATES (with v: the same number).
    Phones check app.js every few minutes and offer the new version on their own. */
-const APP_VERSION = 93;
+const APP_VERSION = 94;
 // The number people see. APP_VERSION stays a plain counter so updates are detected. Big changes bump the first number (2.0), smaller ones the second (1.1, 1.2).
 const REL_NAMES = { 59: "1.0", 60: "1.0", 61: "1.1", 62: "1.2", 63: "1.2", 64: "1.2", 65: "1.2", 66: "1.2", 67: "1.2",
-  68: "1.3", 69: "1.3", 70: "1.3", 71: "1.4", 72: "1.4", 73: "1.5", 74: "1.5", 75: "1.5", 76: "1.5", 77: "1.8", 78: "1.8", 79: "1.9", 80: "1.9", 81: "2.0", 82: "2.0", 83: "1.19", 84: "1.20", 85: "1.21", 86: "1.22", 87: "1.23", 88: "1.24", 89: "1.25", 90: "1.26", 91: "1.27", 92: "1.28", 93: "1.29" };
+  68: "1.3", 69: "1.3", 70: "1.3", 71: "1.4", 72: "1.4", 73: "1.5", 74: "1.5", 75: "1.5", 76: "1.5", 77: "1.8", 78: "1.8", 79: "1.9", 80: "1.9", 81: "2.0", 82: "2.0", 83: "1.19", 84: "1.20", 85: "1.21", 86: "1.22", 87: "1.23", 88: "1.24", 89: "1.25", 90: "1.26", 91: "1.27", 92: "1.28", 93: "1.29", 94: "1.30" };
 const relName = (v) => REL_NAMES[v] || (v < 59 ? `0.${v}` : `1.${v - 59}`);
 try { if ((parseInt(localStorage.getItem("weighin-appv"), 10) || 0) < APP_VERSION) localStorage.setItem("weighin-appv", String(APP_VERSION)); } catch { /* private mode */ }
 const UPDATES = [
+  { id: "2026-11-20b", v: 94, date: "Nov 20", title: "Share on the feed, tidier buttons", items: ["A 📤 Share button is now at the top left of the feed.", "The 🎞️ button is gone from the top of the feed. Posted years still show up as cards in the feed.", "Notifications moved: tap your picture on Me, then Notifications."] },
   { id: "2026-11-20a", v: 93, date: "Nov 20", title: "Take down your slideshow", items: ["Your year card in the feed now has a 🗑 Take down button, so you can remove it without opening the slideshow."] },
   { id: "2026-11-19a", v: 92, date: "Nov 19", title: "Notifications, a new slideshow and sharing", items: [
     "Notifications that reach you even when Weigh-In is closed. Tap 🔔 Notifications on your profile to turn them on. You'll get one when a friend posts a catch or their year.",
@@ -5312,7 +5314,6 @@ function viewMe(p) {
     card("me-game", "🎣", "Fishing game", `Level ${fcLevel()} · 🪙 ${fcCoins()}`, openFishGame),
         card("me-spots", "📍", "Spot saver", S.saved.length ? `${S.saved.length} saved, private` : "Your secret spots", open("spots")),
     card("me-water", "🔍", "Spot finder", "Lakes near you", open("water")),
-    PUSH_OK() ? card("me-notify", pushOn() ? "🔔" : "🔕", "Notifications", pushOn() ? "On. Tap to turn off" : "Hear when friends post", async () => { if (pushOn()) await disablePush(); else await enablePush(); renderTab(); }) : null,
     wrapSeason() ? card("me-wrap", "🎞️", "Your year", `${wrapYear()} recap`, () => openWrapped(wrapYear())) : null),
   );
 }
@@ -5456,6 +5457,7 @@ function viewProfile(p) {
       el("div", null, el("b", null, biggest ? fmtLb(biggest) : "–"), el("span", null, "Biggest")),
       el("div", null, el("b", null, String(pins)), el("span", null, "Map pins"))),
     el("div", { class: "list" },
+      PUSH_OK() ? el("button", { class: "item", type: "button", id: "me-notify", onclick: async () => { if (pushOn()) await disablePush(); else await enablePush(); renderTab(); } }, el("span", { class: "t" }, pushOn() ? "🔔 Notifications" : "🔕 Notifications"), el("span", { class: "label" }, pushOn() ? "On. Tap to turn off" : "Off. Tap to hear when friends post")) : null,
       el("button", { class: "item", type: "button", id: "me-name", onclick: () => openNameSheet(renderTab) }, el("span", { class: "t" }, "✏️ Change name"), el("span", { class: "label" }, "@" + S.name)),
       el("button", { class: "item", type: "button", id: "me-cash", onclick: () => openCashSheet(renderTab) }, el("span", { class: "t" }, "💵 Cash App"), el("span", { class: "label" }, cashTag(S.cash) || "Add"))),
     el("h2", null, "My catches"));
