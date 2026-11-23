@@ -638,3 +638,37 @@ nav.tabs .in{gap:6px;padding:6px 8px;align-items:center}
 .tab[aria-current="page"]::before{display:none}
 .tab.post .bob{width:30px;height:30px;margin-top:0;border-radius:9px;border:0;box-shadow:none}
 .tab.post .bob svg{width:20px;height:20px}
+
+/* ---- Seasons: the whole app changes with the time of year ---- */
+html[data-season="winter"]{--lake:#2c6e9b;--lake-soft:#d9eaf6;--water:#E6EFF6;--line:#C6D6E3;--surface:#FAFCFE}
+html[data-season="spring"]{--lake:#2e7d4f;--lake-soft:#dcf0e0;--water:#EAF3E8;--line:#CFE0CC;--surface:#FBFDF9}
+html[data-season="summer"]{--lake:#17788a;--lake-soft:#d4eef2;--water:#E6F1F0;--line:#C3DADA;--surface:#FBFEFD}
+html[data-season="fall"]{--lake:#9a4f1f;--lake-soft:#f3e1cf;--water:#F3EDE4;--line:#DDD0BF;--surface:#FFFBF5}
+@media (prefers-color-scheme:dark){
+:root:not([data-theme="light"])[data-season="winter"]{--lake:#7cc0ea;--lake-soft:#1b3446;--water:#0d1a24;--line:#27414f;--surface:#14232e}
+:root:not([data-theme="light"])[data-season="spring"]{--lake:#7fd39b;--lake-soft:#1e3a29;--water:#0e1b14;--line:#294234;--surface:#15271b}
+:root:not([data-theme="light"])[data-season="summer"]{--lake:#6fd0dd;--lake-soft:#17383d;--water:#0d1c1d;--line:#284448;--surface:#142729}
+:root:not([data-theme="light"])[data-season="fall"]{--lake:#f0a46a;--lake-soft:#41291a;--water:#1c1510;--line:#443426;--surface:#271c14}}
+:root[data-theme="dark"][data-season="winter"]{--lake:#7cc0ea;--lake-soft:#1b3446;--water:#0d1a24;--line:#27414f;--surface:#14232e}
+:root[data-theme="dark"][data-season="spring"]{--lake:#7fd39b;--lake-soft:#1e3a29;--water:#0e1b14;--line:#294234;--surface:#15271b}
+:root[data-theme="dark"][data-season="summer"]{--lake:#6fd0dd;--lake-soft:#17383d;--water:#0d1c1d;--line:#284448;--surface:#142729}
+:root[data-theme="dark"][data-season="fall"]{--lake:#f0a46a;--lake-soft:#41291a;--water:#1c1510;--line:#443426;--surface:#271c14}
+.season-fx{position:fixed;inset:0;pointer-events:none;z-index:4;overflow:hidden}
+.season-fx::before,.season-fx::after{content:"";position:absolute;inset:0;background-repeat:repeat}
+.season-fx.winter::before{background-image:radial-gradient(circle,#fff 0 1.7px,rgba(150,195,230,.75) 2.1px,transparent 3.2px),radial-gradient(circle,#fff 0 1.3px,rgba(150,195,230,.7) 1.7px,transparent 2.6px);background-size:140px 160px,90px 80px;background-position:0 0,30px 40px;animation:sfall 16s linear infinite}
+.season-fx.winter::after{background-image:radial-gradient(circle,#fff 0 2.6px,rgba(150,195,230,.7) 3px,transparent 4.4px);background-size:230px 240px;background-position:60px 0;animation:sfall2 24s linear infinite}
+.season-fx.spring::before{background-image:radial-gradient(ellipse,#f8c1d3 0 3px,transparent 3.6px),radial-gradient(ellipse,#fbd9e4 0 2.2px,transparent 2.8px);background-size:210px 200px,130px 120px;background-position:0 0,50px 30px;animation:sfall 22s linear infinite}
+.season-fx.fall::before{background-image:radial-gradient(ellipse,#e08a2e 0 3.4px,transparent 4px),radial-gradient(ellipse,#c4502a 0 2.8px,transparent 3.4px);background-size:200px 200px,150px 120px;background-position:0 0,70px 40px;animation:sfall 20s linear infinite}
+.season-fx.spring::after,.season-fx.fall::after{display:none}
+@keyframes sfall{to{background-position:0 200px,30px 240px}}
+@keyframes sfall2{to{background-position:60px 240px}}
+.season-fx.winter::before{animation-name:sfallw}
+@keyframes sfallw{to{background-position:0 160px,30px 200px}}
+.season-fx.spring::before{animation-name:sfalls}
+@keyframes sfalls{to{background-position:0 600px,50px 630px}}
+.season-fx.fall::before{animation-name:sfallf}
+@keyframes sfallf{to{background-position:0 600px,70px 640px}}
+@media (prefers-reduced-motion:reduce){.season-fx::before,.season-fx::after{animation:none!important}}
+.season-hi{font-size:.72rem;font-weight:700;color:var(--lake);background:var(--lake-soft);border-radius:999px;padding:4px 10px;white-space:nowrap}
+@media (max-width:350px){.season-hi{display:none}}
+.season-note{display:flex;flex-direction:column;gap:4px;background:var(--lake-soft);border-color:var(--lake)}
