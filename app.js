@@ -1439,7 +1439,7 @@ const REL_NAMES = { 59: "1.0", 60: "1.0", 61: "1.1", 62: "1.2", 63: "1.2", 64: "
 const relName = (v) => REL_NAMES[v] || (v < 59 ? `0.${v}` : `1.${v - 59}`);
 try { if ((parseInt(localStorage.getItem("weighin-appv"), 10) || 0) < APP_VERSION) localStorage.setItem("weighin-appv", String(APP_VERSION)); } catch { /* private mode */ }
 const UPDATES = [
-  { id: "2026-11-23a", v: 100, date: "Nov 23", title: "Seasons and ice fishing", items: ["The whole app follows the seasons, with a Happy Winter, Spring, Summer or Fall greeting, new colors and falling snow, petals or leaves. Change it any time in Me, tap your picture, then Season.", "Lake Duel: in winter the lakes freeze. You fish through a hole in the ice with ice lures and can catch yellow perch, whitefish and burbot.", "Every cast is different now, in duels and tournaments too. Some fish bite fast, some make you wait, and sometimes your lure lands right on a fish and it eats it.", "The boat and fish finder are gone from the game."] },
+  { id: "2026-11-23a", v: 100, date: "Nov 23", title: "Seasons and ice fishing", items: ["The whole app follows the seasons, with a Happy Winter, Spring, Summer or Fall greeting, new colors and falling snow, petals or leaves. Change it any time in Me, tap your picture, then Season.", "Lake Duel: in winter the lakes freeze. You fish through a hole in the ice with ice lures and can catch yellow perch, whitefish and burbot.", "Every cast is different now, in duels and tournaments too. Bites take longer now, and some fish make you wait a lot longer than others. Sometimes your lure lands right on a fish and it eats it.", "The boat and fish finder are gone from the game."] },
   { id: "2026-11-22b", v: 99, date: "Nov 22", title: "Prizes for everyone", items: ["Anyone can add a prize to a tournament, including invite-only ones.", "Entry fees and card payments are only for the app owner's tournaments for now."] },
   { id: "2026-11-22a", v: 98, date: "Nov 22", title: "Cash App is gone", items: ["Cash App buttons and the Cash App row are removed. Tournament entry fees now use a PayPal.me card button, or any way you describe in your own words."] },
   { id: "2026-11-21b", v: 97, date: "Nov 21", title: "Pay your entry fee by card", items: ["Organizers can turn on \"Take cards inside Weigh-In\" when they make a tournament. Connect your own Stripe account once on Me, then your profile, then Card payments.", "Players tap Pay by card, and they're marked paid on their own. The money goes straight to the organizer. Weigh-In never holds it."] },
@@ -6316,7 +6316,7 @@ function openFishGame() {
       el("h2", null, `My fish (${Object.keys(dex).length}/${names.length})`),
       el("div", { class: "list" }, names.map((n) => el("div", { class: "item", style: "cursor:default" },
         el("span", { class: "t" }, dex[n] ? n : "???"), el("span", { class: "s" }, dex[n] ? `best ${lbText(dex[n].best)} · caught ${dex[n].n}` : "not caught yet")))),
-      el("p", { class: "muted small" }, "How to play: tap to cast. Wait for a dark shape to show at the bobber and the ! to appear, then tap fast to hook it. You can't tell what it is until you land it. Hold to reel. When the fish runs or jumps, let go so the line doesn't snap. Big fish take longer to bite and fight harder. Some bites come fast and some take a long while, and if your lure lands right on a fish it may eat it at once. Sell your fish in your bag to earn coins, then spend them in the tackle shop.")], tab === "events" && evTab(), tab === "rank" && rankTab()].flat(9).filter(Boolean));
+      el("p", { class: "muted small" }, "How to play: tap to cast. Wait for a dark shape to show at the bobber and the ! to appear, then tap fast to hook it. You can't tell what it is until you land it. Hold to reel. When the fish runs or jumps, let go so the line doesn't snap. Big fish take longer to bite and fight harder. Bites take a while: a few come sooner and some make you wait a long time. If your lure lands right on a fish it may eat it quickly. Sell your fish in your bag to earn coins, then spend them in the tackle shop.")], tab === "events" && evTab(), tab === "rank" && rankTab()].flat(9).filter(Boolean));
   };
   draw();
   fcPublish();
@@ -6457,12 +6457,12 @@ function playClash(mode, locId, lureIdIn, onExit, duel) {
     target = { n, w, q: Math.max(0, Math.min(1, q)) };
     fcStat("casts", 1); castAt = performance.now(); landed = false;
     // every cast is different: some fish are quick, most take a normal wait, some make you sit a long while
-    const mood = Math.random(), base = mood < 0.25 ? 0.6 + Math.random() * 1.6 : mood < 0.72 ? 2.6 + Math.random() * 3.4 : 7 + Math.random() * 8;
-    timer = Math.min(20, (base + target.q * 6 * (1 - 0.1 * lureLv))) * Math.max(0.2, 1 - 0.18 * upBait); nearUntil = 0;
+    const mood = Math.random(), base = mood < 0.15 ? 3.5 + Math.random() * 2.5 : mood < 0.6 ? 6.5 + Math.random() * 5 : 11 + Math.random() * 9;
+    timer = Math.min(30, (base + target.q * 9 * (1 - 0.1 * lureLv))) * Math.max(0.35, 1 - 0.15 * upBait); nearUntil = 0;
     { // if the lure lands right on top of a fish, it sometimes eats it straight away
       const tl = (performance.now() + 650) / 1000, bp = bobber();
       for (const sh of deco.shadows) { const sx = ((sh.x + tl * sh.v) % (W + 80) + W + 80) % (W + 80) - 40;
-        if (Math.abs(sx - bp.x) < 46 + sh.s && Math.abs(sh.y - (bp.y + 50)) < 52 + sh.s) { nearUntil = performance.now() + 3200; if (Math.random() < 0.55) timer = 0.35 + Math.random() * 0.35; break; } } }
+        if (Math.abs(sx - bp.x) < 46 + sh.s && Math.abs(sh.y - (bp.y + 50)) < 52 + sh.s) { nearUntil = performance.now() + 3200; if (Math.random() < 0.4) timer = 1.5 + Math.random() * 1.5; break; } } }
     setSt("wait"); tick(700, 0.2, 0.25, 1); rip.push({ ...bobber(), a: 1 }); }
   function hook() {
     fish = target.n; weight = target.w; const f = FC_FISH[fish];
