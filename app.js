@@ -1432,13 +1432,15 @@ function feedPosts() {
 /* What's new. Newest first. Add a new entry on top each time the app changes. */
 /* Bump APP_VERSION every time you change the app, and add a matching entry on top of UPDATES (with v: the same number).
    Phones check app.js every few minutes and offer the new version on their own. */
-const APP_VERSION = 97;
+const APP_VERSION = 99;
 // The number people see. APP_VERSION stays a plain counter so updates are detected. Big changes bump the first number (2.0), smaller ones the second (1.1, 1.2).
 const REL_NAMES = { 59: "1.0", 60: "1.0", 61: "1.1", 62: "1.2", 63: "1.2", 64: "1.2", 65: "1.2", 66: "1.2", 67: "1.2",
-  68: "1.3", 69: "1.3", 70: "1.3", 71: "1.4", 72: "1.4", 73: "1.5", 74: "1.5", 75: "1.5", 76: "1.5", 77: "1.8", 78: "1.8", 79: "1.9", 80: "1.9", 81: "2.0", 82: "2.0", 83: "1.19", 84: "1.20", 85: "1.21", 86: "1.22", 87: "1.23", 88: "1.24", 89: "1.25", 90: "1.26", 91: "1.27", 92: "1.28", 93: "1.29", 94: "1.30", 95: "1.31", 96: "1.32", 97: "1.33" };
+  68: "1.3", 69: "1.3", 70: "1.3", 71: "1.4", 72: "1.4", 73: "1.5", 74: "1.5", 75: "1.5", 76: "1.5", 77: "1.8", 78: "1.8", 79: "1.9", 80: "1.9", 81: "2.0", 82: "2.0", 83: "1.19", 84: "1.20", 85: "1.21", 86: "1.22", 87: "1.23", 88: "1.24", 89: "1.25", 90: "1.26", 91: "1.27", 92: "1.28", 93: "1.29", 94: "1.30", 95: "1.31", 96: "1.32", 97: "1.33", 98: "1.34", 99: "1.35" };
 const relName = (v) => REL_NAMES[v] || (v < 59 ? `0.${v}` : `1.${v - 59}`);
 try { if ((parseInt(localStorage.getItem("weighin-appv"), 10) || 0) < APP_VERSION) localStorage.setItem("weighin-appv", String(APP_VERSION)); } catch { /* private mode */ }
 const UPDATES = [
+  { id: "2026-11-22b", v: 99, date: "Nov 22", title: "Prizes for everyone", items: ["Anyone can add a prize to a tournament, including invite-only ones.", "Entry fees and card payments are only for the app owner's tournaments for now."] },
+  { id: "2026-11-22a", v: 98, date: "Nov 22", title: "Cash App is gone", items: ["Cash App buttons and the Cash App row are removed. Tournament entry fees now use a PayPal.me card button, or any way you describe in your own words."] },
   { id: "2026-11-21b", v: 97, date: "Nov 21", title: "Pay your entry fee by card", items: ["Organizers can turn on \"Take cards inside Weigh-In\" when they make a tournament. Connect your own Stripe account once on Me, then your profile, then Card payments.", "Players tap Pay by card, and they're marked paid on their own. The money goes straight to the organizer. Weigh-In never holds it."] },
   { id: "2026-11-21a", v: 96, date: "Nov 21", title: "More ways to pay for tournaments", items: ["When you make a tournament with an entry fee you can add your PayPal.me name.", "People then get a \"Pay with debit or credit card\" button with the amount already filled in. They don't need Cash App or a PayPal account. Weigh-In still never touches the money."] },
   { id: "2026-11-20c", v: 95, date: "Nov 20", title: "Feed buttons", items: ["The 📤 at the top left of the feed now shares a picture of the catch you're looking at.", "The 📷 Photo and 📤 buttons are off the catch cards. To swap in a sharper photo, tap your picture on Me, then 📷 Photo next to the catch."] },
@@ -2713,7 +2715,6 @@ function openAngler(uid, name) {
         el("div", null, el("b", null, String(rows.length)), el("span", null, "Catches")),
         el("div", null, el("b", null, biggest ? fmtLb(biggest) : "–"), el("span", null, "Biggest")),
         el("div", null, el("b", null, String(likes)), el("span", null, "Likes"))),
-      cashTag(u0?.cash) ? cashButton(cashTag(u0.cash), `💵 ${cashTag(u0.cash)} on Cash App`) : null,
       fav ? el("p", { class: "muted small" }, `Most catches on: ${fav[0].charAt(0).toUpperCase() + fav[0].slice(1)} · ${pins} map pin${pins === 1 ? "" : "s"}`) : null,
       editOn() && can("warn") && uid !== S.user.uid && uid !== OWNER_UID ? el("button", { class: "link small", type: "button", id: "prof-warn", style: "align-self:flex-start", onclick: () => warnUser(uid, name) }, `⚠️ Warn @${name}`) : null,
       editOn() && can("ban") && uid !== S.user.uid && uid !== OWNER_UID ? el("button", { class: "link danger small", type: "button", style: "align-self:flex-start", onclick: () => banUser(uid, name) }, `Ban @${name}`) : null,
@@ -3095,8 +3096,8 @@ let stripeRetDone = false;
 async function stripeReturn() {
   if (stripeRetDone) return; stripeRetDone = true;
   let q; try { q = new URLSearchParams(location.search); } catch { return; }
-  const tid = (q.get("paid") || "").replace(/[^A-Za-z0-9]/g, ""), sr = q.get("stripe");
-  if (!tid && !sr) return;
+  const tid = (q.get("paid") || "").replace(/[^A-Za-z0-9]/g, "");
+  if (!tid) return;
   try { history.replaceState(null, "", location.pathname); } catch { /* fine */ }
   try {
     if (tid) {
@@ -3104,9 +3105,6 @@ async function stripeReturn() {
       for (let i = 0; i < 3 && !ok; i++) { ok = (await stripeApi({ action: "verify", tid })).paid; if (!ok) await new Promise((r) => setTimeout(r, 1500)); }
       toast(ok ? "Payment received. You're paid up! ✅" : "Your payment isn't confirmed yet. Check back in a minute.");
       S.tab = "tours"; try { openTour(tid); } catch { /* fine */ }
-    } else {
-      const st = await stripeApi({ action: "status" });
-      toast(st.ready ? "Your Stripe account is ready. You can take card entry fees now. ✅" : "Stripe still needs a few details. Tap Card payments on your profile to finish.");
     }
   } catch (err) { toast(STRIPE_ERR[err.code] || "Couldn't check that just now."); }
 }
@@ -3120,7 +3118,6 @@ function fillPayBox(box, t, fee) {
   }
   if (okPaypal(payUser(t.payP))) list.push(b(`https://paypal.me/${payUser(t.payP)}/${amt}`, `💳 Pay ${fmtFee(fee)} with debit or credit card`));
   box.replaceChildren(...list);
-  getUser(t.createdBy).then((u) => { const tag = cashTag(u?.cash); if (tag) box.append(cashButton(tag, `💵 Pay ${fmtFee(fee)} on Cash App (${tag})`, fee)); });
   if (list.length) box.className = "stack"; box.style.gap = "8px";
 }
 function cashButton(tag, label, amt) { return el("a", { class: "btn small cash-btn", href: cashLink(tag, amt), target: "_blank", rel: "noopener" }, label || `💵 Pay ${tag} on Cash App`); }
@@ -3663,18 +3660,18 @@ function viewCreateTour(p) {
   const syncMan = () => { const m = manBox.checked; startField.hidden = m; endField.hidden = m || splitBox.checked; totalField.hidden = !(m && !splitBox.checked); paintSummary(); };
   const feeBox = el("input", { type: "checkbox", id: "t-feeon" });
   const feeIn = el("input", { id: "t-fee", type: "number", inputmode: "decimal", min: 1, max: 500, step: "0.01", placeholder: "5", "aria-label": "Entry fee in dollars" });
-  const payIn = el("input", { id: "t-pay", maxlength: 60, placeholder: "Cash App $name, Venmo @name, or cash at the ramp", value: cashTag(S.cash) ? "Cash App " + cashTag(S.cash) : "", "aria-label": "How to pay" });
+  const payIn = el("input", { id: "t-pay", maxlength: 60, placeholder: "Like cash at the ramp, or Zelle", "aria-label": "How to pay" });
   const prizeIn = el("input", { id: "t-prize", maxlength: 60, placeholder: "Like $100 cash, or a new rod", "aria-label": "Prize" });
   const ppIn = el("input", { id: "t-paypal", maxlength: 30, placeholder: "PayPal.me name, like samfish", "aria-label": "PayPal.me name", autocapitalize: "off" });
   // Card payments go through the organizer's own PayPal.me page. Players pay with a debit or credit card and don't need a PayPal account.
   const feeWrap = el("div", { class: "stack", hidden: true }, el("label", { class: "field" }, el("span", { class: "hint" }, "Entry fee ($)"), feeIn),
     el("label", { class: "field" }, el("span", { class: "hint" }, "💳 Take debit and credit cards: your PayPal.me name"), ppIn,
       el("span", { class: "hint" }, "Just the name, like samfish. Make a free one at paypal.me. Players pay with a card and don't need a PayPal account.")),
-    el("label", { class: "field" }, el("span", { class: "hint" }, "Or say how in your own words (cash, Cash App, Zelle…)"), payIn),
+    el("label", { class: "field" }, el("span", { class: "hint" }, "Or say how in your own words (cash at the ramp, Zelle…)"), payIn),
     el("span", { class: "hint" }, "Weigh-In never touches the money. The card button opens your own PayPal page."));
   const stripeBox = el("input", { type: "checkbox", id: "t-stripe" });
-  feeWrap.append(el("label", { class: "row", style: "gap:10px;flex-wrap:nowrap;align-items:flex-start" }, stripeBox, el("span", null, "💳 Take cards inside Weigh-In (Stripe)")),
-    el("span", { class: "hint" }, "Players pay by card in the app and get marked paid on their own. The money goes straight to your own Stripe account (connect it on Me, then your profile, then Card payments). Players pay a small service fee on top. You run the tournament and give out the prize yourself, so check your state's rules."));
+  feeWrap.append(el("label", { class: "row", style: "gap:10px;flex-wrap:nowrap;align-items:flex-start" }, stripeBox, el("span", null, "💳 Take cards inside Weigh-In")),
+    el("span", { class: "hint" }, "Players pay by card in the app and get marked paid on their own. You give out the prize yourself, so check your state's rules."));
   feeBox.addEventListener("change", () => { feeWrap.hidden = !feeBox.checked; });
   function paintSummary() {
     const mins = phaseRows.reduce((a, r) => a + (parseInt(r.mins.value) || 0), 0);
@@ -3730,11 +3727,11 @@ function viewCreateTour(p) {
     endField, totalField,
     el("label", { class: "row", style: "gap:10px;flex-wrap:nowrap" }, splitBox, el("span", null, "Split into phases (a different lake or lure for each part)")),
     phaseWrap,
-    el("div", { class: "field", id: "t-money" }, el("span", null, "Entry fee and prize"),
-      el("label", { class: "row", style: "gap:10px;flex-wrap:nowrap" }, feeBox, el("span", null, "Charge an entry fee")),
-      feeWrap,
+    el("div", { class: "field", id: "t-money" }, el("span", null, S.owner ? "Entry fee and prize" : "Prize"),
+      S.owner ? el("label", { class: "row", style: "gap:10px;flex-wrap:nowrap" }, feeBox, el("span", null, "Charge an entry fee")) : null,
+      S.owner ? feeWrap : null,
       el("label", { class: "field" }, el("span", { class: "hint" }, "Prize (optional)"), prizeIn),
-      el("span", { class: "hint" }, "Weigh-In never takes or sends money. You collect any fee yourself (cash, Venmo and so on), tick people off as paid on the tournament page, and give out the prize yourself. Rules for contests with fees and cash prizes are different in each place, so check yours.")),
+      el("span", { class: "hint" }, !S.owner ? "Weigh-In never takes or sends money. You give out any prize yourself. Rules for contests with prizes are different in each place, so check yours." : "Weigh-In never takes or sends money. You collect any fee yourself (cash, Venmo and so on), tick people off as paid on the tournament page, and give out the prize yourself. Rules for contests with fees and cash prizes are different in each place, so check yours.")),
     el("button", { class: "btn wide", type: "submit" }, priv || canPubTour() ? "Create tournament" : "Send request to the owner"));
   f.addEventListener("submit", async (e) => {
     e.preventDefault();
@@ -3773,10 +3770,6 @@ function viewCreateTour(p) {
       const payV = "", payP = payUser(ppIn.value);
       if (feeBox.checked && payP && !okPaypal(payP)) { toast("That PayPal.me name doesn't look right. Just the name, like jsmith."); return; }
       const useStripe = feeBox.checked && stripeBox.checked;
-      if (useStripe) {
-        let st; try { st = await stripeApi({ action: "status" }); } catch (err) { toast(STRIPE_ERR[err.code] || "Couldn't check your Stripe account. Try again."); return; }
-        if (!st.ready) { toast("Connect your Stripe account first: Me, tap your picture, then Card payments."); return; }
-      }
       if (feeBox.checked && !payHow && !payV && !payP && !useStripe) { toast("Tell people how to pay you."); return; }
       if (isBad(prize, payHow)) { toast(NO_SLURS); return; }
       const data = { name, fee, prize, payHow: fee ? payHow : "", ...(fee && payV ? { payV } : {}), ...(fee && payP ? { payP } : {}), ...(useStripe ? { stripe: true } : {}), paid: [S.user.uid], scoring: fd.get("scoring"), start: localDate(new Date(startAt)), end: localDate(new Date(endAt)), startAt, endAt,
@@ -5552,15 +5545,8 @@ function viewProfile(p) {
       el("div", null, el("b", null, String(pins)), el("span", null, "Map pins"))),
     el("div", { class: "list" },
       PUSH_OK() ? el("button", { class: "item", type: "button", id: "me-notify", onclick: async () => { if (pushOn()) await disablePush(); else await enablePush(); renderTab(); } }, el("span", { class: "t" }, pushOn() ? "🔔 Notifications" : "🔕 Notifications"), el("span", { class: "label" }, pushOn() ? "On. Tap to turn off" : "Off. Tap to hear when friends post")) : null,
-      el("button", { class: "item", type: "button", id: "me-card", onclick: async (e) => {
-        const b = e.currentTarget; b.disabled = true;
-        try { const { url } = await stripeApi({ action: "connect" }); if (!/^https:\/\/connect\.stripe\.com\//.test(url || "")) throw new Error("bad"); location.href = url; }
-        catch (err) { toast(STRIPE_ERR[err.code] || "Couldn't open Stripe. Try again."); b.disabled = false; }
-      } }, el("span", { class: "t" }, "💳 Card payments"), el("span", { class: "label", id: "me-card-s" }, "Take entry fees by card")),
-      el("button", { class: "item", type: "button", id: "me-name", onclick: () => openNameSheet(renderTab) }, el("span", { class: "t" }, "✏️ Change name"), el("span", { class: "label" }, "@" + S.name)),
-      el("button", { class: "item", type: "button", id: "me-cash", onclick: () => openCashSheet(renderTab) }, el("span", { class: "t" }, "💵 Cash App"), el("span", { class: "label" }, cashTag(S.cash) || "Add"))),
+      el("button", { class: "item", type: "button", id: "me-name", onclick: () => openNameSheet(renderTab) }, el("span", { class: "t" }, "✏️ Change name"), el("span", { class: "label" }, "@" + S.name))),
     el("h2", null, "My catches"));
-  stripeApi({ action: "status" }).then((st) => { const l = p.querySelector("#me-card-s"); if (l) l.textContent = !st.connected ? "Set up. Take entry fees by card" : st.ready ? "Ready ✅" : "Finish setting up"; }).catch(() => {});
   if (!mine.length) { p.append(el("p", { class: "empty" }, "You haven't posted a catch yet. Tap the red Post button.")); return; }
   p.append(el("div", { class: "list" }, mine.map((c) => el("div", { class: "item", style: "cursor:default" },
     el("div", { class: "row", style: "gap:12px;flex-wrap:nowrap;min-width:0" },
