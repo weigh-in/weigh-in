@@ -1377,7 +1377,7 @@ function renderFeed() {
   $feed = el("div", { class: "feed", "aria-label": "Catch feed. Swipe up for the next catch." });
   $screen.replaceChildren(el("div", { class: "feed-top" }, el("div", { class: "row", style: "gap:10px;flex-wrap:nowrap;align-items:center" },
       el("button", { class: "scope-btn", type: "button", id: "feed-share", "aria-label": "Share the catch on screen", onclick: shareFeedCatch }, "📤"),
-      el("span", { class: "brand" }, "Weigh-In")),
+      el("span", { class: "brand" }, "Weigh-In"), el("span", { class: "season-hi" }, SEASONS[fcSeason()].icon + " " + SEASONS[fcSeason()].hi)),
     el("div", { class: "row", style: "gap:8px;flex-wrap:nowrap" },
       el("button", { class: "scope-btn", type: "button", id: "lb-btn", "aria-label": "Biggest catches leaderboard", onclick: () => openLeaderboard() }, "🏆"),
       el("button", { class: "scope-btn", type: "button", id: "scope-btn", "aria-label": "Choose whose catches to show", onclick: openScopeSheet }, scopeLabel() + " ▾"))), $feed);
@@ -1432,13 +1432,14 @@ function feedPosts() {
 /* What's new. Newest first. Add a new entry on top each time the app changes. */
 /* Bump APP_VERSION every time you change the app, and add a matching entry on top of UPDATES (with v: the same number).
    Phones check app.js every few minutes and offer the new version on their own. */
-const APP_VERSION = 99;
+const APP_VERSION = 100;
 // The number people see. APP_VERSION stays a plain counter so updates are detected. Big changes bump the first number (2.0), smaller ones the second (1.1, 1.2).
 const REL_NAMES = { 59: "1.0", 60: "1.0", 61: "1.1", 62: "1.2", 63: "1.2", 64: "1.2", 65: "1.2", 66: "1.2", 67: "1.2",
-  68: "1.3", 69: "1.3", 70: "1.3", 71: "1.4", 72: "1.4", 73: "1.5", 74: "1.5", 75: "1.5", 76: "1.5", 77: "1.8", 78: "1.8", 79: "1.9", 80: "1.9", 81: "2.0", 82: "2.0", 83: "1.19", 84: "1.20", 85: "1.21", 86: "1.22", 87: "1.23", 88: "1.24", 89: "1.25", 90: "1.26", 91: "1.27", 92: "1.28", 93: "1.29", 94: "1.30", 95: "1.31", 96: "1.32", 97: "1.33", 98: "1.34", 99: "1.35" };
+  68: "1.3", 69: "1.3", 70: "1.3", 71: "1.4", 72: "1.4", 73: "1.5", 74: "1.5", 75: "1.5", 76: "1.5", 77: "1.8", 78: "1.8", 79: "1.9", 80: "1.9", 81: "2.0", 82: "2.0", 83: "1.19", 84: "1.20", 85: "1.21", 86: "1.22", 87: "1.23", 88: "1.24", 89: "1.25", 90: "1.26", 91: "1.27", 92: "1.28", 93: "1.29", 94: "1.30", 95: "1.31", 96: "1.32", 97: "1.33", 98: "1.34", 99: "1.35", 100: "1.36" };
 const relName = (v) => REL_NAMES[v] || (v < 59 ? `0.${v}` : `1.${v - 59}`);
 try { if ((parseInt(localStorage.getItem("weighin-appv"), 10) || 0) < APP_VERSION) localStorage.setItem("weighin-appv", String(APP_VERSION)); } catch { /* private mode */ }
 const UPDATES = [
+  { id: "2026-11-23a", v: 100, date: "Nov 23", title: "Seasons and ice fishing", items: ["The whole app follows the seasons, with a Happy Winter, Spring, Summer or Fall greeting, new colors and falling snow, petals or leaves. Change it any time in Me, tap your picture, then Season.", "Lake Duel: in winter the lakes freeze. You fish through a hole in the ice with ice lures and can catch yellow perch, whitefish and burbot.", "Every cast is different now, in duels and tournaments too. Some fish bite fast, some make you wait, and sometimes your lure lands right on a fish and it eats it.", "The boat and fish finder are gone from the game."] },
   { id: "2026-11-22b", v: 99, date: "Nov 22", title: "Prizes for everyone", items: ["Anyone can add a prize to a tournament, including invite-only ones.", "Entry fees and card payments are only for the app owner's tournaments for now."] },
   { id: "2026-11-22a", v: 98, date: "Nov 22", title: "Cash App is gone", items: ["Cash App buttons and the Cash App row are removed. Tournament entry fees now use a PayPal.me card button, or any way you describe in your own words."] },
   { id: "2026-11-21b", v: 97, date: "Nov 21", title: "Pay your entry fee by card", items: ["Organizers can turn on \"Take cards inside Weigh-In\" when they make a tournament. Connect your own Stripe account once on Me, then your profile, then Card payments.", "Players tap Pay by card, and they're marked paid on their own. The money goes straight to the organizer. Weigh-In never holds it."] },
@@ -5545,6 +5546,10 @@ function viewProfile(p) {
       el("div", null, el("b", null, String(pins)), el("span", null, "Map pins"))),
     el("div", { class: "list" },
       PUSH_OK() ? el("button", { class: "item", type: "button", id: "me-notify", onclick: async () => { if (pushOn()) await disablePush(); else await enablePush(); renderTab(); } }, el("span", { class: "t" }, pushOn() ? "🔔 Notifications" : "🔕 Notifications"), el("span", { class: "label" }, pushOn() ? "On. Tap to turn off" : "Off. Tap to hear when friends post")) : null,
+      el("button", { class: "item", type: "button", id: "me-season", onclick: (e) => {
+        const order = ["auto", "winter", "spring", "summer", "fall"], nx = order[(order.indexOf(getPref("season", "auto")) + 1) % order.length];
+        setPref("season", nx); applySeason(); const lb = e.currentTarget.querySelector(".label"); if (lb) lb.textContent = seasonLabel(); toast(nx === "auto" ? "The season follows the calendar." : SEASONS[nx].hi);
+      } }, el("span", { class: "t" }, "🌈 Season"), el("span", { class: "label" }, seasonLabel())),
       el("button", { class: "item", type: "button", id: "me-name", onclick: () => openNameSheet(renderTab) }, el("span", { class: "t" }, "✏️ Change name"), el("span", { class: "label" }, "@" + S.name))),
     el("h2", null, "My catches"));
   if (!mine.length) { p.append(el("p", { class: "empty" }, "You haven't posted a catch yet. Tap the red Post button.")); return; }
@@ -5691,6 +5696,33 @@ function openInstallHelp() {
 }
 
 
+/* ======================= SEASONS ======================= */
+const SEASONS = {
+  winter: { n: "Winter", icon: "❄️", hi: "Happy Winter!", msg: "The lakes are frozen. Try ice fishing in Lake Duel." },
+  spring: { n: "Spring", icon: "🌷", hi: "Happy Spring!", msg: "Fish are waking up. Bass and crappie are biting in Lake Duel." },
+  summer: { n: "Summer", icon: "☀️", hi: "Happy Summer!", msg: "Long days on the water. Catfish and bluegill love the heat." },
+  fall: { n: "Fall", icon: "🍂", hi: "Happy Fall!", msg: "Cooler water has walleye and pike feeding hard." } };
+function fcSeason() { const o = getPref("season", "auto"); if (SEASONS[o]) return o; const m = new Date().getMonth(); return m === 11 || m < 2 ? "winter" : m < 5 ? "spring" : m < 8 ? "summer" : "fall"; }
+function applySeason() {
+  const se = fcSeason();
+  try { document.documentElement.dataset.season = se; } catch { /* fine */ }
+  let fx = document.getElementById("season-fx");
+  if (se === "summer") { fx?.remove(); return; }
+  if (!fx) { fx = document.createElement("div"); fx.id = "season-fx"; fx.setAttribute("aria-hidden", "true"); document.body.append(fx); }
+  fx.className = "season-fx " + se;
+}
+const seasonLabel = () => (getPref("season", "auto") === "auto" ? "Auto: " : "") + SEASONS[fcSeason()].icon + " " + SEASONS[fcSeason()].n;
+applySeason();
+const FC_ICE_NAMES = { spinner: "Jigging spoon", worm: "Wax worms", crank: "Tip-up minnow", jig: "Ice jig" };
+const fcIce = (L) => fcSeason() === "winter" && !L.salt;               // freshwater is frozen in winter
+const FC_ICE_EXTRA = ["Yellow perch", "Whitefish", "Burbot"];          // fish you only meet through the ice
+const FC_SEASON_BOOST = {
+  winter: { "Yellow perch": 2.4, "Whitefish": 2, "Burbot": 1.7, "Lake trout": 1.6, "Walleye": 1.3, "Crappie": 1.3 },
+  spring: { "Largemouth bass": 1.5, "Crappie": 1.6, "Northern pike": 1.3, "Rainbow trout": 1.3 },
+  summer: { "Channel catfish": 1.5, "Bluegill": 1.4, "Common carp": 1.3, "Largemouth bass": 1.2 },
+  fall: { "Walleye": 1.6, "Northern pike": 1.5, "Muskellunge": 1.4, "Smallmouth bass": 1.3 } };
+const fcLureName = (id, ice) => ice ? FC_ICE_NAMES[id] : (FC_LURES.find((x) => x[0] === id) || [0, id])[1];
+
 /* ======================= LAKE DUEL (cast, hook, reel) ======================= */
 const FC_LOCS = [
   { id: "pond", n: "Pond", lvl: 1, hard: 0, stars: 1, sky: ["#ffe2b0", "#d6ecf2"], water: ["#4aa6b9", "#1d6577"], fish: ["Bluegill", "Largemouth bass", "Channel catfish"] },
@@ -5761,15 +5793,7 @@ const FC_GEAR = [
   { id: "charm", g: "Experienced angler", n: "Lucky charm", icon: "🍀", base: "No charm",
     names: ["Rabbit's foot", "Old fishing medal", "Grandpa's lucky lure"], costs: [600, 1800, 5000], req: { catches: 50 },
     eff: (l) => l ? `Better chance at bigger fish (+${l})` : "No luck on your side." },
-  { id: "finder", g: "Serious kit", n: "Fish finder", icon: "📡", base: "No finder",
-    names: ["Portable sonar", "Colour sonar", "Live sonar"], costs: [1500, 4000, 9000], req: { catches: 50, lvl: 6 },
-    eff: (l) => ["You can't tell what is down there.", "Shows how big the shadow is", "Shows a weight guess too", "Names the fish before you hook it"][l] },
-  { id: "boat", g: "Serious kit", n: "Boat", icon: "🚤", base: "Fishing from shore",
-    names: ["Kayak", "Jon boat with motor", "Bass boat", "Offshore boat"], costs: [2500, 6000, 14000, 30000], req: { catches: 100, lvl: 8 },
-    eff: (l) => l ? `Reach open water: ${l * 8}% better chance at rare fish` : "You can only reach the edges." },
-  { id: "gps", g: "Serious kit", n: "GPS and charts", icon: "🗺️", base: "No charts",
-    names: ["Handheld GPS", "Chartplotter"], costs: [2000, 6000], req: { gear: ["boat", 1] },
-    eff: (l) => l ? `You remember the good spots: fish bite ${l * 12}% sooner` : "You hunt for spots the hard way." }];
+];
 /* Everything costs 3x what it used to, and every item now has high tiers that need a level too. */
 FC_GEAR.forEach((it) => { it.costs = it.costs.map((c) => Math.round(c * 3 / 10) * 10); it.tl = it.costs.map(() => 0); });
 const FC_EXT = {
@@ -5777,10 +5801,9 @@ const FC_EXT = {
   line: [["120 lb dyneema", 18000, 12], ["Deep-sea 200 lb line", 42000, 20]], drag: [["Pro drag", 14000, 11]], gloves: [["Titanium-grip gloves", 9000, 8]],
   hook: [["Chemically sharpened hooks", 6000, 7]], bait: [["Secret-recipe bait", 8000, 9]], tackle: [["Pro tackle bag", 9000, 8]],
   charm: [["Champion's lucky coin", 16000, 14]], net: [["Pro landing net", 12000, 10]], cooler: [["Walk-in freezer", 16000, 9], ["Fish hold", 32000, 16]],
-  log: [["Master's journal", 12000, 10]], waders: [["Neoprene pro waders", 9000, 9]], scale: [["Master scale", 9000, 11]],
-  boat: [["Sport fisher", 180000, 14], ["Luxury charter yacht", 420000, 22]], gps: [["Satellite navigation", 30000, 12]] };
+  log: [["Master's journal", 12000, 10]], waders: [["Neoprene pro waders", 9000, 9]], scale: [["Master scale", 9000, 11]] };
 for (const id in FC_EXT) { const it = FC_GEAR.find((x) => x.id === id); for (const [n, c, l] of FC_EXT[id]) { it.names.push(n); it.costs.push(c); it.tl.push(l); } }
-const FC_GROUPS = ["Licences and permits", "Starter tackle", "Proper gear", "Experienced angler", "Serious kit"];
+const FC_GROUPS = ["Licences and permits", "Starter tackle", "Proper gear", "Experienced angler"];
 
 /* Things you only get by playing. Each one pays out once. */
 const FC_ACH = [
@@ -5985,6 +6008,10 @@ function fcMine() {
   return { name: S.name || "angler", xp: fcXp(), lv: fcLevel(), big: +bw.toFixed(2), bigN: bn, catches: s.catches, trophies: s.trophies, wins: s.duelWins, tw: s.tWins };
 }
 /* ---------- cloud save: the game progress follows your account ---------- */
+Object.assign(FC_FISH, {
+  "Yellow perch": { min: 0.2, max: 2.5, r: 16, asp: 0.5, top: "#8a8a3c", belly: "#f0d878", fin: "#e07a2f", pat: "bars", patc: "rgba(40,50,20,.4)", price: 34, w: { spinner: 1.5, worm: 3, crank: 0.8, jig: 3 } },
+  "Whitefish": { min: 1, max: 8, r: 22, asp: 0.42, top: "#8f9f9e", belly: "#eef2ef", fin: "#a7b2ae", pat: "spots", patc: "rgba(90,110,110,.22)", price: 20, w: { spinner: 2, worm: 1.5, crank: 0.5, jig: 3 } },
+  "Burbot": { min: 1.5, max: 12, r: 26, asp: 0.32, top: "#6b5a3a", belly: "#c9bc94", fin: "#5a4c30", pat: "spots", patc: "rgba(30,25,10,.45)", whisk: true, price: 24, w: { spinner: 0.4, worm: 2, crank: 0.5, jig: 2 } } });
 const FC_SAVE_KEYS = ["fcach", "fcbag", "fccoins", "fcdex", "fcents", "fcgear", "fcloc", "fclure", "fclv", "fclvpaid", "fcpaid", "fcrod", "fcxp", "fcstats"];
 let fcCloudLast = "", fcCloudAt = 0, fcCloudReady = false, fcCloudTimer = 0, fcWaitingNet = false;
 // No signal when we tried to sync the game: try again the moment it comes back, so a session
@@ -6205,7 +6232,7 @@ function openFishGame() {
     const lv = fcLevel(), xp = fcXp(), lo = 40 * (lv - 1) ** 2, hi = 40 * lv ** 2, dex = fcDex(), coins = fcCoins(), lvs = fcLureLv();
     const names = Object.keys(FC_FISH), bag = fcBag().sort((a, b) => (b.k - a.k) || (sellValue(b) - sellValue(a))), fr = friends();
     const sellable = bag.filter((e) => !e.k);
-    const L0 = FC_LOCS.find((l) => l.id === loc);
+    const L0 = FC_LOCS.find((l) => l.id === loc), ice = fcIce(L0), se = fcSeason(), poolL0 = ice ? [...L0.fish, ...FC_ICE_EXTRA.filter((x) => !L0.fish.includes(x))] : L0.fish;
     box.replaceChildren(...[
       el("div", { class: "row spread" }, el("h1", null, "Lake Duel"), el("button", { class: "link", type: "button", onclick: close }, "Close")),
       el("div", { class: "fc-card hero" }, el("div", { class: "row spread" }, el("b", null, "Level " + lv + " · " + fcTitle(lv)), el("b", { id: "fc-coins" }, "🪙 " + coins)),
@@ -6216,16 +6243,17 @@ function openFishGame() {
       el("div", { class: "chips fc-tabs", role: "group", "aria-label": "Game sections" }, [["play", "Fish"], ["events", "Tournaments"], ["rank", "Leaderboard"], ["shop", "Bag and shop"], ["me", "Progress"]].map(([id, n]) => el("button", { class: "chip", type: "button", "data-tab": id, "aria-pressed": String(tab === id), onclick: () => setTab(id) }, n))),
       tab === "play" && [
       (() => { const owned = FC_GEAR.filter((it) => fcUp(it.id)); return owned.length ? el("p", { class: "muted small" }, "Your gear: " + owned.map((it) => it.icon + " " + fcGearName(it)).join(" · ")) : null; })(),
+      el("div", { class: "fc-card season-note" }, el("b", null, SEASONS[se].icon + " " + SEASONS[se].hi), el("span", { class: "muted small" }, SEASONS[se].msg + (se === "winter" ? " On frozen water you fish through a hole with ice lures, and you can catch perch, whitefish and burbot." : ""))),
       el("h2", null, "Where"),
       el("div", { class: "loc-grid" }, FC_LOCS.map((l) => { const needLic = (l.lic || 0) > fcUp("license"), shut = needLic || l.lvl > lv;
         return el("button", { class: "loc-card", type: "button", "data-loc": l.id, disabled: shut ? "" : null, "aria-pressed": String(loc === l.id),
           style: `background:linear-gradient(180deg,${l.sky[0]} 0%,${l.sky[1]} 32%,${l.water[0]} 34%,${l.water[1]} 100%)`,
           onclick: () => { loc = l.id; setPref("fcloc", loc); note = ""; draw(); } },
-          el("b", null, l.n), el("span", { class: "loc-s" }, "★".repeat(l.stars) + (l.salt ? " · salt" : "")),
+          el("b", null, l.n), el("span", { class: "loc-s" }, "★".repeat(l.stars) + (l.salt ? " · salt" : "") + (fcIce(l) ? " · frozen ❄️" : "")),
           shut ? el("span", { class: "loc-lock" }, l.lvl > lv ? "🔒 Lv " + l.lvl : l.lic === 2 ? "🔒 Saltwater permit" : "🔒 Licence") : null); })),
-      el("p", { class: "muted small" }, `${L0.salt ? "Salt water. " : "Fresh water. "}Fight: ${"★".repeat(L0.stars)}${"☆".repeat(5 - L0.stars)}. Fish here: ${L0.fish.map((n) => (dex[n] ? n : "???")).join(", ")}.`),
-      el("h2", null, "Lure"),
-      el("div", { class: "chips" }, FC_LURES.map(([id, n]) => el("button", { class: "chip", type: "button", "aria-pressed": String(lure === id), onclick: () => { lure = id; setPref("fclure", id); draw(); } }, n + FC_LURE_TAG[lvs[id] || 0]))),
+      el("p", { class: "muted small" }, `${L0.salt ? "Salt water. " : ice ? "Frozen water. You are ice fishing. " : "Fresh water. "}Fight: ${"★".repeat(L0.stars)}${"☆".repeat(5 - L0.stars)}. Fish here: ${poolL0.map((n) => (dex[n] ? n : "???")).join(", ")}.`),
+      el("h2", null, ice ? "Ice lure" : "Lure"),
+      el("div", { class: "chips" }, FC_LURES.map(([id]) => [id, fcLureName(id, ice)]).map(([id, n]) => el("button", { class: "chip", type: "button", "aria-pressed": String(lure === id), onclick: () => { lure = id; setPref("fclure", id); draw(); } }, n + FC_LURE_TAG[lvs[id] || 0]))),
       el("button", { class: "btn wide", type: "button", id: "fc-duel", onclick: () => playClash("duel", loc, lure, draw) }, "Duel a rival (3 casts)"),
       el("button", { class: "btn ghost wide", type: "button", id: "fc-free", onclick: () => playClash("free", loc, lure, draw) }, "Free fishing"),
       el("button", { class: "btn ghost wide", type: "button", id: "fc-rush", onclick: openReelRush }, "Quick game: Reel Rush"),
@@ -6269,7 +6297,7 @@ function openFishGame() {
       }),
       el("h2", null, "Lures"),
       el("div", { class: "list" }, FC_LURES.map(([id, n]) => { const l = lvs[id] || 0, cost = FC_LURE_COST[l];
-        return el("div", { class: "item", style: "cursor:default" }, el("div", { class: "stack", style: "gap:2px" }, el("span", { class: "t" }, n + FC_LURE_TAG[l]), el("span", { class: "s" }, l ? "Attracts bigger fish" : "Basic")),
+        return el("div", { class: "item", style: "cursor:default" }, el("div", { class: "stack", style: "gap:2px" }, el("span", { class: "t" }, n + (fcSeason() === "winter" ? " / " + FC_ICE_NAMES[id] : "") + FC_LURE_TAG[l]), el("span", { class: "s" }, l ? "Attracts bigger fish" : "Basic")),
           cost ? el("button", { class: "btn small", type: "button", "data-buy": id, disabled: coins < cost ? "" : null, onclick: () => { if (fcCoins() >= cost) { setPref("fccoins", String(fcCoins() - cost)); lvs[id] = l + 1; setPref("fclv", JSON.stringify(lvs)); draw(); } } }, "Upgrade 🪙 " + cost) : el("span", { class: "pill live" }, "Maxed")); })),
       ],
       tab === "me" && [
@@ -6288,7 +6316,7 @@ function openFishGame() {
       el("h2", null, `My fish (${Object.keys(dex).length}/${names.length})`),
       el("div", { class: "list" }, names.map((n) => el("div", { class: "item", style: "cursor:default" },
         el("span", { class: "t" }, dex[n] ? n : "???"), el("span", { class: "s" }, dex[n] ? `best ${lbText(dex[n].best)} · caught ${dex[n].n}` : "not caught yet")))),
-      el("p", { class: "muted small" }, "How to play: tap to cast. Wait for a dark shape to show at the bobber and the ! to appear, then tap fast to hook it. You can't tell what it is until you land it. Hold to reel. When the fish runs or jumps, let go so the line doesn't snap. Big fish take longer to bite and fight harder. Sell your fish in your bag to earn coins, then spend them in the tackle shop.")], tab === "events" && evTab(), tab === "rank" && rankTab()].flat(9).filter(Boolean));
+      el("p", { class: "muted small" }, "How to play: tap to cast. Wait for a dark shape to show at the bobber and the ! to appear, then tap fast to hook it. You can't tell what it is until you land it. Hold to reel. When the fish runs or jumps, let go so the line doesn't snap. Big fish take longer to bite and fight harder. Some bites come fast and some take a long while, and if your lure lands right on a fish it may eat it at once. Sell your fish in your bag to earn coins, then spend them in the tackle shop.")], tab === "events" && evTab(), tab === "rank" && rankTab()].flat(9).filter(Boolean));
   };
   draw();
   fcPublish();
@@ -6298,12 +6326,12 @@ function openFishGame() {
 function playClash(mode, locId, lureIdIn, onExit, duel) {
   const lureId = mode === "friend" && duel.lure ? duel.lure : lureIdIn;
   const L = FC_LOCS.find((l) => l.id === locId) || FC_LOCS[0], K = L.like || L.id, HR = window.__hr ?? new Date().getHours(), TOD = HR >= 21 || HR < 5 ? "night" : HR >= 17 ? "dusk" : HR < 8 ? "dawn" : "day";
-  const G = fcGear(), lureLv = fcLureLv()[lureId] || 0;
+  const G = fcGear(), lureLv = fcLureLv()[lureId] || 0, ICE = fcIce(L), SEA = fcSeason();
   const upHook = fcUp("hook"), upNet = fcUp("net");
-  const upBait = fcUp("bait") + 0.7 * fcUp("gps");                 // scent and knowing the spots both speed up bites
+  const upBait = fcUp("bait");                                       // scent speeds up bites
   const upCharm = fcUp("charm") + 0.7 * fcUp("tackle");            // the right lure works like luck
-  const upBoat = fcUp("boat") + 0.9 * fcUp("waders");              // both get you to better water
-  const upFinder = Math.max(fcUp("finder"), fcUp("glasses"));      // glasses do what cheap sonar does
+  const upBoat = fcUp("waders");                                    // wading gets you to better water
+  const upFinder = fcUp("glasses");                                // glasses let you see into the water
   const BITE_WINDOW = 0.95 * (1 + 0.3 * upHook);
   fcMarkPlace(L.id);
   const canvas = el("canvas", { class: "game-canvas", role: "img", "aria-label": "Fishing game. Tap to cast and hook. Hold to reel. Let go when the fish runs." });
@@ -6378,7 +6406,7 @@ function playClash(mode, locId, lureIdIn, onExit, duel) {
   const rng = (seed) => () => { seed |= 0; seed = seed + 0x6D2B79F5 | 0; let t = Math.imul(seed ^ seed >>> 15, 1 | seed); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; };
   const wy = () => H * 0.25;
   function buildDeco() {
-    const r = rng(L.id.length * 977 + (L.id.charCodeAt(0) || 1)), w = W, y0 = wy(), D = { clouds: [], hills: [], trees: [], reeds: [], pads: [], rocks: [], shadows: [], birds: [], sparkles: [] };
+    const r = rng(L.id.length * 977 + (L.id.charCodeAt(0) || 1) + ((Math.random() * 1e9) | 0)), w = W, y0 = wy(), D = { clouds: [], hills: [], trees: [], reeds: [], pads: [], rocks: [], shadows: [], birds: [], sparkles: [] };
     for (let i = 0; i < 4; i++) D.clouds.push({ x: r() * w, y: 20 + r() * y0 * 0.45, s: 0.7 + r() * 0.9, v: 4 + r() * 8 });
     D.hills = [[0.8, "rgba(165,185,210,.35)", 0.35], [0.55, "rgba(120,150,170,.45)", 0.5], [0.35, "rgba(70,105,90,.6)", 0.8]].map(([amp, col, f]) => ({ col, pts: Array.from({ length: 12 }, (_, i) => [i * w / 11, y0 - 8 - r() * y0 * amp * f]) }));
     const n = Math.round(w / 22);
@@ -6387,31 +6415,31 @@ function playClash(mode, locId, lureIdIn, onExit, duel) {
     for (let i = 0; i < 16; i++) D.reeds.push({ x: (i < 8 ? r() * w * 0.28 : w * 0.72 + r() * w * 0.28), h: 26 + r() * 40, ph: r() * 6, cat: r() < 0.5 });
     if (K === "pond") for (let i = 0; i < 9; i++) D.pads.push({ x: r() * w, y: y0 + 60 + r() * (H * 0.45), s: 14 + r() * 14 });
     if (K === "river") for (let i = 0; i < 8; i++) D.rocks.push({ x: r() * w, y: y0 + 50 + r() * (H * 0.55), s: 10 + r() * 22 });
-    for (let i = 0; i < 4; i++) D.shadows.push({ x: r() * w, y: y0 + 80 + r() * H * 0.5, s: 14 + r() * 16, v: (r() < 0.5 ? -1 : 1) * (10 + r() * 14) });
+    for (let i = 0; i < 6; i++) D.shadows.push({ x: r() * w, y: y0 + 80 + r() * H * 0.5, s: 14 + r() * 16, v: (r() < 0.5 ? -1 : 1) * (10 + r() * 14) });
     for (let i = 0; i < 2; i++) D.birds.push({ x: r() * w, y: 30 + r() * y0 * 0.4, v: 25 + r() * 20, ph: r() * 6 });
     for (let i = 0; i < 26; i++) D.sparkles.push({ x: r() * w, y: y0 + 10 + r() * (H - y0) * 0.85, ph: r() * 6 });
     D.weeds = Array.from({ length: 22 }, () => ({ x: r() * w, h: 30 + r() * 60, ph: r() * 6, k: r() }));
     D.bubbles = Array.from({ length: 14 }, () => ({ x: r() * w, y: r() * H, v: 12 + r() * 22, s: 1 + r() * 2.5 }));
     D.streaks = Array.from({ length: 10 }, () => ({ x: r() * w, y: y0 + 30 + r() * (H - y0) * 0.8, l: 30 + r() * 70, v: 20 + r() * 30 }));
     D.pebbles = Array.from({ length: 18 }, () => ({ x: r() * w, y: H * 0.915 + r() * H * 0.07, s: 1.5 + r() * 3.5, c: r() }));
-    D.boat = { x: w * (0.15 + r() * 0.4), s: 0.8 + r() * 0.5 };
     D.far = Array.from({ length: 18 }, (_, i) => ({ x: i * w / 17 + r() * 8, h: 8 + r() * 16 }));
+    if (ICE && D.pads.length < 4) for (let i = 0; i < 5; i++) D.pads.push({ x: r() * w, y: y0 + 60 + r() * H * 0.5, s: 14 + r() * 16 });      // chunks of floating ice
     return D;
   }
   resize(); addEventListener("resize", resize);
 
   /* ---------- game state ---------- */
   const CASTS = 3, rivalName = ["Lakeside Lou", "Big Mike", "Sunny", "Cody", "Captain Pete"][Math.floor(Math.random() * 5)];
-  let flickPow = null, snag = false, aimX = 0.5, aimDrag = false, aimX0 = 0, agit = 0, ringT = 0, eatFx = false, castAt = -9999, landed = true, achNew = [], target = null, inBag = true, netSave = false, st = "cast", ci = 0, mine = [], rival = [], down = false, powerT = 0, power = 0, great = false, timer = 0, biteAt = 0, msg = "", fish = null, weight = 0, F = null, rec = false, resText = "", earned = { xp: 0, coins: 0 }, btn = null, shakeT = 0, drops = [], rip = [], lastTier = null;
+  let nearUntil = 0, flakes = null, flickPow = null, snag = false, aimX = 0.5, aimDrag = false, aimX0 = 0, agit = 0, ringT = 0, eatFx = false, castAt = -9999, landed = true, achNew = [], target = null, inBag = true, netSave = false, st = "cast", ci = 0, mine = [], rival = [], down = false, powerT = 0, power = 0, great = false, timer = 0, biteAt = 0, msg = "", fish = null, weight = 0, F = null, rec = false, resText = "", earned = { xp: 0, coins: 0 }, btn = null, shakeT = 0, drops = [], rip = [], lastTier = null;
   const setSt = (s) => { st = s; bg.dataset.state = s; };
   setSt("cast");
   const pickFish = (rand = Math.random) => {
-    const ws = L.fish.map((n) => FC_FISH[n].w[lureId] * (FC_FISH[n].rare != null ? FC_FISH[n].rare * (1 + 0.08 * upBoat) : 1)); let r = rand() * ws.reduce((a, b) => a + b, 0), i = 0;
+    const pool = ICE ? [...L.fish, ...FC_ICE_EXTRA.filter((x) => !L.fish.includes(x))] : L.fish, bo = FC_SEASON_BOOST[SEA] || {};
+    const ws = pool.map((n) => FC_FISH[n].w[lureId] * (bo[n] || 1) * (FC_FISH[n].rare != null ? FC_FISH[n].rare * (1 + 0.08 * upBoat) : 1)); let r = rand() * ws.reduce((a, b) => a + b, 0), i = 0;
     for (; i < ws.length - 1; i++) { if ((r -= ws[i]) <= 0) break; }
-    return L.fish[i];
+    return pool[i];
   };
   const rollWeight = (n, good, lv, rand = Math.random) => { const f = FC_FISH[n]; return Math.round((f.min + (f.max - f.min) * Math.pow(rand(), Math.max(0.6, (good ? 1.7 : 2.6) - 0.3 * (lv || 0) - 0.22 * upCharm))) * 100) / 100; };
-  const seeded = (i) => rng((duel ? duel.seed : 1) * 31 + i * 7919);
   if (mode === "duel") for (let i = 0; i < CASTS; i++) rival.push(Math.random() < 0.15 ? 0 : rollWeight(pickFish(), Math.random() < 0.4, 0));
 
   const bobber = () => ({ x: W * aimX, y: H * (0.62 - 0.3 * power) });
@@ -6425,10 +6453,17 @@ function playClash(mode, locId, lureIdIn, onExit, duel) {
       snag = true; target = null; fcStat("casts", 1); castAt = performance.now(); landed = false; timer = 1.2; setSt("wait"); tick(700, 0.2, 0.25, 1); rip.push({ ...bobber(), a: 1 }); return;
     }
     // the fish is chosen now but you can't see what it is. Bigger fish take longer to bite.
-    const sr = mode === "friend" || mode === "event" ? seeded(ci) : Math.random, n = pickFish(sr), w = rollWeight(n, great, lureLv, sr), q = fcTier(n, w)[2];
+    const n = pickFish(), w = rollWeight(n, great, lureLv), q = fcTier(n, w)[2];
     target = { n, w, q: Math.max(0, Math.min(1, q)) };
     fcStat("casts", 1); castAt = performance.now(); landed = false;
-    timer = (2.6 + Math.random() * 3.4 + target.q * 6 * (1 - 0.1 * lureLv)) * Math.max(0.2, 1 - 0.18 * upBait); setSt("wait"); tick(700, 0.2, 0.25, 1); rip.push({ ...bobber(), a: 1 }); }
+    // every cast is different: some fish are quick, most take a normal wait, some make you sit a long while
+    const mood = Math.random(), base = mood < 0.25 ? 0.6 + Math.random() * 1.6 : mood < 0.72 ? 2.6 + Math.random() * 3.4 : 7 + Math.random() * 8;
+    timer = Math.min(20, (base + target.q * 6 * (1 - 0.1 * lureLv))) * Math.max(0.2, 1 - 0.18 * upBait); nearUntil = 0;
+    { // if the lure lands right on top of a fish, it sometimes eats it straight away
+      const tl = (performance.now() + 650) / 1000, bp = bobber();
+      for (const sh of deco.shadows) { const sx = ((sh.x + tl * sh.v) % (W + 80) + W + 80) % (W + 80) - 40;
+        if (Math.abs(sx - bp.x) < 46 + sh.s && Math.abs(sh.y - (bp.y + 50)) < 52 + sh.s) { nearUntil = performance.now() + 3200; if (Math.random() < 0.55) timer = 0.35 + Math.random() * 0.35; break; } } }
+    setSt("wait"); tick(700, 0.2, 0.25, 1); rip.push({ ...bobber(), a: 1 }); }
   function hook() {
     fish = target.n; weight = target.w; const f = FC_FISH[fish];
     F = fcNewFight(Math.min(1.25, 0.3 + 0.7 * Math.pow(target.q, 0.85) + L.hard + (f.pow || 0))); F.jumpY = 0; F.off = 0; F.dir = 1; bg.dataset.phase = F.ph; setSt("fight"); tick(900, 0.25, 0.08);
@@ -6561,8 +6596,21 @@ function playClash(mode, locId, lureIdIn, onExit, duel) {
     cx.fillStyle = "rgba(120,200,225,.1)"; cx.fillRect(0, 0, 80, 80); cx.globalCompositeOperation = "source-over";
     ctx.globalAlpha = 0.9 + Math.sin(now / 240) * 0.06; ctx.drawImage(c, 0, 0, c.width, c.height, x - 40, y - 30, 80, 80); ctx.globalAlpha = 1;
   }
+  function iceLure(id, now) {      // the winter versions of the four lures
+    if (id === "jig") { ctx.fillStyle = "#ffcf3a"; ctx.beginPath(); ctx.arc(0, 2, 5.5, 0, 7); ctx.fill(); ctx.fillStyle = "#e0482f"; ctx.beginPath(); ctx.arc(0, 4, 3, 0, 7); ctx.fill();
+      ctx.fillStyle = "rgba(255,255,255,.7)"; ctx.beginPath(); ctx.arc(-1.8, 0, 1.6, 0, 7); ctx.fill(); ctx.strokeStyle = "#c8d0d4"; ctx.lineWidth = 1.6; ctx.beginPath(); ctx.arc(0, 11, 4, 0, 3.2); ctx.stroke();
+      ctx.strokeStyle = "#f4f1e6"; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(0, 7); ctx.quadraticCurveTo(Math.sin(now / 180) * 3, 12, 0, 17); ctx.stroke(); }
+    else if (id === "spinner") { ctx.rotate(Math.sin(now / 260) * 0.25); ctx.fillStyle = "#d7dee2"; ctx.beginPath(); ctx.ellipse(0, 4, 6, 12, 0, 0, 7); ctx.fill();
+      ctx.fillStyle = "rgba(255,255,255," + (0.35 + 0.35 * Math.abs(Math.sin(now / 150))) + ")"; ctx.beginPath(); ctx.ellipse(-2, 1, 2, 7, 0, 0, 7); ctx.fill();
+      ctx.fillStyle = "#e0482f"; ctx.fillRect(-6, 11, 12, 2.5); ctx.strokeStyle = "#aab4b8"; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.arc(0, 18, 3.4, 0, 4.7); ctx.stroke(); }
+    else if (id === "worm") { for (let i = 0; i < 2; i++) { ctx.fillStyle = "#f2e3b5"; ctx.beginPath(); ctx.ellipse(-3 + i * 6, 4 + i * 2, 3.2, 6.5, 0.3 - i * 0.5, 0, 7); ctx.fill(); ctx.fillStyle = "rgba(160,120,60,.4)"; for (let q = -1; q <= 1; q++) ctx.fillRect(-5 + i * 6, 4 + i * 2 + q * 3, 4.5, 0.9); }
+      ctx.strokeStyle = "#c8d0d4"; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.arc(0, 13, 3.4, 0, 4.7); ctx.stroke(); }
+    else { const fl = Math.sin(now / 90) * 2; ctx.fillStyle = "#c9d6dc"; ctx.beginPath(); ctx.ellipse(0, 3, 12, 4.8, 0, 0, 7); ctx.fill(); ctx.fillStyle = "#8fa5ae"; ctx.beginPath(); ctx.moveTo(-11, 3); ctx.lineTo(-19, -2 + fl); ctx.lineTo(-19, 8 - fl); ctx.closePath(); ctx.fill();
+      ctx.fillStyle = "#fff"; ctx.beginPath(); ctx.arc(7, 2, 1.8, 0, 7); ctx.fill(); ctx.fillStyle = "#111"; ctx.beginPath(); ctx.arc(7.4, 2, 0.9, 0, 7); ctx.fill(); }
+  }
   function drawLure(id, x, y, k, now) {
     ctx.save(); ctx.translate(x, y); ctx.scale(k, k); ctx.globalAlpha = 0.92;
+    if (ICE) { iceLure(id, now); ctx.restore(); return; }
     if (id === "spinner") { const w = 5 + Math.abs(Math.sin(now / 70)) * 5;
       ctx.fillStyle = "#c8d0d4"; ctx.beginPath(); ctx.ellipse(0, 6, 3, 8, 0, 0, 7); ctx.fill();
       ctx.fillStyle = "#e9c46a"; ctx.beginPath(); ctx.ellipse(w * 0.2, -2, w, 6, Math.sin(now / 90) * 0.5, 0, 7); ctx.fill();
@@ -6582,7 +6630,7 @@ function playClash(mode, locId, lureIdIn, onExit, duel) {
   function buildLayers() {
     const y0 = wy(), D = deco, t = 0, main = ctx, la = mkLayer(), lb = mkLayer(), lc = mkLayer(), ld = mkLayer(), lr = mkLayer();
     ctx = la.x;
-    const SKY = TOD === "night" ? ["#060b22", "#2a4270"] : TOD === "dusk" ? ["#ff8f5a", "#ffd6a0"] : TOD === "dawn" ? ["#f4a9c0", "#ffe4c6"] : L.sky;
+    const SKY = TOD === "night" ? ["#060b22", "#2a4270"] : TOD === "dusk" ? ["#ff8f5a", "#ffd6a0"] : TOD === "dawn" ? ["#f4a9c0", "#ffe4c6"] : ICE ? ["#b3c6da", "#ebf1f7"] : L.sky;
     let g = ctx.createLinearGradient(0, 0, 0, y0); g.addColorStop(0, SKY[0]); g.addColorStop(1, SKY[1]); ctx.fillStyle = g; ctx.fillRect(0, 0, W, y0);
     if (TOD === "night") {
       for (let i = 0; i < 40; i++) { const sx = rnd(i * 3) * W, sy = rnd(i * 3 + 1) * y0 * 0.85; ctx.fillStyle = `rgba(255,255,255,${0.35 + 0.5 * Math.abs(Math.sin(t * 1.2 + i))})`; ctx.fillRect(sx, sy, 1.6, 1.6); }
@@ -6593,11 +6641,11 @@ function playClash(mode, locId, lureIdIn, onExit, duel) {
       const sg = ctx.createRadialGradient(W * 0.8, sy, 4, W * 0.8, sy, warm ? 95 : 70); sg.addColorStop(0, warm ? "rgba(255,226,170,1)" : "rgba(255,246,200,1)"); sg.addColorStop(0.25, warm ? "rgba(255,170,100,.8)" : "rgba(255,236,170,.8)"); sg.addColorStop(1, "rgba(255,200,120,0)"); ctx.fillStyle = sg; ctx.fillRect(W * 0.8 - 100, sy - 100, 200, 200);
     }
     ctx = lb.x;
-    for (const hl of D.hills) { ctx.fillStyle = hl.col; ctx.beginPath(); ctx.moveTo(0, y0); hl.pts.forEach(([x, y], i) => { if (i === 0) ctx.lineTo(x, y); else { const [px, py] = hl.pts[i - 1]; ctx.quadraticCurveTo(px, py, (px + x) / 2, (py + y) / 2); } }); ctx.lineTo(W, y0); ctx.closePath(); ctx.fill(); }
+    for (const hl of D.hills) { ctx.fillStyle = ICE ? ["rgba(232,240,247,.75)", "rgba(205,219,231,.85)", "rgba(228,237,245,.97)"][D.hills.indexOf(hl)] || "#e6edf3" : hl.col; ctx.beginPath(); ctx.moveTo(0, y0); hl.pts.forEach(([x, y], i) => { if (i === 0) ctx.lineTo(x, y); else { const [px, py] = hl.pts[i - 1]; ctx.quadraticCurveTo(px, py, (px + x) / 2, (py + y) / 2); } }); ctx.lineTo(W, y0); ctx.closePath(); ctx.fill(); }
     if (!L.salt) { ctx.fillStyle = "rgba(50,88,72,.55)"; for (const f of D.far) { ctx.beginPath(); ctx.moveTo(f.x - 7, y0); ctx.lineTo(f.x, y0 - f.h); ctx.lineTo(f.x + 7, y0); ctx.fill(); } }
     for (const tr of D.trees) { const base = y0 + 2;
       if (tr.palm) { const tx = tr.x + (tr.k - 0.5) * 30, ty = base - tr.h; ctx.strokeStyle = "#6b4f2c"; ctx.lineWidth = 4; ctx.beginPath(); ctx.moveTo(tr.x, base); ctx.quadraticCurveTo(tr.x + (tr.k - 0.5) * 14, base - tr.h * 0.5, tx, ty); ctx.stroke(); ctx.strokeStyle = "#2f8a46"; ctx.lineWidth = 3; for (let i = 0; i < 7; i++) { const ang = -Math.PI / 2 + (i - 3) * 0.55; ctx.beginPath(); ctx.moveTo(tx, ty); ctx.quadraticCurveTo(tx + Math.cos(ang) * 22, ty + Math.sin(ang) * 22 - 6, tx + Math.cos(ang) * 38, ty + Math.sin(ang) * 38 + 10 + Math.sin(t * 1.5 + i) * 2); ctx.stroke(); } continue; }
-      const pal = K === "river" ? ["#2f5a3a", "#427a52", "#24472e"] : K === "lake" ? ["#244b36", "#33694c", "#1b3a2a"] : ["#3d7a42", "#5fa75c", "#2f6334"], dark = tr.k > 0.5 ? pal[0] : pal[2];
+      const pal = ICE ? ["#d9e5ee", "#f5f9fc", "#a8bccb"] : SEA === "fall" && !L.salt ? ["#b5581f", "#e39a32", "#82391a"] : SEA === "spring" && !L.salt ? ["#4f9a55", "#8fd08a", "#38753f"] : K === "river" ? ["#2f5a3a", "#427a52", "#24472e"] : K === "lake" ? ["#244b36", "#33694c", "#1b3a2a"] : ["#3d7a42", "#5fa75c", "#2f6334"], dark = tr.k > 0.5 ? pal[0] : pal[2];
       ctx.fillStyle = "rgba(10,30,20,.25)"; ctx.beginPath(); ctx.ellipse(tr.x, base + 1, 9 + tr.k * 5, 2.5, 0, 0, 7); ctx.fill();
       if (tr.pine) {
         ctx.fillStyle = "#4a3523"; ctx.fillRect(tr.x - 2, base - tr.h * 0.32, 4, tr.h * 0.32 + 1); ctx.fillStyle = "#35261a"; ctx.fillRect(tr.x, base - tr.h * 0.32, 2, tr.h * 0.32 + 1);
@@ -6614,10 +6662,21 @@ function playClash(mode, locId, lureIdIn, onExit, duel) {
     ctx.fillStyle = "rgba(255,255,255,.1)"; ctx.fillRect(0, y0, W, 18);
     const hz = ctx.createLinearGradient(0, y0 - 26, 0, y0 + 40); hz.addColorStop(0, "rgba(255,255,255,0)"); hz.addColorStop(0.45, "rgba(255,255,255,.3)"); hz.addColorStop(1, "rgba(255,255,255,0)"); ctx.fillStyle = hz; ctx.fillRect(0, y0 - 26, W, 66);
     ctx = ld.x;
+    if (ICE) {      // a hole cut in the ice: thick white ice all around, dark water in the middle
+      const ty = y0 + (H * 0.9 - y0) * 0.07, bx0 = W * 0.04, bx1 = W * 0.96, byy = H * 0.9 - 6, rad = 46;
+      const rr = () => { ctx.moveTo(bx0 + rad, ty); ctx.arcTo(bx1, ty, bx1, byy, rad); ctx.arcTo(bx1, byy, bx0, byy, rad); ctx.arcTo(bx0, byy, bx0, ty, rad); ctx.arcTo(bx0, ty, bx1, ty, rad); ctx.closePath(); };
+      ctx.save(); ctx.beginPath(); ctx.rect(0, y0, W, H - y0); rr();
+      const ig = ctx.createLinearGradient(0, y0, 0, H); ig.addColorStop(0, "#e4eef5"); ig.addColorStop(1, "#bdd1df"); ctx.fillStyle = ig; ctx.fill("evenodd");
+      ctx.beginPath(); rr(); ctx.lineWidth = 7; ctx.strokeStyle = "rgba(255,255,255,.9)"; ctx.stroke(); ctx.lineWidth = 2; ctx.strokeStyle = "rgba(70,120,150,.4)"; ctx.stroke();
+      ctx.strokeStyle = "rgba(120,160,185,.45)"; ctx.lineWidth = 1.3;      // cracks in the ice
+      for (let i = 0; i < 9; i++) { let cx0 = rnd(i * 7 + 3) * W, cy0 = y0 + 4 + rnd(i * 7 + 4) * (H * 0.9 - y0); ctx.beginPath(); ctx.moveTo(cx0, cy0); for (let k = 0; k < 4; k++) { cx0 += (rnd(i * 7 + k * 2 + 20) - 0.5) * 50; cy0 += (rnd(i * 7 + k * 2 + 21) - 0.3) * 22; ctx.lineTo(cx0, cy0); } ctx.stroke(); }
+      ctx.restore();
+      const hx = W * 0.82, hy = y0 + 22; ctx.fillStyle = "#7a5a3a"; ctx.fillRect(hx - 14, hy - 16, 28, 16); ctx.fillStyle = "#f4f8fb"; ctx.beginPath(); ctx.moveTo(hx - 17, hy - 16); ctx.lineTo(hx, hy - 27); ctx.lineTo(hx + 17, hy - 16); ctx.closePath(); ctx.fill(); ctx.fillStyle = "#ffd98a"; ctx.fillRect(hx - 9, hy - 13, 7, 7); ctx.fillStyle = "#3b2a1a"; ctx.fillRect(hx + 3, hy - 12, 7, 12);      // little ice-fishing hut
+    }
     const vg = ctx.createRadialGradient(W / 2, H * 0.5, H * 0.25, W / 2, H * 0.5, H * 0.8); vg.addColorStop(0, "rgba(0,0,0,0)"); vg.addColorStop(1, K === "ocean" ? "rgba(0,10,30,.45)" : "rgba(0,15,25,.3)"); ctx.fillStyle = vg; ctx.fillRect(0, y0, W, H - y0);
     // bank
-    const by = H * 0.9; g = ctx.createLinearGradient(0, by, 0, H); g.addColorStop(0, L.salt ? "#e5d3a1" : "#7a6440"); g.addColorStop(1, L.salt ? "#c3ac75" : "#5a4a2e"); ctx.fillStyle = g; ctx.fillRect(0, by, W, H - by);
-    ctx.fillStyle = L.salt ? "#cdb97f" : "#4d7a35"; ctx.beginPath(); ctx.moveTo(0, by + 4); for (let x = 0; x <= W; x += 10) ctx.lineTo(x, by - 2 + Math.sin(x * 0.2) * 3); ctx.lineTo(W, by + 8); ctx.lineTo(0, by + 8); ctx.fill();
+    const by = H * 0.9; g = ctx.createLinearGradient(0, by, 0, H); g.addColorStop(0, ICE ? "#eef4f8" : L.salt ? "#e5d3a1" : "#7a6440"); g.addColorStop(1, ICE ? "#cfdce6" : L.salt ? "#c3ac75" : "#5a4a2e"); ctx.fillStyle = g; ctx.fillRect(0, by, W, H - by);
+    ctx.fillStyle = ICE ? "#f7fafc" : L.salt ? "#cdb97f" : "#4d7a35"; ctx.beginPath(); ctx.moveTo(0, by + 4); for (let x = 0; x <= W; x += 10) ctx.lineTo(x, by - 2 + Math.sin(x * 0.2) * 3); ctx.lineTo(W, by + 8); ctx.lineTo(0, by + 8); ctx.fill();
     ctx.fillStyle = L.salt ? "#8c8272" : "#6b4a2a"; ctx.fillRect(0, by - 10, W * 0.2, 7); for (let i = 0; i < 5; i++) ctx.fillRect(i * W * 0.045, by - 2, 5, 22); ctx.fillStyle = "rgba(0,0,0,.2)"; ctx.fillRect(0, by - 3, W * 0.2, 2);
     ctx.strokeStyle = "rgba(255,255,255,.55)"; ctx.lineWidth = 2; ctx.beginPath(); for (let x = 0; x <= W; x += 12) ctx.lineTo(x, by - 3 + Math.sin(x * 0.1 + t * 2) * 1.5); ctx.stroke();
     ctx.fillStyle = "rgba(0,0,0,.28)"; for (let i = 0; i < 6; i++) ctx.fillRect(W * 0.02 + i * W * 0.032, by - 10, 1.5, 7);
@@ -6638,7 +6697,6 @@ function playClash(mode, locId, lureIdIn, onExit, duel) {
     ctx.globalAlpha = 1;
     ctx.strokeStyle = "#2a2a2a"; ctx.lineWidth = 1.6; for (const b of D.birds) { const bx = ((b.x + t * b.v) % (W + 60)) - 30, fl = Math.sin(t * 7 + b.ph) * 4; ctx.beginPath(); ctx.moveTo(bx - 8, b.y - fl); ctx.quadraticCurveTo(bx - 3, b.y - 4, bx, b.y); ctx.quadraticCurveTo(bx + 3, b.y - 4, bx + 8, b.y - fl); ctx.stroke(); }
     blit(LAY.b);
-    if (L.salt || L.big) { const bx = (D.boat.x + t * 3) % (W + 80) - 40, sc = D.boat.s, b0 = y0 - 1 + Math.sin(t * 1.2); ctx.fillStyle = "#f4f1e8"; ctx.beginPath(); ctx.moveTo(bx, b0 - 22 * sc); ctx.lineTo(bx + 12 * sc, b0 - 3 * sc); ctx.lineTo(bx, b0 - 3 * sc); ctx.fill(); ctx.fillStyle = "#e3ddc9"; ctx.beginPath(); ctx.moveTo(bx - 2 * sc, b0 - 18 * sc); ctx.lineTo(bx - 10 * sc, b0 - 3 * sc); ctx.lineTo(bx - 2 * sc, b0 - 3 * sc); ctx.fill(); ctx.fillStyle = "#3b4a5a"; ctx.fillRect(bx - 12 * sc, b0 - 3 * sc, 26 * sc, 4 * sc); }
     blit(LAY.c);
     // mirror image of the shore and sky on the water. Fast phones bend it with tiny waves.
     { const al = TOD === "night" ? 0.16 : 0.26, rh = y0 * 0.95; ctx.globalAlpha = al;
@@ -6660,15 +6718,17 @@ function playClash(mode, locId, lureIdIn, onExit, duel) {
     // caustics: moving net of light on the bottom of shallow water
     if (Q < 1 && !(K === "ocean" || L.big)) { ctx.strokeStyle = "rgba(255,255,230,.07)"; ctx.lineWidth = 1.5; for (let i = 0; i < 9; i++) { const cy2 = H * 0.62 + i * (H * 0.3 / 9); ctx.beginPath(); for (let x = 0; x <= W; x += 12) ctx.lineTo(x, cy2 + Math.sin(x / 22 + t * 1.2 + i * 1.9) * 5 + Math.cos(x / 41 - t * 0.8 + i) * 4); ctx.stroke(); } }
     if (K === "river") for (const sk of D.streaks) { const sx = ((sk.x + t * sk.v) % (W + 140)) - 70; ctx.strokeStyle = "rgba(255,255,255,.22)"; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(sx, sk.y); ctx.lineTo(sx + sk.l, sk.y + 1); ctx.stroke(); }
-    for (const p of D.pads) { ctx.fillStyle = "#3e8a45"; ctx.beginPath(); ctx.ellipse(p.x, p.y, p.s, p.s * 0.45, 0, 0.3, Math.PI * 2 - 0.1); ctx.lineTo(p.x, p.y); ctx.fill(); if (p.s > 22) { ctx.fillStyle = "#f6b6cc"; ctx.beginPath(); ctx.arc(p.x + 3, p.y - 3, 4, 0, 7); ctx.fill(); } }
+    for (const p of D.pads) { ctx.fillStyle = ICE ? "#eaf4f9" : "#3e8a45"; ctx.beginPath(); ctx.ellipse(p.x, p.y, p.s, p.s * 0.45, 0, 0.3, Math.PI * 2 - 0.1); ctx.lineTo(p.x, p.y); ctx.fill(); if (p.s > 22 && !ICE) { ctx.fillStyle = "#f6b6cc"; ctx.beginPath(); ctx.arc(p.x + 3, p.y - 3, 4, 0, 7); ctx.fill(); } }
     for (const rk of D.rocks) { ctx.fillStyle = "#59666b"; ctx.beginPath(); ctx.ellipse(rk.x, rk.y, rk.s, rk.s * 0.55, 0, Math.PI, 0); ctx.fill(); ctx.fillStyle = "rgba(255,255,255,.4)"; ctx.fillRect(rk.x - rk.s, rk.y - 1, rk.s * 2, 2); }
     if (Q < 2) for (const s of D.sparkles) { const a = Math.max(0, Math.sin(t * 2 + s.ph)); if (a > 0.6) { ctx.fillStyle = `rgba(255,255,255,${(a - 0.6) * 1.6})`; ctx.fillRect(s.x - 4, s.y, 8, 1.5); } }
     ctx.lineCap = "round";
     for (const [wi, wd] of D.weeds.entries()) { if (Q >= 2 && wi % 2) continue; const bx = wd.x, b0 = H * 0.9; ctx.strokeStyle = L.salt ? (wd.k < 0.5 ? "rgba(214,98,84,.32)" : "rgba(30,110,70,.32)") : "rgba(20,70,40,.34)"; ctx.lineWidth = 3 + wd.k * 3; ctx.beginPath(); ctx.moveTo(bx, b0); ctx.bezierCurveTo(bx + Math.sin(t * 1.1 + wd.ph) * 10, b0 - wd.h * 0.35, bx - Math.sin(t * 1.3 + wd.ph) * 10, b0 - wd.h * 0.7, bx + Math.sin(t * 1.2 + wd.ph) * 14, b0 - wd.h); ctx.stroke(); }
     if (Q < 2) for (const [bi, bb] of D.bubbles.entries()) { if (Q && bi % 2) continue; const yy = (((bb.y - t * bb.v) % (H - y0)) + (H - y0)) % (H - y0) + y0; ctx.fillStyle = "rgba(255,255,255,.28)"; ctx.beginPath(); ctx.arc(bb.x + Math.sin(t + bb.y) * 4, yy, bb.s, 0, 7); ctx.fill(); }
     blit(LAY.d);
-    if (!L.salt) { ctx.strokeStyle = "#3d6a2b"; ctx.lineWidth = 1.5; for (let x = 4; x < W; x += (Q ? 18 : 9)) { const hh = 6 + ((x * 7) % 9); ctx.beginPath(); ctx.moveTo(x, by + 2); ctx.lineTo(x + Math.sin(t * 2 + x) * 2, by - hh); ctx.stroke(); } }
-    for (const r of D.reeds) { const sway = Math.sin(t * 1.4 + r.ph) * 4, rx = r.x, ry = by + 2; ctx.strokeStyle = L.salt ? "#9aa24f" : "#3f6a2c"; ctx.lineWidth = 2.5; ctx.beginPath(); ctx.moveTo(rx, ry); ctx.quadraticCurveTo(rx + sway * 0.5, ry - r.h * 0.5, rx + sway, ry - r.h); ctx.stroke(); if (r.cat && !L.salt) { ctx.fillStyle = "#6a4528"; ctx.beginPath(); ctx.ellipse(rx + sway, ry - r.h - 5, 3, 8, 0, 0, 7); ctx.fill(); } }
+    if (!L.salt && !ICE) { ctx.strokeStyle = "#3d6a2b"; ctx.lineWidth = 1.5; for (let x = 4; x < W; x += (Q ? 18 : 9)) { const hh = 6 + ((x * 7) % 9); ctx.beginPath(); ctx.moveTo(x, by + 2); ctx.lineTo(x + Math.sin(t * 2 + x) * 2, by - hh); ctx.stroke(); } }
+    for (const r of (ICE ? [] : D.reeds)) { const sway = Math.sin(t * 1.4 + r.ph) * 4, rx = r.x, ry = by + 2; ctx.strokeStyle = L.salt ? "#9aa24f" : "#3f6a2c"; ctx.lineWidth = 2.5; ctx.beginPath(); ctx.moveTo(rx, ry); ctx.quadraticCurveTo(rx + sway * 0.5, ry - r.h * 0.5, rx + sway, ry - r.h); ctx.stroke(); if (r.cat && !L.salt) { ctx.fillStyle = "#6a4528"; ctx.beginPath(); ctx.ellipse(rx + sway, ry - r.h - 5, 3, 8, 0, 0, 7); ctx.fill(); } }
+    if (ICE) { if (!flakes) flakes = Array.from({ length: Q >= 2 ? 28 : Q ? 50 : 85 }, (_, i) => ({ x: rnd(i * 3 + 11), y: rnd(i * 3 + 12), s: 1 + rnd(i * 3 + 13) * 2.2, v: 0.03 + rnd(i * 3 + 14) * 0.07, d: rnd(i * 3 + 15) * 6.28 }));
+      ctx.fillStyle = "rgba(255,255,255,.85)"; for (const f of flakes) { const fx = (((f.x * W + Math.sin(t * 0.8 + f.d) * 14) % W) + W) % W, fy = ((f.y + t * f.v) % 1) * H; ctx.beginPath(); ctx.arc(fx, fy, f.s, 0, 7); ctx.fill(); } }
     if (TOD !== "day") { ctx.fillStyle = TOD === "night" ? "rgba(6,12,44,.34)" : TOD === "dusk" ? "rgba(255,110,40,.15)" : "rgba(255,170,190,.1)"; ctx.fillRect(0, 0, W, H); }
   }
   function frame(now) {
@@ -6692,6 +6752,7 @@ function playClash(mode, locId, lureIdIn, onExit, duel) {
     } else if ((st === "wait" || st === "bite") && !landed) { landed = true; for (let i = 0; i < 10; i++) drops.push({ x: b.x, y: b.y, vx: (Math.random() - 0.5) * 90, vy: -60 - Math.random() * 90, a: 1 }); rip.push({ x: b.x, y: b.y, a: 1 }); rip.push({ x: b.x, y: b.y, a: 0.7 }); tick(500, 0.2, 0.18, 1); }
     if (st !== "bite") eatFx = false;
     if ((st === "wait" || st === "bite") && !flying) {
+      if (st === "wait" && performance.now() < nearUntil) text("👀 A fish is right under it!", W / 2, H * 0.18, 19, "#fff");
       const eaten = st === "bite" && biteAt >= 0.3, since = st === "bite" ? Math.max(0, biteAt - 0.3) : 0, rush = st === "bite" ? Math.min(1, biteAt / 0.3) : 0;
       const dip = st === "bite" ? 7 + Math.sin(now / 40) * 3 : Math.sin(now / 500) * 2 + Math.sin(now / 170 + 1) * 0.8;
       const sink = Math.min(1, Math.max(0, (now - castAt - 650) / 1100)), dep = lureId === "worm" ? 0 : Math.max(64, H * 0.1) * (1 - (1 - sink) * (1 - sink));      // lures sink down into the water after they land
