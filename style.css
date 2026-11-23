@@ -629,3 +629,12 @@ nav.tabs{border-top:1px solid var(--line);box-shadow:0 -6px 20px rgba(16,48,42,.
 .wr-stage>*:not(.wr-fx){position:relative;z-index:1}
 .wr .btn.ghost{background:rgba(255,255,255,.16);color:#fff;border:1px solid rgba(255,255,255,.45)}
 .wr .btn.ghost:active{background:rgba(255,255,255,.28)}
+
+/* Bottom buttons as rounded squares */
+nav.tabs .in{gap:6px;padding:6px 8px;align-items:center}
+.tab{aspect-ratio:1/1;width:100%;border-radius:16px;background:var(--water);border:1.5px solid var(--line);padding:4px 0;justify-content:center;gap:2px;min-width:0;font-size:.6rem;letter-spacing:-.1px;overflow:hidden;white-space:nowrap}
+.tab svg{width:22px;height:22px}
+.tab[aria-current="page"]{background:var(--lake-soft);border-color:var(--lake);color:var(--lake)}
+.tab[aria-current="page"]::before{display:none}
+.tab.post .bob{width:28px;height:28px;margin-top:0;border-radius:9px;border:0;box-shadow:none}
+.tab.post .bob svg{width:18px;height:18px}
