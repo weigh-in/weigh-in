@@ -672,3 +672,6 @@ html[data-season="fall"]{--lake:#9a4f1f;--lake-soft:#f3e1cf;--water:#F3EDE4;--li
 .season-hi{font-size:.72rem;font-weight:700;color:var(--lake);background:var(--lake-soft);border-radius:999px;padding:4px 10px;white-space:nowrap}
 @media (max-width:350px){.season-hi{display:none}}
 .season-note{display:flex;flex-direction:column;gap:4px;background:var(--lake-soft);border-color:var(--lake)}
+
+/* smaller "Everyone" button at the top of the feed */
+.feed-top #scope-btn{min-height:34px;padding:4px 10px;font-size:.78rem}
