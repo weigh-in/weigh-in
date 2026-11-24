@@ -294,6 +294,23 @@ function badText(text) {
   // everything else is checked one word at a time, so "wet backpack" and "Grandpa's pond" are fine
   return [...tokens, ...spaced].some((w) => BLOCK_WORDS.has(w) || BLOCK_PATTERNS.some((re) => re.test(w)));
 }
+/* Names (anglers, friends, tournaments) are held to a stricter rule: swear words and sexual words too,
+   even squashed together like "FuckYou99". Whole-word checks keep honest names like Dickson or Grass safe. */
+const NAME_SUBSTR = ["fuck", "shit", "cunt", "bitch", "whore", "slut", "pussy", "penis", "vagina", "asshole", "bastard", "nigg", "faggot", "tranny", "nazi", "hitler", "cocksuck", "blowjob", "dildo", "porn", "boob", "twat", "wank"];
+const NAME_WORDS = new Set(["ass", "dick", "cock", "tit", "tits", "cum", "sex", "sexy", "anal", "anus", "piss", "damn", "hoe", "hoes", "rape", "rapist", "milf", "nude", "nudes", "kys", "xxx", "horny", "dumbass", "jackass", "balls", "butt", "fart", "poop"]);
+function badName(text) {
+  if (badText(text)) return true;
+  const base = String(text || "").toLowerCase().normalize("NFKD").replace(/[\u0300-\u036f]/g, "");
+  const leet = base.replace(/[013457@$!|]/g, (c) => ({ "0": "o", "1": "i", "3": "e", "4": "a", "5": "s", "7": "t", "@": "a", "$": "s", "!": "i", "|": "i" }[c]));
+  const sq = leet.replace(/[^a-z]/g, "").replace(/scunthorpe|shiitake|shitake/g, "");
+  const one = sq.replace(/(.)\1+/g, "$1");   // fuuuck -> fuck
+  if (NAME_SUBSTR.some((w) => sq.includes(w) || one.includes(w.replace(/(.)\1+/g, "$1")))) return true;
+  const tokens = leet.split(/[^a-z]+/).filter(Boolean);
+  const spaced = []; let run = "";
+  for (const w of tokens) { if (w.length === 1) run += w; else { if (run.length >= 3) spaced.push(run); run = ""; } }
+  if (run.length >= 3) spaced.push(run);
+  return [...tokens, ...spaced].some((w) => NAME_WORDS.has(w) || NAME_WORDS.has(w.replace(/(.)\1+/g, "$1")));
+}
 const NO_SLURS = "That includes language that isn't allowed here. Please change it.";
 const PERMS = [["deletePosts", "Delete catches"], ["deleteComments", "Delete comments"], ["deleteTours", "Delete tournaments"], ["reports", "See and handle reports"], ["ban", "Ban and unban anglers"], ["warn", "Warn anglers"]];
 /* How the map looks. Water is the US Geological Survey's topographic map: it names lakes, rivers,
@@ -347,7 +364,7 @@ function renderAuth(mode = "signin") {
         if (emailErr) { msg.textContent = emailErr; return; }
         const name = String(fd.get("name") || "").trim();
         if (!NAME_RE.test(name)) { msg.textContent = "Angler name must be 2 to 20 letters, numbers or _."; return; }
-        if (badText(name)) { msg.textContent = "That name isn't allowed. Pick another one."; return; }
+        if (badName(name)) { msg.textContent = "That name isn't allowed. Pick another one."; return; }
         pendingName = name;
         const cred = await createUserWithEmailAndPassword(auth, email, pw);
         try { await sendEmailVerification(cred.user); } catch (e2) { /* the verify screen has a Resend button */ }
@@ -389,7 +406,7 @@ function renderPickName(note) {
     e.preventDefault();
     const name = String(new FormData(f).get("name") || "").trim();
     if (!NAME_RE.test(name)) { msg.textContent = "Use 2 to 20 letters, numbers or _."; return; }
-    if (badText(name)) { msg.textContent = "That name isn't allowed. Pick another one."; return; }
+    if (badName(name)) { msg.textContent = "That name isn't allowed. Pick another one."; return; }
     const ok = await claimName(name);
     if (ok) startApp(); else msg.textContent = `"${name}" is taken. Try another.`;
   });
@@ -1432,13 +1449,14 @@ function feedPosts() {
 /* What's new. Newest first. Add a new entry on top each time the app changes. */
 /* Bump APP_VERSION every time you change the app, and add a matching entry on top of UPDATES (with v: the same number).
    Phones check app.js every few minutes and offer the new version on their own. */
-const APP_VERSION = 100;
+const APP_VERSION = 101;
 // The number people see. APP_VERSION stays a plain counter so updates are detected. Big changes bump the first number (2.0), smaller ones the second (1.1, 1.2).
 const REL_NAMES = { 59: "1.0", 60: "1.0", 61: "1.1", 62: "1.2", 63: "1.2", 64: "1.2", 65: "1.2", 66: "1.2", 67: "1.2",
-  68: "1.3", 69: "1.3", 70: "1.3", 71: "1.4", 72: "1.4", 73: "1.5", 74: "1.5", 75: "1.5", 76: "1.5", 77: "1.8", 78: "1.8", 79: "1.9", 80: "1.9", 81: "2.0", 82: "2.0", 83: "1.19", 84: "1.20", 85: "1.21", 86: "1.22", 87: "1.23", 88: "1.24", 89: "1.25", 90: "1.26", 91: "1.27", 92: "1.28", 93: "1.29", 94: "1.30", 95: "1.31", 96: "1.32", 97: "1.33", 98: "1.34", 99: "1.35", 100: "1.36" };
+  68: "1.3", 69: "1.3", 70: "1.3", 71: "1.4", 72: "1.4", 73: "1.5", 74: "1.5", 75: "1.5", 76: "1.5", 77: "1.8", 78: "1.8", 79: "1.9", 80: "1.9", 81: "2.0", 82: "2.0", 83: "1.19", 84: "1.20", 85: "1.21", 86: "1.22", 87: "1.23", 88: "1.24", 89: "1.25", 90: "1.26", 91: "1.27", 92: "1.28", 93: "1.29", 94: "1.30", 95: "1.31", 96: "1.32", 97: "1.33", 98: "1.34", 99: "1.35", 100: "1.36", 101: "1.37" };
 const relName = (v) => REL_NAMES[v] || (v < 59 ? `0.${v}` : `1.${v - 59}`);
 try { if ((parseInt(localStorage.getItem("weighin-appv"), 10) || 0) < APP_VERSION) localStorage.setItem("weighin-appv", String(APP_VERSION)); } catch { /* private mode */ }
 const UPDATES = [
+  { id: "2026-11-23b", v: 101, date: "Nov 23", title: "Cleaner names", items: ["Names of anglers and tournaments now block swear words and rude words too, even when people sneak them in with numbers or extra letters."] },
   { id: "2026-11-23a", v: 100, date: "Nov 23", title: "Seasons and ice fishing", items: ["The whole app follows the seasons, with a Happy Winter, Spring, Summer or Fall greeting, new colors and falling snow, petals or leaves. Change it any time in Me, tap your picture, then Season.", "Lake Duel: in winter the lakes freeze. You fish through a hole in the ice with ice lures and can catch yellow perch, whitefish and burbot.", "Every cast is different now, in duels and tournaments too. Bites take longer now, and some fish make you wait a lot longer than others. Sometimes your lure lands right on a fish and it eats it.", "The boat and fish finder are gone from the game."] },
   { id: "2026-11-22b", v: 99, date: "Nov 22", title: "Prizes for everyone", items: ["Anyone can add a prize to a tournament, including invite-only ones.", "Entry fees and card payments are only for the app owner's tournaments for now."] },
   { id: "2026-11-22a", v: 98, date: "Nov 22", title: "Cash App is gone", items: ["Cash App buttons and the Cash App row are removed. Tournament entry fees now use a PayPal.me card button, or any way you describe in your own words."] },
@@ -3153,7 +3171,7 @@ function openNameSheet(onDone) {
         wait > 0 ? null : el("button", { class: "btn wide", type: "button", id: "nm-save", onclick: async (e) => {
           const v = inp.value.trim();
           if (!NAME_RE.test(v)) { toast("Use 2 to 20 letters, numbers or _."); return; }
-          if (badText(v)) { toast("That name isn't allowed. Pick another one."); return; }
+          if (badName(v)) { toast("That name isn't allowed. Pick another one."); return; }
           if (v === S.name) { toast("That's already your name."); return; }
           if (!confirm(`Change your name to @${v}? You can't change it again for ${NAME_DAYS} days.`)) return;
           e.target.disabled = true;
@@ -3738,7 +3756,7 @@ function viewCreateTour(p) {
     e.preventDefault();
     const fd = new FormData(f);
     const name = String(fd.get("name") || "").trim();
-    if (badText(name)) { toast(NO_SLURS); return; }
+    if (badName(name)) { toast(NO_SLURS); return; }
     const manual = priv && manBox.checked, startAt = manual ? Date.now() : new Date(startInput.value).getTime();
     if (!name) { toast("Give the tournament a name."); return; }
     if (!startAt) { toast("Pick a start date and time."); return; }
