@@ -682,3 +682,4 @@ html[data-season="fall"]{--lake:#9a4f1f;--lake-soft:#f3e1cf;--water:#F3EDE4;--li
 @keyframes leafsway{from{margin-left:calc(var(--sway,40px) * -1)}to{margin-left:var(--sway,40px)}}
 @keyframes leafturn{from{transform:rotate(calc(var(--spin,90deg) * -1)) rotateY(0)}to{transform:rotate(var(--spin,90deg)) rotateY(65deg)}}
 @media (prefers-reduced-motion:reduce){.season-fx .leaf,.season-fx .leaf-in{animation:none!important}}
+.season-fx.fall.leaves-done{opacity:0;transition:opacity 2.2s ease}
