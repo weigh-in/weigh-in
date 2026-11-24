@@ -1449,13 +1449,14 @@ function feedPosts() {
 /* What's new. Newest first. Add a new entry on top each time the app changes. */
 /* Bump APP_VERSION every time you change the app, and add a matching entry on top of UPDATES (with v: the same number).
    Phones check app.js every few minutes and offer the new version on their own. */
-const APP_VERSION = 101;
+const APP_VERSION = 102;
 // The number people see. APP_VERSION stays a plain counter so updates are detected. Big changes bump the first number (2.0), smaller ones the second (1.1, 1.2).
 const REL_NAMES = { 59: "1.0", 60: "1.0", 61: "1.1", 62: "1.2", 63: "1.2", 64: "1.2", 65: "1.2", 66: "1.2", 67: "1.2",
-  68: "1.3", 69: "1.3", 70: "1.3", 71: "1.4", 72: "1.4", 73: "1.5", 74: "1.5", 75: "1.5", 76: "1.5", 77: "1.8", 78: "1.8", 79: "1.9", 80: "1.9", 81: "2.0", 82: "2.0", 83: "1.19", 84: "1.20", 85: "1.21", 86: "1.22", 87: "1.23", 88: "1.24", 89: "1.25", 90: "1.26", 91: "1.27", 92: "1.28", 93: "1.29", 94: "1.30", 95: "1.31", 96: "1.32", 97: "1.33", 98: "1.34", 99: "1.35", 100: "1.36", 101: "1.37" };
+  68: "1.3", 69: "1.3", 70: "1.3", 71: "1.4", 72: "1.4", 73: "1.5", 74: "1.5", 75: "1.5", 76: "1.5", 77: "1.8", 78: "1.8", 79: "1.9", 80: "1.9", 81: "2.0", 82: "2.0", 83: "1.19", 84: "1.20", 85: "1.21", 86: "1.22", 87: "1.23", 88: "1.24", 89: "1.25", 90: "1.26", 91: "1.27", 92: "1.28", 93: "1.29", 94: "1.30", 95: "1.31", 96: "1.32", 97: "1.33", 98: "1.34", 99: "1.35", 100: "1.36", 101: "1.37", 102: "1.38" };
 const relName = (v) => REL_NAMES[v] || (v < 59 ? `0.${v}` : `1.${v - 59}`);
 try { if ((parseInt(localStorage.getItem("weighin-appv"), 10) || 0) < APP_VERSION) localStorage.setItem("weighin-appv", String(APP_VERSION)); } catch { /* private mode */ }
 const UPDATES = [
+  { id: "2026-11-24a", v: 102, date: "Nov 24", title: "Real falling leaves", items: ["Fall now has real leaves that drift down in random spots, sway side to side and spin as they fall."] },
   { id: "2026-11-23b", v: 101, date: "Nov 23", title: "Cleaner names", items: ["Names of anglers and tournaments now block swear words and rude words too, even when people sneak them in with numbers or extra letters."] },
   { id: "2026-11-23a", v: 100, date: "Nov 23", title: "Seasons and ice fishing", items: ["The whole app follows the seasons, with a Happy Winter, Spring, Summer or Fall greeting, new colors and falling snow, petals or leaves. Change it any time in Me, tap your picture, then Season.", "Lake Duel: in winter the lakes freeze. You fish through a hole in the ice with ice lures and can catch yellow perch, whitefish and burbot.", "Every cast is different now, in duels and tournaments too. Bites take longer now, and some fish make you wait a lot longer than others. Sometimes your lure lands right on a fish and it eats it.", "The boat and fish finder are gone from the game."] },
   { id: "2026-11-22b", v: 99, date: "Nov 22", title: "Prizes for everyone", items: ["Anyone can add a prize to a tournament, including invite-only ones.", "Entry fees and card payments are only for the app owner's tournaments for now."] },
@@ -5728,6 +5729,33 @@ function applySeason() {
   if (se === "summer") { fx?.remove(); return; }
   if (!fx) { fx = document.createElement("div"); fx.id = "season-fx"; fx.setAttribute("aria-hidden", "true"); document.body.append(fx); }
   fx.className = "season-fx " + se;
+  fx.textContent = "";
+  if (se === "fall") fillLeaves(fx);
+}
+/* Real falling leaves: each one has its own spot, size, speed, sway and spin, and picks a new spot every time it lands. */
+const LEAF_COLORS = [["#d9772b", "#8a3c12"], ["#b8432a", "#6e1f10"], ["#e3a52f", "#8a5a10"], ["#a8531c", "#5c2a0a"], ["#c9622a", "#7a3010"]];
+const LEAF_D = "M0,-14 L3,-8 L9,-11 L7,-3 L14,-2 L8,3 L11,9 L4,7 L0,15 L-4,7 L-11,9 L-8,3 L-14,-2 L-7,-3 L-9,-11 L-3,-8 Z";
+const rnd = (a, b) => a + Math.random() * (b - a);
+function fillLeaves(fx) {
+  const n = window.innerWidth < 500 ? 16 : 26;
+  for (let i = 0; i < n; i++) {
+    const [c, v] = LEAF_COLORS[Math.floor(Math.random() * LEAF_COLORS.length)];
+    const svg = `<svg xmlns='http://www.w3.org/2000/svg' viewBox='-16 -16 32 34'><path d='${LEAF_D}' fill='${c}'/><path d='M0,-12 L0,16' stroke='${v}' stroke-width='1.3' fill='none'/></svg>`;
+    const outer = document.createElement("span"), inner = document.createElement("span");
+    outer.className = "leaf"; inner.className = "leaf-in";
+    const place = () => { outer.style.left = rnd(-3, 100) + "vw"; outer.style.setProperty("--drift", rnd(-25, 25) + "vw"); };
+    place();
+    outer.style.width = outer.style.height = rnd(14, 30) + "px";
+    outer.style.animationDuration = rnd(9, 20) + "s";
+    outer.style.animationDelay = -rnd(0, 20) + "s";
+    inner.style.backgroundImage = `url("data:image/svg+xml,${encodeURIComponent(svg)}")`;
+    inner.style.animationDuration = rnd(2.2, 5.5) + "s, " + rnd(3, 8) + "s";
+    inner.style.animationDelay = -rnd(0, 6) + "s, " + -rnd(0, 6) + "s";
+    inner.style.setProperty("--sway", rnd(18, 70) + "px");
+    inner.style.setProperty("--spin", rnd(40, 160) * (Math.random() < 0.5 ? -1 : 1) + "deg");
+    outer.addEventListener("animationiteration", place);
+    outer.append(inner); fx.append(outer);
+  }
 }
 const seasonLabel = () => (getPref("season", "auto") === "auto" ? "Auto: " : "") + SEASONS[fcSeason()].icon + " " + SEASONS[fcSeason()].n;
 applySeason();
