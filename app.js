@@ -1449,13 +1449,14 @@ function feedPosts() {
 /* What's new. Newest first. Add a new entry on top each time the app changes. */
 /* Bump APP_VERSION every time you change the app, and add a matching entry on top of UPDATES (with v: the same number).
    Phones check app.js every few minutes and offer the new version on their own. */
-const APP_VERSION = 102;
+const APP_VERSION = 103;
 // The number people see. APP_VERSION stays a plain counter so updates are detected. Big changes bump the first number (2.0), smaller ones the second (1.1, 1.2).
 const REL_NAMES = { 59: "1.0", 60: "1.0", 61: "1.1", 62: "1.2", 63: "1.2", 64: "1.2", 65: "1.2", 66: "1.2", 67: "1.2",
-  68: "1.3", 69: "1.3", 70: "1.3", 71: "1.4", 72: "1.4", 73: "1.5", 74: "1.5", 75: "1.5", 76: "1.5", 77: "1.8", 78: "1.8", 79: "1.9", 80: "1.9", 81: "2.0", 82: "2.0", 83: "1.19", 84: "1.20", 85: "1.21", 86: "1.22", 87: "1.23", 88: "1.24", 89: "1.25", 90: "1.26", 91: "1.27", 92: "1.28", 93: "1.29", 94: "1.30", 95: "1.31", 96: "1.32", 97: "1.33", 98: "1.34", 99: "1.35", 100: "1.36", 101: "1.37", 102: "1.38" };
+  68: "1.3", 69: "1.3", 70: "1.3", 71: "1.4", 72: "1.4", 73: "1.5", 74: "1.5", 75: "1.5", 76: "1.5", 77: "1.8", 78: "1.8", 79: "1.9", 80: "1.9", 81: "2.0", 82: "2.0", 83: "1.19", 84: "1.20", 85: "1.21", 86: "1.22", 87: "1.23", 88: "1.24", 89: "1.25", 90: "1.26", 91: "1.27", 92: "1.28", 93: "1.29", 94: "1.30", 95: "1.31", 96: "1.32", 97: "1.33", 98: "1.34", 99: "1.35", 100: "1.36", 101: "1.37", 102: "1.38", 103: "1.39" };
 const relName = (v) => REL_NAMES[v] || (v < 59 ? `0.${v}` : `1.${v - 59}`);
 try { if ((parseInt(localStorage.getItem("weighin-appv"), 10) || 0) < APP_VERSION) localStorage.setItem("weighin-appv", String(APP_VERSION)); } catch { /* private mode */ }
 const UPDATES = [
+  { id: "2026-11-24b", v: 103, date: "Nov 24", title: "Leaves rest", items: ["The falling leaves now fade away after about 30 seconds."] },
   { id: "2026-11-24a", v: 102, date: "Nov 24", title: "Real falling leaves", items: ["Fall now has real leaves that drift down in random spots, sway side to side and spin as they fall."] },
   { id: "2026-11-23b", v: 101, date: "Nov 23", title: "Cleaner names", items: ["Names of anglers and tournaments now block swear words and rude words too, even when people sneak them in with numbers or extra letters."] },
   { id: "2026-11-23a", v: 100, date: "Nov 23", title: "Seasons and ice fishing", items: ["The whole app follows the seasons, with a Happy Winter, Spring, Summer or Fall greeting, new colors and falling snow, petals or leaves. Change it any time in Me, tap your picture, then Season.", "Lake Duel: in winter the lakes freeze. You fish through a hole in the ice with ice lures and can catch yellow perch, whitefish and burbot.", "Every cast is different now, in duels and tournaments too. Bites take longer now, and some fish make you wait a lot longer than others. Sometimes your lure lands right on a fish and it eats it.", "The boat and fish finder are gone from the game."] },
@@ -5756,6 +5757,12 @@ function fillLeaves(fx) {
     outer.addEventListener("animationiteration", place);
     outer.append(inner); fx.append(outer);
   }
+  // after about 30 seconds the leaves fade away and stop, so they don't run the battery down
+  clearTimeout(fillLeaves.t);
+  fillLeaves.t = setTimeout(() => {
+    fx.classList.add("leaves-done");
+    fillLeaves.t = setTimeout(() => { if (fx.classList.contains("leaves-done")) fx.textContent = ""; }, 2500);
+  }, 30000);
 }
 const seasonLabel = () => (getPref("season", "auto") === "auto" ? "Auto: " : "") + SEASONS[fcSeason()].icon + " " + SEASONS[fcSeason()].n;
 applySeason();
