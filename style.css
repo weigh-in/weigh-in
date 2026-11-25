@@ -676,10 +676,11 @@ html[data-season="fall"]{--lake:#9a4f1f;--lake-soft:#f3e1cf;--water:#F3EDE4;--li
 .feed-top #scope-btn{min-height:34px;padding:4px 10px;font-size:.78rem}
 
 .season-fx.fall::before,.season-fx.fall::after{display:none}
+.season-fx::before,.season-fx::after{display:none!important}
 .season-fx .leaf{position:absolute;top:-40px;display:block;animation:leafdrop 14s linear infinite;will-change:transform}
-.season-fx .leaf-in{display:block;width:100%;height:100%;background-size:contain;background-repeat:no-repeat;animation:leafsway 3.5s ease-in-out infinite alternate,leafturn 5s ease-in-out infinite alternate}
+.season-fx .leaf-mid{display:block;width:100%;height:100%;animation:leafswing 4s ease-in-out infinite alternate}
+.season-fx .leaf-in{display:block;width:100%;height:100%;background-size:contain;background-repeat:no-repeat;animation:leafflip 4s ease-in-out infinite alternate}
 @keyframes leafdrop{0%{transform:translate(0,-6vh)}100%{transform:translate(var(--drift,0),112vh)}}
-@keyframes leafsway{from{margin-left:calc(var(--sway,40px) * -1)}to{margin-left:var(--sway,40px)}}
-@keyframes leafturn{from{transform:rotate(calc(var(--spin,90deg) * -1)) rotateY(0)}to{transform:rotate(var(--spin,90deg)) rotateY(65deg)}}
-@media (prefers-reduced-motion:reduce){.season-fx .leaf,.season-fx .leaf-in{animation:none!important}}
-.season-fx.fall.leaves-done{opacity:0;transition:opacity 2.2s ease}
+@keyframes leafswing{0%{transform:translateX(calc(var(--sway,40px) * -1)) rotate(calc(var(--tilt,40deg) * -1))}50%{transform:translateX(0) rotate(0deg)}100%{transform:translateX(var(--sway,40px)) rotate(var(--tilt,40deg))}}
+@keyframes leafflip{from{transform:rotateY(0deg) scaleY(1)}to{transform:rotateY(70deg) scaleY(.9)}}
+@media (prefers-reduced-motion:reduce){.season-fx .leaf,.season-fx .leaf-mid,.season-fx .leaf-in{animation:none!important}}
