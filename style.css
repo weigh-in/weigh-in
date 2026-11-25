@@ -690,3 +690,16 @@ html[data-season="fall"]{--lake:#9a4f1f;--lake-soft:#f3e1cf;--water:#F3EDE4;--li
 .map-tools .btn{flex:1;min-height:40px}
 #map-tool .sheet{overflow:auto}
 #map-tool h1{display:none}
+/* Profile: a big picture-and-name header across the top, then tight, easy tiles with little empty space. */
+.me-home{gap:10px;justify-content:flex-start}
+.me-hero{display:flex;flex-direction:column;align-items:center;gap:6px;width:100%;padding:26px 12px 20px;border:0;border-radius:20px;background:linear-gradient(160deg,#2a6f9c,#2e8a74);color:#fff;font:inherit;cursor:pointer}
+.me-hero-av{border-radius:50%;box-shadow:0 0 0 4px rgba(255,255,255,.9),0 6px 16px rgba(0,0,0,.25);display:block;line-height:0}
+.me-hero-name{margin:4px 0 0;font-size:1.6rem;color:#fff;overflow-wrap:anywhere;text-align:center}
+.me-hero-sub{font-size:.8rem;font-weight:600;opacity:.9}
+.me-home .icon-row{display:flex;flex-wrap:nowrap;gap:8px}
+.me-home .icon-tile{flex:1 1 0;min-height:62px}
+.me-home .stats.four{gap:8px}
+.me-home .stats div{padding:10px 4px}
+.me-home .me-grid{flex:0 0 auto;gap:10px;grid-auto-rows:minmax(100px,140px)}
+.me-home .me-grid .me-tile:last-child:nth-child(odd){grid-column:1/-1}
+.me-home .share-row{gap:8px}
