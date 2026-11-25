@@ -684,3 +684,5 @@ html[data-season="fall"]{--lake:#9a4f1f;--lake-soft:#f3e1cf;--water:#F3EDE4;--li
 @keyframes leafswing{0%{transform:translateX(calc(var(--sway,40px) * -1)) rotate(calc(var(--tilt,40deg) * -1))}50%{transform:translateX(0) rotate(0deg)}100%{transform:translateX(var(--sway,40px)) rotate(var(--tilt,40deg))}}
 @keyframes leafflip{from{transform:rotateY(0deg) scaleY(1)}to{transform:rotateY(70deg) scaleY(.9)}}
 @media (prefers-reduced-motion:reduce){.season-fx .leaf,.season-fx .leaf-mid,.season-fx .leaf-in{animation:none!important}}
+.charter-card>.nophoto{background:linear-gradient(160deg,#173b52,#0b6e8a 58%,#e3a52f);color:#fff;font-size:5.5rem;display:grid;place-items:center}
+.charter-pill{align-self:flex-start;width:fit-content}
