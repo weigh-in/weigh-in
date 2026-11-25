@@ -1449,13 +1449,14 @@ function feedPosts() {
 /* What's new. Newest first. Add a new entry on top each time the app changes. */
 /* Bump APP_VERSION every time you change the app, and add a matching entry on top of UPDATES (with v: the same number).
    Phones check app.js every few minutes and offer the new version on their own. */
-const APP_VERSION = 103;
+const APP_VERSION = 104;
 // The number people see. APP_VERSION stays a plain counter so updates are detected. Big changes bump the first number (2.0), smaller ones the second (1.1, 1.2).
 const REL_NAMES = { 59: "1.0", 60: "1.0", 61: "1.1", 62: "1.2", 63: "1.2", 64: "1.2", 65: "1.2", 66: "1.2", 67: "1.2",
-  68: "1.3", 69: "1.3", 70: "1.3", 71: "1.4", 72: "1.4", 73: "1.5", 74: "1.5", 75: "1.5", 76: "1.5", 77: "1.8", 78: "1.8", 79: "1.9", 80: "1.9", 81: "2.0", 82: "2.0", 83: "1.19", 84: "1.20", 85: "1.21", 86: "1.22", 87: "1.23", 88: "1.24", 89: "1.25", 90: "1.26", 91: "1.27", 92: "1.28", 93: "1.29", 94: "1.30", 95: "1.31", 96: "1.32", 97: "1.33", 98: "1.34", 99: "1.35", 100: "1.36", 101: "1.37", 102: "1.38", 103: "1.39" };
+  68: "1.3", 69: "1.3", 70: "1.3", 71: "1.4", 72: "1.4", 73: "1.5", 74: "1.5", 75: "1.5", 76: "1.5", 77: "1.8", 78: "1.8", 79: "1.9", 80: "1.9", 81: "2.0", 82: "2.0", 83: "1.19", 84: "1.20", 85: "1.21", 86: "1.22", 87: "1.23", 88: "1.24", 89: "1.25", 90: "1.26", 91: "1.27", 92: "1.28", 93: "1.29", 94: "1.30", 95: "1.31", 96: "1.32", 97: "1.33", 98: "1.34", 99: "1.35", 100: "1.36", 101: "1.37", 102: "1.38", 103: "1.39", 104: "1.40" };
 const relName = (v) => REL_NAMES[v] || (v < 59 ? `0.${v}` : `1.${v - 59}`);
 try { if ((parseInt(localStorage.getItem("weighin-appv"), 10) || 0) < APP_VERSION) localStorage.setItem("weighin-appv", String(APP_VERSION)); } catch { /* private mode */ }
 const UPDATES = [
+  { id: "2026-11-24c", v: 104, date: "Nov 24", title: "Natural falling", items: ["Leaves, snow and petals now fall at random, swing like the real thing, and fade away after about 30 seconds."] },
   { id: "2026-11-24b", v: 103, date: "Nov 24", title: "Leaves rest", items: ["The falling leaves now fade away after about 30 seconds."] },
   { id: "2026-11-24a", v: 102, date: "Nov 24", title: "Real falling leaves", items: ["Fall now has real leaves that drift down in random spots, sway side to side and spin as they fall."] },
   { id: "2026-11-23b", v: 101, date: "Nov 23", title: "Cleaner names", items: ["Names of anglers and tournaments now block swear words and rude words too, even when people sneak them in with numbers or extra letters."] },
@@ -5731,33 +5732,39 @@ function applySeason() {
   if (!fx) { fx = document.createElement("div"); fx.id = "season-fx"; fx.setAttribute("aria-hidden", "true"); document.body.append(fx); }
   fx.className = "season-fx " + se;
   fx.textContent = "";
-  if (se === "fall") fillLeaves(fx);
+  fillLeaves(fx, se);
 }
-/* Real falling leaves: each one has its own spot, size, speed, sway and spin, and picks a new spot every time it lands. */
+/* Things falling through the season: leaves, snow or petals. Every one has its own spot, size, speed, sway and spin,
+   swings like a pendulum as it drops, and picks a new spot each time it lands. They fade away after about 30 seconds. */
 const LEAF_COLORS = [["#d9772b", "#8a3c12"], ["#b8432a", "#6e1f10"], ["#e3a52f", "#8a5a10"], ["#a8531c", "#5c2a0a"], ["#c9622a", "#7a3010"]];
 const LEAF_D = "M0,-14 L3,-8 L9,-11 L7,-3 L14,-2 L8,3 L11,9 L4,7 L0,15 L-4,7 L-11,9 L-8,3 L-14,-2 L-7,-3 L-9,-11 L-3,-8 Z";
 const rnd = (a, b) => a + Math.random() * (b - a);
-function fillLeaves(fx) {
-  const n = window.innerWidth < 500 ? 16 : 26;
+const FX_KINDS = {
+  fall: { n: [16, 26], size: [16, 32], dur: [9, 20], swing: [3, 6.5], sway: [20, 75], tilt: [25, 80], flip: true,
+    art: () => { const [c, v] = LEAF_COLORS[Math.floor(Math.random() * LEAF_COLORS.length)]; return `<svg xmlns='http://www.w3.org/2000/svg' viewBox='-16 -16 32 34'><path d='${LEAF_D}' fill='${c}'/><path d='M0,-12 L0,16' stroke='${v}' stroke-width='1.3' fill='none'/></svg>`; } },
+  winter: { n: [34, 60], size: [5, 13], dur: [12, 26], swing: [3, 7], sway: [8, 34], tilt: [0, 0], flip: false,
+    art: () => "<svg xmlns='http://www.w3.org/2000/svg' viewBox='-8 -8 16 16'><circle r='6' fill='#fff' stroke='#9ec7e6' stroke-width='1.4'/></svg>" },
+  spring: { n: [16, 26], size: [10, 20], dur: [11, 22], swing: [3, 6.5], sway: [16, 55], tilt: [30, 90], flip: true,
+    art: () => { const c = ["#f8c1d3", "#fbd9e4", "#f5a9c0"][Math.floor(Math.random() * 3)]; return `<svg xmlns='http://www.w3.org/2000/svg' viewBox='-10 -10 20 20'><path d='M0,-9 C8,-6 8,5 0,9 C-8,5 -8,-6 0,-9 Z' fill='${c}'/></svg>`; } } };
+function fillLeaves(fx, kind) {
+  const K = FX_KINDS[kind]; if (!K) return;
+  const n = Math.round(rnd(K.n[0], K.n[1]) * (window.innerWidth < 500 ? 0.65 : 1));
   for (let i = 0; i < n; i++) {
-    const [c, v] = LEAF_COLORS[Math.floor(Math.random() * LEAF_COLORS.length)];
-    const svg = `<svg xmlns='http://www.w3.org/2000/svg' viewBox='-16 -16 32 34'><path d='${LEAF_D}' fill='${c}'/><path d='M0,-12 L0,16' stroke='${v}' stroke-width='1.3' fill='none'/></svg>`;
-    const outer = document.createElement("span"), inner = document.createElement("span");
-    outer.className = "leaf"; inner.className = "leaf-in";
-    const place = () => { outer.style.left = rnd(-3, 100) + "vw"; outer.style.setProperty("--drift", rnd(-25, 25) + "vw"); };
+    const outer = document.createElement("span"), mid = document.createElement("span"), inner = document.createElement("span");
+    outer.className = "leaf"; mid.className = "leaf-mid"; inner.className = "leaf-in";
+    const place = () => { outer.style.left = rnd(-3, 100) + "vw"; outer.style.setProperty("--drift", rnd(-20, 20) + "vw"); outer.style.animationDuration = rnd(K.dur[0], K.dur[1]) + "s"; };
     place();
-    outer.style.width = outer.style.height = rnd(14, 30) + "px";
-    outer.style.animationDuration = rnd(9, 20) + "s";
-    outer.style.animationDelay = -rnd(0, 20) + "s";
-    inner.style.backgroundImage = `url("data:image/svg+xml,${encodeURIComponent(svg)}")`;
-    inner.style.animationDuration = rnd(2.2, 5.5) + "s, " + rnd(3, 8) + "s";
-    inner.style.animationDelay = -rnd(0, 6) + "s, " + -rnd(0, 6) + "s";
-    inner.style.setProperty("--sway", rnd(18, 70) + "px");
-    inner.style.setProperty("--spin", rnd(40, 160) * (Math.random() < 0.5 ? -1 : 1) + "deg");
-    outer.addEventListener("animationiteration", place);
-    outer.append(inner); fx.append(outer);
+    outer.style.animationDelay = -rnd(0, K.dur[1]) + "s";
+    outer.style.width = outer.style.height = rnd(K.size[0], K.size[1]) + "px";
+    mid.style.animationDuration = rnd(K.swing[0], K.swing[1]) + "s";
+    mid.style.animationDelay = -rnd(0, 6) + "s";
+    mid.style.setProperty("--sway", rnd(K.sway[0], K.sway[1]) + "px");
+    mid.style.setProperty("--tilt", rnd(K.tilt[0], K.tilt[1]) + "deg");
+    inner.style.backgroundImage = `url("data:image/svg+xml,${encodeURIComponent(K.art())}")`;
+    if (K.flip) { inner.style.animationDuration = rnd(2.5, 6) + "s"; inner.style.animationDelay = -rnd(0, 6) + "s"; } else inner.style.animation = "none";
+    outer.addEventListener("animationiteration", (e) => { if (e.target === outer) place(); });
+    mid.append(inner); outer.append(mid); fx.append(outer);
   }
-  // after about 30 seconds the leaves fade away and stop, so they don't run the battery down
   clearTimeout(fillLeaves.t);
   fillLeaves.t = setTimeout(() => {
     fx.classList.add("leaves-done");
