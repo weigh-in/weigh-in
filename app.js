@@ -5632,13 +5632,10 @@ function viewMe(p) {
     el("span", { class: "icon-tile-e", "aria-hidden": "true" }, emoji), el("span", { class: "icon-tile-t" }, label),
     dot ? el("span", { class: "dot" }) : null);
   p.append(
-    el("div", { class: "row", id: "me-head", style: "gap:14px;flex-wrap:nowrap;align-items:center" },
-      el("button", { class: "profile-head", type: "button", id: "me-profile", "aria-label": "Open your profile", style: "background:none;border:0;padding:0;font:inherit;color:inherit;cursor:pointer;flex:none", onclick: open("profile") },
-        el("div", { class: "av-edit" }, avatar(S.user.uid, S.name, 72))),
-      el("div", { class: "stack", style: "gap:8px;min-width:0;flex:1" },
-        el("button", { type: "button", id: "me-profile-name", "aria-label": "Open your profile", style: "background:none;border:0;padding:0;text-align:left;font:inherit;color:inherit;cursor:pointer;min-height:44px", onclick: open("profile") },
-          el("h1", { style: "overflow-wrap:anywhere;margin:0" }, "@" + S.name)),
-      )),
+    el("button", { class: "me-hero", type: "button", id: "me-head", "aria-label": "Open your profile", onclick: open("profile") },
+      el("span", { class: "me-hero-av", id: "me-profile" }, avatar(S.user.uid, S.name, 116)),
+      el("h1", { class: "me-hero-name", id: "me-profile-name" }, "@" + S.name),
+      el("span", { class: "me-hero-sub" }, "View and edit your profile ›")),
     // The round emoji buttons said nothing about what they did, so each is now a tile with its name under it.
     el("div", { class: "icon-row", id: "me-icons" }, ...[
       iconTile("me-new", "\u{1F514}", "Updates", unseenUpdate() ? "Release notes, new" : "Release notes", unseenUpdate(), () => openWhatsNew(renderTab)),
