@@ -265,7 +265,7 @@ const S = {
   posts: [], tournaments: [], log: [], saved: [],
   myLikes: new Set(), lcount: new Map(), likeNMode: false,
   live: [], older: [], moreLeft: true, loadingMore: false, scrollTo: null,
-  reqIn: [], reqOut: [], friendships: [], unread: new Set(), chatOpen: null, recaps: [], offIn: [], offOut: [], tradeAll: [], tradeMine: [], tourReqs: [], joinIn: [], joinOut: [], inviteIn: [], inviteOut: [],
+  reqIn: [], reqOut: [], friendships: [], unread: new Set(), chatOpen: null, recaps: [], charters: new Map(), offIn: [], offOut: [], tradeAll: [], tradeMine: [], tourReqs: [], joinIn: [], joinOut: [], inviteIn: [], inviteOut: [],
   openTournament: null, tourPosts: [], viewing: null, creatingTour: false,
   meView: "main", mine: [], spots: [], map: null, markers: null, likes: new Map(), mod: null,
 };
@@ -618,6 +618,11 @@ function startApp() {
     if (S.tab === "feed") renderFeedCards();
     if (document.querySelector("#rc-list")) paintRecaps();
     setTimeout(maybeFriendYear, 2500);
+  }, () => {}));
+  unsubs.push(onSnapshot(query(collection(db, "charters"), limit(200)), (sn) => {
+    S.charters = new Map(sn.docs.map((d) => [d.id, { id: d.id, ...d.data({ serverTimestamps: "estimate" }) }]));
+    if (S.tab === "feed") renderFeedCards();
+    if (document.querySelector("#tutor-list")) paintTutors();
   }, () => {}));
   unsubs.push(onSnapshot(query(collection(db, "warnings"), where("to", "==", uid)), (sn) => showWarnings(sn.docs.map((d) => ({ id: d.id, ...d.data({ serverTimestamps: "estimate" }) }))), () => {}));
   unsubs.push(() => { msgUns.forEach((u) => u()); msgUns.clear(); S.unread.clear(); S.chatOpen = null; });
@@ -1449,13 +1454,18 @@ function feedPosts() {
 /* What's new. Newest first. Add a new entry on top each time the app changes. */
 /* Bump APP_VERSION every time you change the app, and add a matching entry on top of UPDATES (with v: the same number).
    Phones check app.js every few minutes and offer the new version on their own. */
-const APP_VERSION = 104;
+const APP_VERSION = 105;
 // The number people see. APP_VERSION stays a plain counter so updates are detected. Big changes bump the first number (2.0), smaller ones the second (1.1, 1.2).
 const REL_NAMES = { 59: "1.0", 60: "1.0", 61: "1.1", 62: "1.2", 63: "1.2", 64: "1.2", 65: "1.2", 66: "1.2", 67: "1.2",
-  68: "1.3", 69: "1.3", 70: "1.3", 71: "1.4", 72: "1.4", 73: "1.5", 74: "1.5", 75: "1.5", 76: "1.5", 77: "1.8", 78: "1.8", 79: "1.9", 80: "1.9", 81: "2.0", 82: "2.0", 83: "1.19", 84: "1.20", 85: "1.21", 86: "1.22", 87: "1.23", 88: "1.24", 89: "1.25", 90: "1.26", 91: "1.27", 92: "1.28", 93: "1.29", 94: "1.30", 95: "1.31", 96: "1.32", 97: "1.33", 98: "1.34", 99: "1.35", 100: "1.36", 101: "1.37", 102: "1.38", 103: "1.39", 104: "1.40" };
+  68: "1.3", 69: "1.3", 70: "1.3", 71: "1.4", 72: "1.4", 73: "1.5", 74: "1.5", 75: "1.5", 76: "1.5", 77: "1.8", 78: "1.8", 79: "1.9", 80: "1.9", 81: "2.0", 82: "2.0", 83: "1.19", 84: "1.20", 85: "1.21", 86: "1.22", 87: "1.23", 88: "1.24", 89: "1.25", 90: "1.26", 91: "1.27", 92: "1.28", 93: "1.29", 94: "1.30", 95: "1.31", 96: "1.32", 97: "1.33", 98: "1.34", 99: "1.35", 100: "1.36", 101: "1.37", 102: "1.38", 103: "1.39", 104: "1.40", 105: "1.41" };
 const relName = (v) => REL_NAMES[v] || (v < 59 ? `0.${v}` : `1.${v - 59}`);
 try { if ((parseInt(localStorage.getItem("weighin-appv"), 10) || 0) < APP_VERSION) localStorage.setItem("weighin-appv", String(APP_VERSION)); } catch { /* private mode */ }
 const UPDATES = [
+  { id: "2026-11-24d", v: 105, date: "Nov 24", title: "Charters, tutors and free entries", items: [
+    "New: Charters. Take the hardest test in Weigh-In from your profile (10 questions, all courses, 10 out of 10 to pass), tell the owner why you want to teach, and if you're approved you get a 🎖️ Charter badge and a post on the feed.",
+    "New: Tutor in Fishing school lists the Charters. Payment is cash only, and you should always bring a parent or guardian.",
+    "The owner can give out free entries, make a tournament free for everyone, or make it free for one person. The owner never has to pay.",
+    "Fishing school is harder: 8 question lessons, hard questions come first, and regular quizzes need 85%."] },
   { id: "2026-11-24c", v: 104, date: "Nov 24", title: "Natural falling", items: ["Leaves, snow and petals now fall at random, swing like the real thing, and fade away after about 30 seconds."] },
   { id: "2026-11-24b", v: 103, date: "Nov 24", title: "Leaves rest", items: ["The falling leaves now fade away after about 30 seconds."] },
   { id: "2026-11-24a", v: 102, date: "Nov 24", title: "Real falling leaves", items: ["Fall now has real leaves that drift down in random spots, sway side to side and spin as they fall."] },
@@ -1873,16 +1883,34 @@ function recapCard(r) {
       } }, "🗑 Take down") : null));
   recapCache.set(key, n); return n;
 }
+const charterCache = new Map();
+function charterCard(c) {
+  const key = c.id + "|" + c.name; let n = charterCache.get(key); if (n) return n;
+  const mine = c.id === S.user.uid;
+  n = el("article", { class: "card charter-card", "data-id": "charter_" + c.id, "data-charter": c.id },
+    el("div", { class: "nophoto" }, "🎖️"),
+    el("div", { class: "shade" }),
+    el("div", { class: "info" },
+      el("button", { class: "who", type: "button", "aria-label": `See ${c.name}'s catches`, onclick: () => openAngler(c.id, c.name) }, avatar(c.id, c.name, 30), el("span", null, "@" + c.name)),
+      el("div", { class: "species" }, mine ? "🎖️ You're a Charter!" : `🎖️ @${c.name} is now a Charter!`),
+      el("div", { class: "size" }, "Passed the hardest test in Weigh-In"),
+      el("div", { class: "meta" }, "Charters are anglers the owner picked to teach others. Find them under Fishing school, then Tutor."),
+      el("button", { class: "btn", type: "button", "data-act": "charter-see", style: "margin-top:12px;align-self:flex-start", onclick: () => openAngler(c.id, c.name) }, "See their catches")));
+  charterCache.set(key, n); return n;
+}
 function feedEntries(list) {
   const sc = getPref("feedScope", "all"), me = S.user.uid, ms = (x) => x.createdAt?.toMillis?.() ?? 0;
   const recs = S.recaps.filter((r) => r.photos && (sc === "all" || r.uid === me)).sort((a, b) => ms(b) - ms(a));
   const out = []; let ri = 0;
+  const newCh = [...S.charters.values()].filter((c) => c.createdAt && Date.now() - ms(c) < 14 * 864e5 && (sc === "all" || c.id === me)).sort((a, b) => ms(b) - ms(a));   // a new Charter shows on the feed for 2 weeks
+  const mix = [...recs.map((r) => ({ at: ms(r), node: () => ({ id: "recap_" + r.id, node: recapCard(r) }) })), ...newCh.map((c) => ({ at: ms(c), node: () => ({ id: "charter_" + c.id, node: charterCard(c) }) }))].sort((a, b) => b.at - a.at);
+  recs.length = 0; recs.push(...mix);
   for (const p of list) {
-    while (ri < recs.length && ms(recs[ri]) >= ms(p)) { out.push({ id: "recap_" + recs[ri].id, node: recapCard(recs[ri]) }); ri++; }
+    while (ri < recs.length && recs[ri].at >= ms(p)) { out.push(recs[ri].node()); ri++; }
     let n = cardCache.get(p.id); if (!n) { n = makeCard(p); cardCache.set(p.id, n); }
     out.push({ id: p.id, node: n });
   }
-  while (ri < recs.length) { out.push({ id: "recap_" + recs[ri].id, node: recapCard(recs[ri]) }); ri++; }
+  while (ri < recs.length) { out.push(recs[ri].node()); ri++; }
   return out;
 }
 function makeCard(p) {
@@ -2648,11 +2676,23 @@ function openModEditor(uid, name, current) {
         } }, "Remove moderator") : null)));
   document.body.append(bg);
 }
+async function givePass(uid, name, have) {
+  try { await setDoc(doc(db, "passes", uid), { n: have + 1, name }); toast(`@${name} now has ${have + 1} free entr${have + 1 === 1 ? "y" : "ies"}. 🎟️`); }
+  catch (err) { toast(errText(err)); }
+}
+async function approveCharter(a) {
+  try {
+    const b = writeBatch(db);
+    b.update(doc(db, "charterApps", a.id), { status: "approved" });
+    b.set(doc(db, "charters", a.id), { uid: a.id, name: a.name, createdAt: serverTimestamp() });
+    await b.commit(); charterCache.clear(); toast(`@${a.name} is a Charter now. It's on the feed! 🎖️`);
+  } catch (err) { toast(errText(err)); }
+}
 function viewOwner(p) {
   stopOwner();
   const reportsBox = el("div", { class: "list" }, el("p", { class: "muted" }, "Loading…"));
   const membersBox = el("div", { class: "list" }, el("p", { class: "muted" }, "Loading…"));
-  let bans = new Set(), banInfo = new Map(), users = [], reports = [], mods = new Map(), tacc = new Set();
+  let bans = new Set(), banInfo = new Map(), users = [], reports = [], mods = new Map(), tacc = new Set(), passN = new Map(), apps = [];
   const bannedBox = el("div", { class: "list", id: "own-banned" });
   const paintReports = () => reportsBox.replaceChildren(...(reports.length ? reports.map((r) => el("div", { class: "item", style: "cursor:default;align-items:flex-start" },
     el("div", { class: "row", style: "gap:12px;flex-wrap:nowrap;min-width:0" },
@@ -2672,9 +2712,30 @@ function viewOwner(p) {
         S.owner ? el("button", { class: "btn ghost small", type: "button", "data-rename": u.id, onclick: () => openOwnerRename(u.id, u.name) }, "Rename") : null,
         S.owner && u.id !== OWNER_UID ? el("button", { class: "btn ghost small", type: "button", "data-tacc": u.id, onclick: () => toggleTourAccess(u.id, u.name, tacc.has(u.id)) }, tacc.has(u.id) ? "Take away tourneys" : "Allow tourneys") : null,
         S.owner ? el("button", { class: "btn ghost small", type: "button", onclick: () => openModEditor(u.id, u.name, mods.get(u.id)) }, mods.has(u.id) ? "Edit mod" : "Make mod") : null,
+        S.owner ? el("button", { class: "btn ghost small", type: "button", "data-pass": u.id, onclick: () => givePass(u.id, u.name, passN.get(u.id) || 0) }, `🎟️ Free entry${passN.get(u.id) ? " (" + passN.get(u.id) + ")" : ""}`) : null,
         can("warn") && u.id !== OWNER_UID && u.id !== S.user.uid ? el("button", { class: "btn ghost small", type: "button", "data-warn": u.id, onclick: () => warnUser(u.id, u.name) }, "Warn") : null,
         can("ban") ? (bans.has(u.id) ? el("button", { class: "btn ghost small", type: "button", onclick: () => unbanUser(u.id, u.name) }, "Unban")
           : el("button", { class: "btn small", type: "button", onclick: () => banUser(u.id, u.name) }, "Ban")) : null))) : [el("p", { class: "empty" }, "No other anglers yet.")])); };
+  const charBox = el("div", { class: "list", id: "own-charters" });
+  const paintChar = () => {
+    const pend = apps.filter((a) => a.status === "pending"), have = [...S.charters.values()];
+    charBox.replaceChildren(
+      el("b", null, `Waiting for you (${pend.length})`),
+      ...(pend.length ? pend.map((a) => el("div", { class: "trade-offer", "data-app": a.id },
+        el("b", null, "@" + a.name), el("span", { class: "hint" }, `Test: ${a.score} / ${a.total}`),
+        el("p", { style: "margin:4px 0;white-space:pre-wrap;overflow-wrap:anywhere" }, a.why),
+        el("div", { class: "row" },
+          el("button", { class: "btn small", type: "button", "data-act": "approve-charter", onclick: () => approveCharter(a) }, "Make Charter"),
+          el("button", { class: "btn ghost small", type: "button", "data-act": "decline-charter", onclick: async () => { try { await updateDoc(doc(db, "charterApps", a.id), { status: "declined" }); toast("Declined."); } catch (err) { toast(errText(err)); } } }, "Decline")))) : [el("p", { class: "empty" }, "No applications waiting.")]),
+      el("b", null, `Charters (${have.length})`),
+      ...(have.length ? have.map((c) => el("div", { class: "item", style: "cursor:default;flex-wrap:wrap" }, el("span", { class: "t" }, "🎖️ @" + c.name),
+        el("button", { class: "btn ghost small", type: "button", "data-rm-charter": c.id, onclick: async () => { if (!confirm(`Take the Charter badge from @${c.name}?`)) return; try { await deleteDoc(doc(db, "charters", c.id)); charterCache.clear(); toast("Removed."); paintChar(); } catch (err) { toast(errText(err)); } } }, "Remove"))) : [el("p", { class: "empty" }, "No Charters yet.")]));
+  };
+  if (S.owner) {
+    ownerUns.push(onSnapshot(collection(db, "charterApps"), (sn) => { apps = sn.docs.map((d) => ({ id: d.id, ...d.data() })); paintChar(); }, () => {}));
+    ownerUns.push(onSnapshot(collection(db, "passes"), (sn) => { passN = new Map(sn.docs.map((d) => [d.id, +d.data().n || 0])); paintMembers(); }, () => {}));
+    ownerUns.push(onSnapshot(query(collection(db, "charters"), limit(200)), () => paintChar(), () => {}));
+  }
   const paintBanned = () => bannedBox.replaceChildren(...(bans.size ? [...bans].map((id) => {
     const u = users.find((x) => x.id === id), nm = banInfo.get(id)?.name || u?.name || "angler";
     return el("div", { class: "item", style: "cursor:default;flex-wrap:wrap" },
@@ -2698,6 +2759,7 @@ function viewOwner(p) {
   const ownDefs = [["reports", "Reports", can("reports"), el("section", { class: "stack", id: "own-p-reports" }, el("h2", null, "Reports"), reportsBox)],
     ["catches", "Catches", S.owner || can("deletePosts"), el("section", { class: "stack", id: "own-p-catches" }, el("h2", null, "Catches"), el("p", { class: "muted small", style: "margin:0" }, "The newest catches. Edit a name or delete one."), catchesBox)],
     ["anglers", "Anglers", can("ban") || S.owner, el("section", { class: "stack", id: "own-p-anglers" }, el("h2", null, S.owner ? "Anglers and moderators" : "Anglers"), membersBox)],
+    ["charters", "Charters", S.owner, el("section", { class: "stack", id: "own-p-charters" }, el("h2", null, "Charters"), el("p", { class: "muted small", style: "margin:0" }, "People who got 10 out of 10 on the hard test. Read why they want to teach, then make them a Charter or decline."), charBox)],
     ["banned", "Banned", can("ban") || S.owner, el("section", { class: "stack", id: "own-p-banned" }, el("h2", null, "Banned people"), bannedBox)]].filter((d) => d[2]);
   const ownSecs = ownDefs.map((d) => d[3]);
   const ownBar = el("div", { class: "seg", id: "own-tabs", role: "tablist", style: `grid-template-columns:repeat(${Math.max(1, ownDefs.length)},1fr)` });
@@ -2720,7 +2782,7 @@ function openAngler(uid, name) {
   const close = () => bg.remove();
   const bg = el("div", { class: "sheet-bg", onclick: (e) => { if (e.target === bg) close(); } },
     el("div", { class: "sheet", role: "dialog", "aria-label": `@${name}'s catches` },
-      el("div", { class: "sheet-h" }, el("span", { class: "row", style: "gap:10px;flex-wrap:nowrap;min-width:0" }, avatar(uid, name, 40), el("h2", { style: "overflow-wrap:anywhere" }, "@" + name)),
+      el("div", { class: "sheet-h" }, el("span", { class: "row", style: "gap:10px;flex-wrap:nowrap;min-width:0" }, avatar(uid, name, 40), el("h2", { style: "overflow-wrap:anywhere" }, "@" + name), isCharter(uid) ? charterBadge() : null),
         el("button", { class: "link", type: "button", onclick: close }, "Close")),
       body));
   document.body.append(bg);
@@ -3479,19 +3541,34 @@ function tourMoneyCard(t, joined) {
   const fee = +t.fee || 0, prize = t.prize || "";
   if (!fee && !prize) return null;
   const mineT = t.createdBy === S.user.uid, paid = t.paid || [t.createdBy], members = t.members || [];
-  const payBox = el("div", { id: "tour-cash" }); if (fee) fillPayBox(payBox, t, fee);
+  const freeL = t.free || [], allFree = !!t.freeAll, meFree = allFree || S.owner || freeL.includes(S.user.uid);   // entry is free for everyone, the owner, or people with a pass
+  const payBox = el("div", { id: "tour-cash" }); if (fee && !meFree) fillPayBox(payBox, t, fee);
+  const waive = async (patch, msg) => { try { await updateDoc(doc(db, "tournaments", t.id), patch); if (msg) toast(msg); } catch (err) { toast(errText(err)); } };
+  const passBox = el("div", { id: "tour-pass" });
+  if (fee && joined && !mineT && !meFree) getDoc(doc(db, "passes", S.user.uid)).then((d) => {
+    const n = d.exists() ? +d.data().n || 0 : 0; if (n < 1) return;
+    passBox.replaceChildren(el("button", { class: "btn small", type: "button", id: "tour-usepass", onclick: async (e) => {
+      if (!confirm(`Use 1 of your ${n} free entr${n === 1 ? "y" : "ies"} on ${t.name}?`)) return;
+      e.currentTarget.disabled = true;
+      try { const b = writeBatch(db); b.update(doc(db, "tournaments", t.id), { free: [...freeL, S.user.uid] }); b.update(doc(db, "passes", S.user.uid), { n: n - 1 }); await b.commit(); toast("Free entry used. You're in for free! 🎟️"); }
+      catch (err) { e.currentTarget.disabled = false; toast(errText(err)); }
+    } }, `🎟️ Use a free entry (${n} left)`));
+  }).catch(() => {});
   const setPaid = async (uid, on) => {
     const next = on ? [...new Set([...paid, uid])] : paid.filter((x) => x !== uid);
     try { await updateDoc(doc(db, "tournaments", t.id), { paid: next }); } catch (err) { toast(errText(err)); }
   };
   const sec = el("section", { class: "stack tour-money", id: "tour-money" }, el("h2", null, "Entry and prize"),
-    el("div", { class: "row", style: "gap:8px" }, fee ? el("span", { class: "pill live" }, fmtFee(fee) + " entry") : el("span", { class: "pill soon" }, "Free entry"), prize ? el("span", { class: "pill final" }, "🎁 " + prize) : null),
+    el("div", { class: "row", style: "gap:8px" }, fee && !allFree ? el("span", { class: "pill live" }, fmtFee(fee) + " entry") : el("span", { class: "pill soon" }, "Free entry"), fee && allFree ? el("span", { class: "hint" }, `(was ${fmtFee(fee)}, the owner made it free)`) : null, prize ? el("span", { class: "pill final" }, "🎁 " + prize) : null),
     fee && t.payHow ? el("p", { style: "margin:0" }, `Pay @${t.createdByName || "the organizer"}: ${t.payHow}`) : null,
     el("p", { class: "hint", style: "margin:0" }, fee ? (t.stripe ? "Cards are paid through Stripe straight to the organizer. Weigh-In never holds the money. The organizer also gives out the prize." : "Weigh-In doesn't handle money. Pay the organizer yourself, and they tick you off as paid. The organizer also gives out the prize.") : "The organizer gives out the prize."),
-    fee && !mineT && t.createdBy ? payBox : null,
-    fee && joined && !mineT ? el("p", { id: "tour-paid-me", class: paid.includes(S.user.uid) ? "pb-ok" : "hint", style: "margin:0;font-weight:700" }, paid.includes(S.user.uid) ? "✅ The organizer marked you as paid." : "Not marked as paid yet.") : null,
+    fee && !mineT && t.createdBy && !meFree ? payBox : null,
+    fee && joined && !mineT && !meFree ? passBox : null,
+    fee && joined && !mineT && meFree ? el("p", { id: "tour-free-me", class: "pb-ok", style: "margin:0;font-weight:700" }, allFree ? "✅ Free for everyone. Nothing to pay." : S.owner ? "✅ You're the owner. Free entry." : "✅ Free entry. Nothing to pay.") : null,
+    fee && joined && !mineT && !meFree ? el("p", { id: "tour-paid-me", class: paid.includes(S.user.uid) ? "pb-ok" : "hint", style: "margin:0;font-weight:700" }, paid.includes(S.user.uid) ? "✅ The organizer marked you as paid." : "Not marked as paid yet.") : null,
+    fee && S.owner ? el("label", { class: "row", style: "gap:10px;flex-wrap:nowrap" }, el("input", { type: "checkbox", id: "tour-freeall", checked: allFree ? "" : null, onchange: (e) => waive({ freeAll: e.target.checked }, e.target.checked ? "Entry is free for everyone now." : "Entry costs money again.") }), el("span", null, "Make entry free for everyone")) : null,
     fee && mineT ? el("div", { class: "stack", id: "tour-paid-list" }, el("b", null, "Who has paid"), members.filter((u) => u !== t.createdBy).length
-      ? members.filter((u) => u !== t.createdBy).map((u) => { const row = el("label", { class: "row", style: "gap:10px;flex-wrap:nowrap" }, el("input", { type: "checkbox", "data-paid": u, checked: paid.includes(u) ? "" : null, onchange: (e) => setPaid(u, e.target.checked) }), el("span", null, "…")); getUser(u).then((x) => { row.lastChild.textContent = "@" + (x?.name || "angler"); }); return row; })
+      ? members.filter((u) => u !== t.createdBy).map((u) => { const row = el("label", { class: "row", style: "gap:10px;flex-wrap:nowrap" }, el("input", { type: "checkbox", "data-paid": u, checked: paid.includes(u) ? "" : null, onchange: (e) => setPaid(u, e.target.checked) }), el("span", null, "…"), S.owner && !allFree ? el("button", { class: "btn ghost small", type: "button", "data-free": u, onclick: () => waive({ free: freeL.includes(u) ? freeL.filter((x) => x !== u) : [...freeL, u] }) }, freeL.includes(u) ? "🎟️ Free ✓" : "🎟️ Make free") : null); getUser(u).then((x) => { row.children[1].textContent = "@" + (x?.name || "angler"); }); return row; })
       : el("p", { class: "hint", style: "margin:0" }, "Nobody has joined yet.")) : null);
   const pc = stripePaidCache.get(t.id);
   if (fee && t.stripe && t.id) (pc && Date.now() - pc.at < 15000 ? pc.p : (() => { const p = stripeApi({ action: "paid", tid: t.id }); stripePaidCache.set(t.id, { at: Date.now(), p }); p.catch(() => stripePaidCache.delete(t.id)); return p; })()).then(({ paid: cp }) => {
@@ -5065,16 +5142,16 @@ const SCH_GEN = { gear: ["oz", "sum"], care: ["oz", "limit"], weather: ["sunrise
 const SCH_GEN_ALL = [...SCH_MATH, "habitat"];
 function schDraw(pool, n, key, gens) {
   const s = sch(), seen = new Set(s.seen[key] || []);
-  const g = gens && gens.length ? [...new Set(gens)] : null, nd = !pool.length ? n : g ? Math.max(1, Math.round(n / 3)) : 0;
+  const g = gens && gens.length ? [...new Set(gens)] : null, nd = !pool.length ? n : g ? Math.max(1, Math.round(n / 2)) : 0;
   const dyn = [], dq = new Set();
   for (let t = 0; g && dyn.length < nd && t < nd * 10; t++) { const q = SCH_GENS[rPick(g)](); if (!dq.has(q.q)) { dq.add(q.q); dyn.push(q); } }
   n -= dyn.length;
-  const pick = pool.map((q) => ({ q, k: Math.random() + (seen.has(q.q) ? 0 : 2) + (q.hard ? 0.8 : 0) })).sort((a, b) => b.k - a.k).slice(0, Math.min(n, pool.length)).map((x) => x.q);
+  const pick = pool.map((q) => ({ q, k: Math.random() + (seen.has(q.q) ? 0 : 2) + (q.hard ? 2.5 : 0) })).sort((a, b) => b.k - a.k).slice(0, Math.min(n, pool.length)).map((x) => x.q);
   let ns = [...seen, ...pick.map((q) => q.q)]; if (pool.every((q) => ns.includes(q.q))) ns = pick.map((q) => q.q);      // once you've seen them all, start the cycle again
   s.seen[key] = ns.slice(-80); schSave();
   return schShuffle([...pick, ...dyn]).map(schPrep);
 }
-const SCH_LQ = 6;                                              // questions in a lesson quiz
+const SCH_LQ = 8;                                              // questions in a lesson quiz
 const schWait = (rec) => !!rec && rec.last === schDayNum();    // you took this quiz today, so it opens again tomorrow
 const schLockMsg = () => toast("You already took this one today. It opens again tomorrow with new questions.");
 const schAllQs = (lids) => lids.flatMap((id) => SCH_LESSONS[id].q);
@@ -5095,11 +5172,85 @@ function schNext() {      // the next thing you can do in any course you started
     if (cs.finUnlocked) return { c, text: `${c.n}: final quiz is ready`, kind: "final" }; }
   return null;
 }
+/* ======================= CHARTERS: a hard test, the owner approves, then a badge and a spot in Tutor ======================= */
+const isCharter = (uid) => S.charters.has(uid);
+const charterBadge = () => el("span", { class: "pill live charter-pill", title: "Approved by the owner to teach" }, "🎖️ Charter");
+function charterQs() {      // one HARD question from each of 10 different lessons, so every course is covered
+  const ids = [...new Set(SCH_COURSES.flatMap((c) => c.days))].filter((id) => SCH_LESSONS[id]);
+  return schShuffle(ids).slice(0, 10).map((id) => { const all = SCH_LESSONS[id].q, hard = all.filter((q) => q.hard); return schPrep(rPick(hard.length ? hard : all)); });
+}
+async function charterState() {
+  const uid = S.user.uid;
+  if (isCharter(uid)) return "charter";
+  try { const d = await getDoc(doc(db, "charterApps", uid)); if (d.exists()) return d.data().status === "declined" ? "declined" : "pending"; } catch { /* fine */ }
+  return "none";
+}
+function openCharterTest(onDone) {
+  const body = el("div", { class: "stack", style: "padding:16px" });
+  const close = () => { bg.remove(); onDone?.(); };
+  const bg = el("div", { class: "sheet-bg", id: "charter-test", onclick: (e) => { if (e.target === bg) close(); } },
+    el("div", { class: "sheet", role: "dialog", "aria-label": "Charter test", style: "height:auto;max-height:92vh;overflow:auto" },
+      el("div", { class: "sheet-h" }, el("h2", null, "🎖️ Charter test"), el("button", { class: "link", type: "button", onclick: close }, "Close")), body));
+  document.body.append(bg);
+  const today = schDayNum();
+  const intro = () => {
+    if (+getPref("charterDay", 0) === today) { body.replaceChildren(el("p", { id: "ct-wait", style: "margin:0;font-weight:700" }, "You already took the test today. You can try again tomorrow.")); return; }
+    body.replaceChildren(
+      el("p", { style: "margin:0" }, "A Charter is an angler the owner picks to teach other people. To apply you take the hardest test in Weigh-In."),
+      el("ul", { class: "muted", style: "margin:0;padding-left:20px" }, el("li", null, "10 questions, one from each of 10 lessons across all the courses."), el("li", null, "No lessons, hints or answers are shown. You have to already know it."), el("li", null, "You need all 10 right."), el("li", null, "Then you tell the owner why you want to teach. The owner decides.")),
+      el("p", { class: "hint", style: "margin:0" }, "You can take it once a day."),
+      el("button", { class: "btn wide", type: "button", id: "ct-go", onclick: () => run() }, "Start the test"));
+  };
+  const run = () => {
+    setPref("charterDay", String(today));
+    const qs = charterQs(); let i = 0, right = 0;
+    const step = () => {
+      const q = qs[i]; let pick = -1;
+      const opts = q.opts.map((o, k) => el("button", { class: "sch-opt", type: "button", "data-opt": k, "aria-pressed": "false", onclick: () => {
+        pick = k; opts.forEach((b, j) => { b.setAttribute("aria-pressed", String(j === k)); b.style.borderColor = j === k ? "var(--accent, #0b6e8a)" : ""; }); nxt.disabled = false; } }, el("b", { class: "sch-let" }, "ABCD"[k]), el("span", null, o)));
+      const nxt = el("button", { class: "btn wide", type: "button", id: "ct-next", disabled: "", onclick: () => { if (pick === q.c) right++; if (++i < qs.length) step(); else end(); } }, i === qs.length - 1 ? "Finish" : "Next");
+      body.replaceChildren(el("b", { class: "hint", id: "ct-qn" }, `Question ${i + 1} of ${qs.length}`), el("h2", { id: "ct-q", style: "margin:0" }, q.q), el("div", { class: "stack", style: "gap:8px" }, opts), nxt);
+    };
+    const end = () => {
+      if (right < qs.length) { body.replaceChildren(el("div", { class: "sch-result", id: "ct-fail" }, el("div", { class: "sch-big" }, `${right} / ${qs.length}`), el("b", null, "Not this time."), el("span", null, "You need all 10 right. Study in Fishing school and try again tomorrow.")), el("button", { class: "btn wide", type: "button", onclick: close }, "Close")); return; }
+      const ta = el("textarea", { id: "ct-why", maxlength: 600, rows: 6, placeholder: "Why do you want to teach other anglers? What would you teach? (at least 40 letters)", style: "width:100%;box-sizing:border-box" });
+      const send = el("button", { class: "btn wide", type: "button", id: "ct-send", onclick: async () => {
+        const why = ta.value.trim();
+        if (why.length < 40) { toast("Tell us a bit more. At least 40 letters."); return; }
+        if (isBad(why)) { toast(NO_SLURS); return; }
+        send.disabled = true;
+        try { await setDoc(doc(db, "charterApps", S.user.uid), { uid: S.user.uid, name: S.name, why, score: 10, total: 10, status: "pending", createdAt: serverTimestamp() });
+          body.replaceChildren(el("div", { class: "sch-result", id: "ct-sent" }, el("div", { class: "sch-big" }, "10 / 10"), el("b", null, "Sent! 🎉"), el("span", null, "The owner will read it. If you're approved, your profile gets a Charter badge and it shows on the feed.")), el("button", { class: "btn wide", type: "button", onclick: close }, "Done"));
+        } catch (err) { send.disabled = false; toast(errText(err)); }
+      } }, "Send to the owner");
+      body.replaceChildren(el("div", { class: "sch-result" }, el("div", { class: "sch-big" }, "10 / 10"), el("b", null, "Perfect score! 🎖️")), el("label", { class: "field" }, el("span", null, "One more thing: why do you want to teach?"), ta), send);
+    };
+    step();
+  };
+  intro();
+}
+function paintTutors(given) {
+  const box = given || document.querySelector("#tutor-list"); if (!box) return;
+  const rows = [...S.charters.values()].sort((a, b) => String(a.name).localeCompare(String(b.name)));
+  box.replaceChildren(...(rows.length ? rows.map((c) => el("div", { class: "item", style: "cursor:default;flex-wrap:wrap", "data-tutor": c.id },
+    el("span", { class: "row", style: "gap:8px;flex-wrap:nowrap;min-width:0" }, avatar(c.id, c.name, 36), el("span", { class: "stack", style: "gap:0;min-width:0" }, el("span", { class: "t" }, "@" + c.name), el("span", { class: "s" }, "🎖️ Charter"))),
+    el("button", { class: "btn ghost small", type: "button", onclick: () => openAngler(c.id, c.name) }, "See profile"))) : [el("p", { class: "empty" }, "No Charters yet. Be the first: take the Charter test in your profile.")]));
+}
+function schTutor(p) {
+  const list = el("div", { class: "list", id: "tutor-list" });
+  p.append(el("h1", null, "🎖️ Tutor"),
+    el("p", { class: "muted", style: "margin:0" }, "Tutors are Charters: anglers the owner picked after a really hard test. They can teach you more about fishing."),
+    el("div", { class: "card-note", id: "tutor-pay", style: "padding:12px 14px;border:2px solid var(--line, #c9d6de);border-radius:12px" },
+      el("b", null, "💵 Payment: cash only"), el("p", { class: "hint", style: "margin:4px 0 0" }, "Pay your tutor in cash. Weigh-In never handles money.")),
+    el("p", { class: "hint", style: "margin:0" }, "Safety first: always tell a parent or guardian, and never meet anyone alone. Meet in a public place with an adult you trust."),
+    list);
+  paintTutors(list);
+}
 function viewSchool(p) {
   const V = S.sch || (S.sch = { v: "home" });
   const go2 = (v, extra) => { Object.assign(V, { v }, extra || {}); renderTab(); };
   p.append(el("button", { class: "link", type: "button", id: "sch-back", style: "align-self:flex-start", onclick: () => { if (V.v === "home") { S.meView = "main"; renderTab(); } else go2(V.back || "home", { back: null }); } }, V.v === "home" ? "‹ Profile" : "‹ Fishing school"));
-  const fn = { home: schHome, guide: schGuide, knots: schKnotBook, course: schCourse, play: schPlay, quizpick: schQuizPick, board: schBoard }[V.v] || schHome;
+  const fn = { home: schHome, guide: schGuide, knots: schKnotBook, course: schCourse, play: schPlay, quizpick: schQuizPick, board: schBoard, tutor: schTutor }[V.v] || schHome;
   fn(p, V, go2);
 }
 function schRankCard() {
@@ -5132,6 +5283,7 @@ function schHome(p, V, go2) {
       el("div", { class: "stack", style: "gap:6px;margin-top:8px" }, Object.entries(SCH_LESSONS).map(([id, L]) => el("button", { class: "item", type: "button", "data-lesson": id,
         onclick: () => { if (schWait(s.lessons[id])) return schLockMsg(); go2("play", { kind: "lesson", lid: id, cid: "", qs: schDraw(L.q, SCH_LQ, "l:" + id, SCH_GEN[id]), back: "home" }); } }, el("span", { class: "t" }, `${L.icon} ${L.n}`), el("span", { class: "label" }, schWait(s.lessons[id]) ? "Tomorrow" : s.lessons[id]?.done ? `Best ${s.lessons[id].best}/${SCH_LQ}` : "›"))))),
     el("button", { class: "btn ghost wide", type: "button", id: "sch-board", onclick: () => go2("board") }, "🏅 Top anglers"),
+    el("button", { class: "btn ghost wide", type: "button", id: "sch-tutor", onclick: () => go2("tutor") }, "🎖️ Tutor"),
     el("p", { class: "hint" }, "This is beginner knowledge. Fishing rules are different in every state and country, so always check your local wildlife agency. It isn't legal advice."));
 }
 /* ---- Knot book: simple step drawings + video links ---- */
@@ -5247,7 +5399,7 @@ function schPlay(p, V, go2) {
     box.replaceChildren(el("div", { class: "row spread", style: "align-items:center" }, el("b", { class: "hint" }, title), el("span", { class: "sch-qn", id: "sch-qn" }, `Question ${qn} of ${qs.length}`, q.hard ? el("span", { class: "sch-hard" }, "Hard") : null)), bar(), el("h2", { id: "sch-q" }, q.q), el("div", { class: "stack", style: "gap:8px" }, opts), note, next);
   };
   const finish = () => {
-    const s = sch(), total = qs.length, pass = right / total >= (V.kind === "final" ? 0.9 : V.kind === "lesson" ? 0.85 : 0.75), today0 = schDayNum();
+    const s = sch(), total = qs.length, pass = right / total >= (V.kind === "final" ? 0.9 : V.kind === "lesson" ? 0.85 : 0.85), today0 = schDayNum();
     let gain = 0, extra = "", rankUp = null;
     if (V.kind === "lesson") {
       const rec = s.lessons[V.lid] || (s.lessons[V.lid] = { done: false, best: 0 });
@@ -5257,7 +5409,7 @@ function schPlay(p, V, go2) {
       extra = pass ? "Lesson complete!" : `You need ${Math.ceil(total * 0.85)} out of ${total} to finish the lesson. Read the cards again and try tomorrow.`;
     } else if (V.kind === "final") {
       const st = s.courses[V.cid]; st.flast = today0; gain += 10 * Math.max(0, right - st.fbest); st.fbest = Math.max(st.fbest, right);
-      if (pass && !st.fin) { st.fin = true; gain += 50; extra = "Course finished! 🏆"; } else extra = pass ? "You passed again." : "You need 9 out of 10 to finish. Review the lessons and try again tomorrow.";
+      if (pass && !st.fin) { st.fin = true; gain += 50; extra = "Course finished! 🏆"; } else extra = pass ? "You passed again." : "You need 9 out of 10 to finish. Hard questions come first now. Review the lessons and try again tomorrow.";
     } else {
       const today = schDayNum(); s.freeLast[V.topic || "all"] = today; if (s.free.day !== today) s.free = { day: today, xp: 0 };
       gain = Math.min(5 * right, Math.max(0, 100 - s.free.xp)); s.free.xp += gain;
@@ -5559,6 +5711,7 @@ function viewProfile(p) {
     el("div", { class: "profile-head" },
       el("div", { class: "av-edit" }, avatar(S.user.uid, S.name, 96), photoInput("me-photo", "Change profile picture")),
       el("div", { class: "stack", style: "gap:2px;min-width:0" }, el("h1", { style: "overflow-wrap:anywhere" }, "@" + S.name),
+        isCharter(S.user.uid) ? charterBadge() : null,
         el("span", { class: "hint" }, "Tap your picture to change it"))),
     el("div", { class: "stats four" },
       el("div", null, el("b", null, String(mine.length)), el("span", null, "Catches")),
@@ -5571,6 +5724,17 @@ function viewProfile(p) {
         const order = ["auto", "winter", "spring", "summer", "fall"], nx = order[(order.indexOf(getPref("season", "auto")) + 1) % order.length];
         setPref("season", nx); applySeason(); const lb = e.currentTarget.querySelector(".label"); if (lb) lb.textContent = seasonLabel(); toast(nx === "auto" ? "The season follows the calendar." : SEASONS[nx].hi);
       } }, el("span", { class: "t" }, "🌈 Season"), el("span", { class: "label" }, seasonLabel())),
+      (() => {
+        const lab = el("span", { class: "label" }, isCharter(S.user.uid) ? "You're a Charter" : "…");
+        const b = el("button", { class: "item", type: "button", id: "me-charter", onclick: async () => {
+          const st = await charterState();
+          if (st === "charter") toast("You're a Charter. Nice work! 🎖️");
+          else if (st === "pending") toast("The owner hasn't decided yet. Hang tight.");
+          else openCharterTest(renderTab);
+        } }, el("span", { class: "t" }, "🎖️ Become a Charter"), lab);
+        charterState().then((st) => { lab.textContent = { charter: "You're a Charter", pending: "Waiting for the owner", declined: "Try again", none: "Take the test" }[st]; });
+        return b;
+      })(),
       el("button", { class: "item", type: "button", id: "me-name", onclick: () => openNameSheet(renderTab) }, el("span", { class: "t" }, "✏️ Change name"), el("span", { class: "label" }, "@" + S.name))),
     el("h2", null, "My catches"));
   if (!mine.length) { p.append(el("p", { class: "empty" }, "You haven't posted a catch yet. Tap the red Post button.")); return; }
