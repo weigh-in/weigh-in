@@ -1454,13 +1454,14 @@ function feedPosts() {
 /* What's new. Newest first. Add a new entry on top each time the app changes. */
 /* Bump APP_VERSION every time you change the app, and add a matching entry on top of UPDATES (with v: the same number).
    Phones check app.js every few minutes and offer the new version on their own. */
-const APP_VERSION = 106;
+const APP_VERSION = 107;
 // The number people see. APP_VERSION stays a plain counter so updates are detected. Big changes bump the first number (2.0), smaller ones the second (1.1, 1.2).
 const REL_NAMES = { 59: "1.0", 60: "1.0", 61: "1.1", 62: "1.2", 63: "1.2", 64: "1.2", 65: "1.2", 66: "1.2", 67: "1.2",
-  68: "1.3", 69: "1.3", 70: "1.3", 71: "1.4", 72: "1.4", 73: "1.5", 74: "1.5", 75: "1.5", 76: "1.5", 77: "1.8", 78: "1.8", 79: "1.9", 80: "1.9", 81: "2.0", 82: "2.0", 83: "1.19", 84: "1.20", 85: "1.21", 86: "1.22", 87: "1.23", 88: "1.24", 89: "1.25", 90: "1.26", 91: "1.27", 92: "1.28", 93: "1.29", 94: "1.30", 95: "1.31", 96: "1.32", 97: "1.33", 98: "1.34", 99: "1.35", 100: "1.36", 101: "1.37", 102: "1.38", 103: "1.39", 104: "1.40", 105: "1.41", 106: "1.42" };
+  68: "1.3", 69: "1.3", 70: "1.3", 71: "1.4", 72: "1.4", 73: "1.5", 74: "1.5", 75: "1.5", 76: "1.5", 77: "1.8", 78: "1.8", 79: "1.9", 80: "1.9", 81: "2.0", 82: "2.0", 83: "1.19", 84: "1.20", 85: "1.21", 86: "1.22", 87: "1.23", 88: "1.24", 89: "1.25", 90: "1.26", 91: "1.27", 92: "1.28", 93: "1.29", 94: "1.30", 95: "1.31", 96: "1.32", 97: "1.33", 98: "1.34", 99: "1.35", 100: "1.36", 101: "1.37", 102: "1.38", 103: "1.39", 104: "1.40", 105: "1.41", 106: "1.42", 107: "1.43" };
 const relName = (v) => REL_NAMES[v] || (v < 59 ? `0.${v}` : `1.${v - 59}`);
 try { if ((parseInt(localStorage.getItem("weighin-appv"), 10) || 0) < APP_VERSION) localStorage.setItem("weighin-appv", String(APP_VERSION)); } catch { /* private mode */ }
 const UPDATES = [
+  { id: "2026-11-24f", v: 107, date: "Nov 24", title: "Real answers only", items: ["The Charter application now has to read like real sentences. Random letters are refused."] },
   { id: "2026-11-24e", v: 106, date: "Nov 24", title: "Fishing school: no more longest answer", items: ["The right answer is not the longest one anymore. About 130 questions got new, believable wrong answers that are just as long, so school and the Charter test are much harder."] },
   { id: "2026-11-24d", v: 105, date: "Nov 24", title: "Charters, tutors and free entries", items: [
     "New: Charters. Take the hardest test in Weigh-In from your profile (10 questions, all courses, 10 out of 10 to pass), tell the owner why you want to teach, and if you're approved you get a 🎖️ Charter badge and a post on the feed.",
@@ -5176,6 +5177,18 @@ function schNext() {      // the next thing you can do in any course you started
 /* ======================= CHARTERS: a hard test, the owner approves, then a badge and a spot in Tutor ======================= */
 const isCharter = (uid) => S.charters.has(uid);
 const charterBadge = () => el("span", { class: "pill live charter-pill", title: "Approved by the owner to teach" }, "🎖️ Charter");
+/* Keeps mashed-keyboard answers like "jebqhrfqhbfqh" out of the Charter application: it has to read like real sentences. */
+const COMMON_WORDS = new Set("i a an the and or but so to of in on at for with from my me we you your it is am are was be have has had do can will would want wanted like love because teach teaching teacher show help helping learn learned learning kids friends friend people others other fish fishing fisher lake pond river boat bass catch caught how what why when where who this that they them their there about know since years year little more some all out up not no yes if as by get got go make good great best very really also just then than too one two three".split(" "));
+function whyProblem(text) {
+  const t = String(text || "").trim().toLowerCase(), words = t.split(/\s+/).filter(Boolean);
+  if (words.length < 8) return "Write a few real sentences. At least 8 words.";
+  const clean = words.map((w) => w.replace(/[^a-z']/g, "")).filter(Boolean);
+  const common = clean.filter((w) => COMMON_WORDS.has(w)).length;
+  const weird = clean.filter((w) => w.length > 18 || /[^aeiouy' ]{6,}/.test(w) || (w.length > 5 && !/[aeiouy]/.test(w))).length;
+  const repeats = Math.max(...clean.map((w) => clean.filter((x) => x === w).length));
+  if (common < Math.ceil(clean.length * 0.25) || weird > clean.length * 0.25 || repeats > Math.max(3, clean.length * 0.4)) return "That doesn't read like a real answer. Tell the owner in your own words why you want to teach.";
+  return "";
+}
 function charterQs() {      // one HARD question from each of 10 different lessons, so every course is covered
   const ids = [...new Set(SCH_COURSES.flatMap((c) => c.days))].filter((id) => SCH_LESSONS[id]);
   return schShuffle(ids).slice(0, 10).map((id) => { const all = SCH_LESSONS[id].q, hard = all.filter((q) => q.hard); return schPrep(rPick(hard.length ? hard : all)); });
@@ -5218,6 +5231,7 @@ function openCharterTest(onDone) {
       const send = el("button", { class: "btn wide", type: "button", id: "ct-send", onclick: async () => {
         const why = ta.value.trim();
         if (why.length < 40) { toast("Tell us a bit more. At least 40 letters."); return; }
+        const bad = whyProblem(why); if (bad) { toast(bad); return; }
         if (isBad(why)) { toast(NO_SLURS); return; }
         send.disabled = true;
         try { await setDoc(doc(db, "charterApps", S.user.uid), { uid: S.user.uid, name: S.name, why, score: 10, total: 10, status: "pending", createdAt: serverTimestamp() });
