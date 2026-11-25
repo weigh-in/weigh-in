@@ -691,6 +691,7 @@ function startApp() {
   }, () => {}));
   unsubs.push(onSnapshot(collection(db, "users", uid, "saved"), (s) => {
     S.saved = s.docs.map((d) => ({ id: d.id, ...d.data({ serverTimestamps: "estimate" }) })).sort((a, b) => (b.createdAt?.toMillis?.() || 0) - (a.createdAt?.toMillis?.() || 0));
+    if (S.repaintTool && document.querySelector("#map-tool[data-kind=spots]")) S.repaintTool();
     refreshMe("spots");
   }, () => {}));
   unsubs.push(onSnapshot(query(collection(db, "requests"), where("to", "==", uid)), (s) => {
@@ -703,7 +704,7 @@ function startApp() {
   }, () => {}));
   unsubs.push(onSnapshot(query(collection(db, "friendships"), where("members", "array-contains", uid)), (s) => {
     S.friendships = s.docs.map((d) => ({ id: d.id, ...d.data() }));
-    syncMsgWatch(); syncPush(); stripeReturn();
+    syncMsgWatch(); syncPush(); stripeReturn(); if (!S.nudgeTimer) S.nudgeTimer = setTimeout(maybeNotifyNudge, 12000);
     refreshMe("friends");
   }, () => {}));
   unsubs.push(onSnapshot(query(collection(db, "spots"), orderBy("createdAt", "desc"), limit(300)), (s) => {
@@ -1454,13 +1455,17 @@ function feedPosts() {
 /* What's new. Newest first. Add a new entry on top each time the app changes. */
 /* Bump APP_VERSION every time you change the app, and add a matching entry on top of UPDATES (with v: the same number).
    Phones check app.js every few minutes and offer the new version on their own. */
-const APP_VERSION = 111;
+const APP_VERSION = 112;
 // The number people see. APP_VERSION stays a plain counter so updates are detected. Big changes bump the first number (2.0), smaller ones the second (1.1, 1.2).
 const REL_NAMES = { 59: "1.0", 60: "1.0", 61: "1.1", 62: "1.2", 63: "1.2", 64: "1.2", 65: "1.2", 66: "1.2", 67: "1.2",
-  68: "1.3", 69: "1.3", 70: "1.3", 71: "1.4", 72: "1.4", 73: "1.5", 74: "1.5", 75: "1.5", 76: "1.5", 77: "1.8", 78: "1.8", 79: "1.9", 80: "1.9", 81: "2.0", 82: "2.0", 83: "1.19", 84: "1.20", 85: "1.21", 86: "1.22", 87: "1.23", 88: "1.24", 89: "1.25", 90: "1.26", 91: "1.27", 92: "1.28", 93: "1.29", 94: "1.30", 95: "1.31", 96: "1.32", 97: "1.33", 98: "1.34", 99: "1.35", 100: "1.36", 101: "1.37", 102: "1.38", 103: "1.39", 104: "1.40", 105: "1.41", 106: "1.42", 107: "1.43", 108: "1.44", 109: "1.45", 110: "1.46", 111: "1.47" };
+  68: "1.3", 69: "1.3", 70: "1.3", 71: "1.4", 72: "1.4", 73: "1.5", 74: "1.5", 75: "1.5", 76: "1.5", 77: "1.8", 78: "1.8", 79: "1.9", 80: "1.9", 81: "2.0", 82: "2.0", 83: "1.19", 84: "1.20", 85: "1.21", 86: "1.22", 87: "1.23", 88: "1.24", 89: "1.25", 90: "1.26", 91: "1.27", 92: "1.28", 93: "1.29", 94: "1.30", 95: "1.31", 96: "1.32", 97: "1.33", 98: "1.34", 99: "1.35", 100: "1.36", 101: "1.37", 102: "1.38", 103: "1.39", 104: "1.40", 105: "1.41", 106: "1.42", 107: "1.43", 108: "1.44", 109: "1.45", 110: "1.46", 111: "1.47", 112: "1.48" };
 const relName = (v) => REL_NAMES[v] || (v < 59 ? `0.${v}` : `1.${v - 59}`);
 try { if ((parseInt(localStorage.getItem("weighin-appv"), 10) || 0) < APP_VERSION) localStorage.setItem("weighin-appv", String(APP_VERSION)); } catch { /* private mode */ }
 const UPDATES = [
+  { id: "2026-11-26a", v: 112, date: "Nov 26", title: "Map tools, nudges and game sounds", items: [
+    "Spot saver and Spot finder moved to the Map. Tap the buttons above the map.",
+    "If notifications are off, Weigh-In now asks you once in a while to turn them on. You can say Not now or Don't ask again.",
+    "The fishing game has sounds of the place: water, wind in the trees, birds, frogs, crickets, gulls and ice creaking. It changes with the season and time of day. The 🔊 button turns it off."] },
   { id: "2026-11-25d", v: 111, date: "Nov 25", title: "Restart your Charter application", items: ["You can press Start over on your Charter application to delete it and try again, even if it got stuck."] },
   { id: "2026-11-25c", v: 110, date: "Nov 25", title: "Charter send fix", items: ["Sending a Charter application is more forgiving, and if it fails it now says which step broke."] },
   { id: "2026-11-25b", v: 109, date: "Nov 25", title: "Charter fixes", items: ["If your Charter application is waiting, you can tap it to change your answer or picture. The owner can make themselves a Charter without the test."] },
@@ -3144,6 +3149,27 @@ async function syncPush() {
 function notifyFriends(kind, extra) {
   try { const to = friendUids().slice(0, 100); if (!to.length || !auth.currentUser) return; pushApi({ action: "notify", kind, to, name: S.name, ...extra }).catch(() => {}); } catch { /* never blocks posting */ }
 }
+// Every once in a while, when notifications are off, ask nicely. About every 4 days, then every 2 weeks if you keep saying "Not now". Never if the phone has blocked them.
+function maybeNotifyNudge() {
+  try {
+    if (!S.user || S.nudgeDone || !PUSH_OK() || pushOn()) return;
+    if (Notification.permission === "denied" || getPref("nudgeoff", "0") === "1") return;
+    if (document.querySelector(".sheet-bg, .game-bg, .pb-alert")) { S.nudgeTimer = setTimeout(maybeNotifyNudge, 45000); return; }   // never on top of something else; try again later
+    const last = +getPref("nudgelast", "0") || 0, times = +getPref("nudgen", "0") || 0;
+    if (Date.now() - last < (times >= 3 ? 14 : 4) * 864e5) return;
+    S.nudgeDone = true; setPref("nudgelast", String(Date.now())); setPref("nudgen", String(times + 1));
+    const close = () => bg.remove();
+    const bg = el("div", { class: "sheet-bg", id: "nudge", onclick: (e) => { if (e.target === bg) close(); } },
+      el("div", { class: "sheet", role: "dialog", "aria-label": "Turn on notifications", style: "height:auto;padding:20px 18px calc(20px + env(safe-area-inset-bottom));gap:12px" },
+        el("div", { style: "font-size:2.6rem;text-align:center" }, "🔔"),
+        el("h2", { style: "margin:0;text-align:center" }, "Turn on notifications"),
+        el("p", { class: "muted", style: "margin:0;text-align:center" }, "Hear when a friend posts a catch, even when Weigh-In is closed. You can turn them off any time in Settings."),
+        el("button", { class: "btn wide", type: "button", id: "nudge-on", onclick: async () => { close(); await enablePush(); } }, "Turn on"),
+        el("button", { class: "btn ghost wide", type: "button", id: "nudge-later", onclick: close }, "Not now"),
+        el("button", { class: "link small", type: "button", id: "nudge-never", style: "align-self:center", onclick: () => { setPref("nudgeoff", "1"); close(); } }, "Don't ask again")));
+    document.body.append(bg);
+  } catch { /* a missed nudge is fine */ }
+}
 // Once in a while, show one of your friends' posted years so it doesn't get missed. At most one every 3 days, and never the same one twice.
 function maybeFriendYear() {
   try {
@@ -4352,6 +4378,17 @@ function loadLeaflet() {
 function destroyMap() { mapToken++; if (S.map) { S.map.remove(); S.map = null; S.markers = null; S.me = null; } }
 const lureKey = (x) => String(x.lure || "").trim().toLowerCase().replace(/\s+/g, " ");
 const nameCase = (t) => t.charAt(0).toUpperCase() + t.slice(1);
+/* Spot saver and Spot finder live on the Map now. Each opens in a big sheet over the map. */
+function openMapTool(kind) {
+  document.querySelector("#map-tool")?.remove();
+  const body = el("div", { class: "stack", style: "padding:4px 16px 24px" });
+  const close = () => { bg.remove(); S.repaintTool = null; };
+  const bg = el("div", { class: "sheet-bg", id: "map-tool", "data-kind": kind, onclick: (e) => { if (e.target === bg) close(); } },
+    el("div", { class: "sheet", role: "dialog", "aria-label": kind === "spots" ? "Spot saver" : "Spot finder", style: "height:92%;overflow:auto" },
+      el("div", { class: "sheet-h" }, el("h2", null, kind === "spots" ? "📍 Spot saver" : "🔍 Spot finder"), el("button", { class: "link", type: "button", id: "map-tool-x", onclick: close }, "Close")), body));
+  const paint = () => { body.replaceChildren(); return kind === "spots" ? viewSpots(body) : viewWater(body); };
+  S.repaintTool = paint; document.body.append(bg); paint();
+}
 function renderMap() {
   $screen.className = "screen feed-wrap";
   const f = S.mapFilter || (S.mapFilter = { species: "", lure: "", mine: false });
@@ -4387,8 +4424,11 @@ function renderMap() {
   }
   S.paintMapBar = paintBar;
   paintBar();
+  const tools = el("div", { class: "map-tools" },
+    el("button", { class: "btn small", type: "button", id: "map-spots", onclick: () => openMapTool("spots") }, "📍 Spot saver"),
+    el("button", { class: "btn small", type: "button", id: "map-water", onclick: () => openMapTool("water") }, "🔍 Spot finder"));
   // The switcher floats over the map itself, so it never sits on top of the filter bar.
-  $screen.replaceChildren(bar, el("div", { class: "map-wrap" }, box, styles), fab, note);
+  $screen.replaceChildren(bar, tools, el("div", { class: "map-wrap" }, box, styles), fab, note);
   const token = ++mapToken;
   loadLeaflet().then((L) => {
     if (S.tab !== "map" || token !== mapToken) return;
@@ -4660,7 +4700,7 @@ async function viewWater(p) {
     out.replaceChildren(el("div", { class: "sf-left", id: "wf-left" }, el("b", null, rows.length === 1 ? "1 spot left" : `${rows.length} spots left`),
         el("span", { class: "hint" }, rows.length > 1 ? "Add more clues or rule spots out to narrow it down." : rows.length === 1 ? "That's the one." : "Nothing matches. Take off a clue or add more minutes."),
         st_backup ? el("span", { class: "hint", id: "wf-backup" }, "The main map server is busy, so these have fewer details.") : null,
-        el("button", { class: "link small", type: "button", id: "wf-reset", style: "align-self:flex-start", onclick: () => { Object.assign(st, { mins: 10, kinds: new Set(), text: "", ruled: {} }); renderTab(); } }, "Clear clues")),
+        el("button", { class: "link small", type: "button", id: "wf-reset", style: "align-self:flex-start", onclick: () => { Object.assign(st, { mins: 10, kinds: new Set(), text: "", ruled: {} }); if (S.repaintTool) S.repaintTool(); else renderTab(); } }, "Clear clues")),
       ...shown.map(card),
       rows.length > shown.length ? el("p", { class: "hint" }, `Showing the closest ${shown.length}. Add a clue to see the rest.`) : null,
       gone.length ? el("div", { class: "stack", id: "wf-ruled", style: "gap:6px" }, el("b", null, `Ruled out (${gone.length})`),
@@ -5621,8 +5661,6 @@ function viewMe(p) {
     el("div", { class: "me-grid" },
     (() => { const r = schRank(sch().xp); return card("me-school", r.icon, "Fishing school", `${r.title} · ${sch().xp} XP`, () => { S.sch = { v: "home" }; S.meView = "school"; renderTab(); }); })(),
     card("me-game", "🎣", "Fishing game", `Level ${fcLevel()} · 🪙 ${fcCoins()}`, openFishGame),
-        card("me-spots", "📍", "Spot saver", S.saved.length ? `${S.saved.length} saved, private` : "Your secret spots", open("spots")),
-    card("me-water", "🔍", "Spot finder", "Lakes near you", open("water")),
     wrapSeason() ? card("me-wrap", "🎞️", "Your year", `${wrapYear()} recap`, () => openWrapped(wrapYear())) : null),
   );
 }
@@ -6608,7 +6646,7 @@ function playClash(mode, locId, lureIdIn, onExit, duel) {
   fcMarkPlace(L.id);
   const canvas = el("canvas", { class: "game-canvas", role: "img", "aria-label": "Fishing game. Tap to cast and hook. Hold to reel. Let go when the fish runs." });
   let ctx = canvas.getContext("2d", { alpha: false });
-  const sndBtn = el("button", { class: "game-x game-snd", type: "button", "aria-label": "Sound on or off", onclick: () => { soundOn = !soundOn; setPref("fcsound", soundOn ? "1" : "0"); sndBtn.textContent = soundOn ? "🔊" : "🔇"; if (!soundOn) whine(false); } });
+  const sndBtn = el("button", { class: "game-x game-snd", type: "button", "aria-label": "Sound on or off", onclick: () => { soundOn = !soundOn; setPref("fcsound", soundOn ? "1" : "0"); sndBtn.textContent = soundOn ? "🔊" : "🔇"; if (!soundOn) whine(false); ambSync(); } });
   const motBtn = el("button", { class: "game-x game-snd", type: "button", id: "fc-motion", "aria-label": "Motion mode on or off", style: "right:114px;font-size:1.05rem", onclick: async () => {
     if (!motionOn) {
       try {   // iPhones ask first. Other phones just say yes.
@@ -6671,8 +6709,72 @@ function playClash(mode, locId, lureIdIn, onExit, duel) {
     if (!whineNode) { const o = a.createOscillator(), f = a.createBiquadFilter(), g = a.createGain(); o.type = "sawtooth"; f.type = "bandpass"; f.frequency.value = 1400; f.Q.value = 2; g.gain.value = 0.0001; o.connect(f); f.connect(g); g.connect(a.destination); o.start(); g.gain.setTargetAtTime(0.025, a.currentTime, 0.05); whineNode = { o, g }; }
     whineNode.o.frequency.setTargetAtTime(pitch, a.currentTime, 0.05);
   };
+  /* ---------- the sounds of the place: water, wind in the trees, birds, frogs, crickets, gulls, ice ----------
+     Everything is made up on the spot (nothing to download). The season, time of day and water change what you hear. */
+  let amb = null;
+  const ambStart = () => {
+    const a = audio(); if (!a || amb) return;
+    const master = a.createGain(); master.gain.value = 0.0001; master.gain.setTargetAtTime(0.55, a.currentTime, 1.4); master.connect(a.destination);
+    const me = amb = { master, nodes: [], timers: [] };
+    const nb = Math.floor(a.sampleRate * 4), bed = a.createBuffer(1, nb, a.sampleRate), bd = bed.getChannelData(0); let last = 0;
+    for (let i = 0; i < nb; i++) { last = (last + 0.04 * (Math.random() * 2 - 1)) / 1.04; bd[i] = last * 3.5; }     // soft, brown-ish noise
+    const layer = (type, freq, q, vol, lfoHz, lfoDepth) => {
+      const s2 = a.createBufferSource(); s2.buffer = bed; s2.loop = true;
+      const f = a.createBiquadFilter(); f.type = type; f.frequency.value = freq; f.Q.value = q;
+      const g = a.createGain(); g.gain.value = vol;
+      s2.connect(f); f.connect(g); g.connect(master); s2.start(a.currentTime, Math.random() * 3); me.nodes.push(s2);
+      if (lfoHz) { const o = a.createOscillator(), og = a.createGain(); o.frequency.value = lfoHz * (0.85 + Math.random() * 0.3); og.gain.value = vol * lfoDepth; o.connect(og); og.connect(g.gain); o.start(); me.nodes.push(o); }
+    };
+    const tone = (type, f0, f1, dur, vol, at = 0) => {
+      const t = a.currentTime + at, o = a.createOscillator(), g = a.createGain();
+      o.type = type; o.frequency.setValueAtTime(f0, t); o.frequency.exponentialRampToValueAtTime(Math.max(30, f1), t + dur);
+      g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(vol, t + dur * 0.25); g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+      o.connect(g); g.connect(master); o.start(t); o.stop(t + dur + 0.05);
+    };
+    const every = (lo, hi, fn) => { const go = () => { if (amb !== me) return; fn(); me.timers.push(setTimeout(go, (lo + Math.random() * (hi - lo)) * 1000)); }; me.timers.push(setTimeout(go, Math.random() * lo * 1000)); };
+    const salt = !!L.salt, night = TOD === "night", still = K === "pond" || K === "lake" || K === "reservoir" || K === "creek";
+    // water
+    if (!ICE) {
+      if (salt) layer("lowpass", 650, 0.7, 0.8, 0.1, 0.9);                                                   // waves, about every 10 seconds
+      else if (K === "river") { layer("lowpass", 1500, 0.6, 0.7, 0.05, 0.2); layer("highpass", 2600, 0.5, 0.1, 0.2, 0.5); }   // rushing
+      else { layer("lowpass", 520, 0.6, 0.5, 0.16, 0.7); layer("highpass", 1900, 0.5, 0.045, 0.3, 1); }       // little laps against the shore
+    }
+    // wind in the trees (stronger in fall and winter)
+    if (!salt || K === "bay") layer("bandpass", 480, 0.8, SEA === "winter" ? 0.5 : SEA === "fall" ? 0.4 : SEA === "spring" ? 0.22 : 0.16, 0.07, 0.8);
+    if (ICE) layer("lowpass", 240, 0.6, 0.38, 0.05, 0.7);
+    // birds
+    const bird = () => {
+      const k = Math.random(), base = 2300 + Math.random() * 1700;
+      if (k < 0.4) { const n = 2 + (Math.random() * 3 | 0); for (let i = 0; i < n; i++) tone("sine", base, base * (1.15 + Math.random() * 0.35), 0.09, 0.05, i * 0.13); }   // tweet tweet
+      else if (k < 0.7) { tone("sine", base * 1.3, base * 1.25, 0.28, 0.05, 0); tone("sine", base, base * 0.98, 0.34, 0.05, 0.34); }                                // fee-bee
+      else for (let i = 0; i < 9; i++) tone("sine", base + (i % 2) * 500, base + (i % 2) * 500 + 200, 0.045, 0.035, i * 0.06);                                          // trill
+    };
+    const caw = () => { tone("sawtooth", 430, 300, 0.32, 0.03); tone("sawtooth", 400, 280, 0.3, 0.025, 0.42); };
+    const gull = () => { tone("sawtooth", 1150, 760, 0.42, 0.022); tone("sawtooth", 1000, 700, 0.35, 0.02, 0.5); };
+    const cricket = () => { for (let i = 0; i < 7; i++) tone("sine", 4300, 4250, 0.035, 0.016, i * 0.06); };
+    const frog = () => { tone("square", 160, 110, 0.13, 0.022); tone("square", 150, 100, 0.14, 0.02, 0.17); };
+    const owl = () => { tone("sine", 390, 350, 0.5, 0.05); tone("sine", 360, 320, 0.55, 0.045, 0.75); };
+    const plop = () => tone("sine", 520, 140, 0.14, 0.07);
+    const creak = () => { tone("sawtooth", 95, 42, 0.8, 0.03); tone("sine", 1900, 1500, 0.22, 0.018, 0.4); };
+    if (salt) every(5, 14, gull);
+    else if (ICE) { every(9, 20, creak); every(16, 34, caw); if (!night) every(14, 30, bird); }
+    else if (night) { every(7, 16, owl); if (SEA !== "winter") every(2.5, 6, cricket); if (still && (SEA === "spring" || SEA === "summer")) every(4, 9, frog); }
+    else {
+      if (SEA === "spring") every(TOD === "dawn" ? 0.8 : 1.4, TOD === "dawn" ? 3 : 4.5, bird);
+      else if (SEA === "summer") { every(2.4, 7, bird); if (TOD === "dusk") every(2.5, 6, cricket); }
+      else if (SEA === "fall") { every(6, 14, bird); every(12, 26, caw); every(7, 15, () => tick(3600, 0.03, 0.3, 1.2)); }   // a few birds, a crow, leaves rustling
+      else { every(14, 30, bird); every(16, 34, caw); }
+      if (still && (SEA === "spring" || SEA === "summer") && TOD === "dusk") every(4, 9, frog);
+    }
+    if (!salt) every(8, 21, plop);                                                                    // a fish jumping somewhere
+  };
+  const ambStop = () => {
+    if (!amb) return; const m = amb; amb = null; m.timers.forEach(clearTimeout);
+    try { m.master.gain.setTargetAtTime(0.0001, actx.currentTime, 0.15); setTimeout(() => m.nodes.forEach((n) => { try { n.stop(); } catch { /* already stopped */ } }), 700); } catch { /* ignore */ }
+  };
+  const ambSync = () => { if (soundOn) ambStart(); else ambStop(); };
   const resize = () => { dpr = Math.min(Q === 0 ? 2 : Q === 1 ? 1.25 : 1, devicePixelRatio || 1); W = bg.clientWidth; H = bg.clientHeight; canvas.width = W * dpr; canvas.height = H * dpr; canvas.style.width = W + "px"; canvas.style.height = H + "px"; ctx.setTransform(dpr, 0, 0, dpr, 0, 0); deco = buildDeco(); LAY = null; };
-  const end = () => { evSubmit(); cancelAnimationFrame(raf); whine(false); removeEventListener("resize", resize); removeEventListener("keydown", onKey); removeEventListener("keyup", onKeyUp); detachMotion(); try { actx && actx.close(); } catch { /* ignore */ } bg.remove(); onExit && onExit(); };
+  const end = () => { evSubmit(); cancelAnimationFrame(raf); whine(false); ambStop(); removeEventListener("resize", resize); removeEventListener("keydown", onKey); removeEventListener("keyup", onKeyUp); detachMotion(); try { actx && actx.close(); } catch { /* ignore */ } bg.remove(); onExit && onExit(); };
 
   /* ---------- scenery ---------- */
   const rng = (seed) => () => { seed |= 0; seed = seed + 0x6D2B79F5 | 0; let t = Math.imul(seed ^ seed >>> 15, 1 | seed); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; };
@@ -6699,6 +6801,7 @@ function playClash(mode, locId, lureIdIn, onExit, duel) {
     return D;
   }
   resize(); addEventListener("resize", resize);
+  ambSync(); bg.addEventListener("pointerdown", () => { audio(); ambSync(); }, { once: true });     // the first tap wakes the sound up on phones
 
   /* ---------- game state ---------- */
   const CASTS = 3, rivalName = ["Lakeside Lou", "Big Mike", "Sunny", "Cody", "Captain Pete"][Math.floor(Math.random() * 5)];
