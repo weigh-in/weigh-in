@@ -1454,13 +1454,14 @@ function feedPosts() {
 /* What's new. Newest first. Add a new entry on top each time the app changes. */
 /* Bump APP_VERSION every time you change the app, and add a matching entry on top of UPDATES (with v: the same number).
    Phones check app.js every few minutes and offer the new version on their own. */
-const APP_VERSION = 109;
+const APP_VERSION = 110;
 // The number people see. APP_VERSION stays a plain counter so updates are detected. Big changes bump the first number (2.0), smaller ones the second (1.1, 1.2).
 const REL_NAMES = { 59: "1.0", 60: "1.0", 61: "1.1", 62: "1.2", 63: "1.2", 64: "1.2", 65: "1.2", 66: "1.2", 67: "1.2",
-  68: "1.3", 69: "1.3", 70: "1.3", 71: "1.4", 72: "1.4", 73: "1.5", 74: "1.5", 75: "1.5", 76: "1.5", 77: "1.8", 78: "1.8", 79: "1.9", 80: "1.9", 81: "2.0", 82: "2.0", 83: "1.19", 84: "1.20", 85: "1.21", 86: "1.22", 87: "1.23", 88: "1.24", 89: "1.25", 90: "1.26", 91: "1.27", 92: "1.28", 93: "1.29", 94: "1.30", 95: "1.31", 96: "1.32", 97: "1.33", 98: "1.34", 99: "1.35", 100: "1.36", 101: "1.37", 102: "1.38", 103: "1.39", 104: "1.40", 105: "1.41", 106: "1.42", 107: "1.43", 108: "1.44", 109: "1.45" };
+  68: "1.3", 69: "1.3", 70: "1.3", 71: "1.4", 72: "1.4", 73: "1.5", 74: "1.5", 75: "1.5", 76: "1.5", 77: "1.8", 78: "1.8", 79: "1.9", 80: "1.9", 81: "2.0", 82: "2.0", 83: "1.19", 84: "1.20", 85: "1.21", 86: "1.22", 87: "1.23", 88: "1.24", 89: "1.25", 90: "1.26", 91: "1.27", 92: "1.28", 93: "1.29", 94: "1.30", 95: "1.31", 96: "1.32", 97: "1.33", 98: "1.34", 99: "1.35", 100: "1.36", 101: "1.37", 102: "1.38", 103: "1.39", 104: "1.40", 105: "1.41", 106: "1.42", 107: "1.43", 108: "1.44", 109: "1.45", 110: "1.46" };
 const relName = (v) => REL_NAMES[v] || (v < 59 ? `0.${v}` : `1.${v - 59}`);
 try { if ((parseInt(localStorage.getItem("weighin-appv"), 10) || 0) < APP_VERSION) localStorage.setItem("weighin-appv", String(APP_VERSION)); } catch { /* private mode */ }
 const UPDATES = [
+  { id: "2026-11-25c", v: 110, date: "Nov 25", title: "Charter send fix", items: ["Sending a Charter application is more forgiving, and if it fails it now says which step broke."] },
   { id: "2026-11-25b", v: 109, date: "Nov 25", title: "Charter fixes", items: ["If your Charter application is waiting, you can tap it to change your answer or picture. The owner can make themselves a Charter without the test."] },
   { id: "2026-11-25a", v: 108, date: "Nov 25", title: "Charter pictures", items: ["When you apply to be a Charter you can pick one picture. If you are approved, it is the picture on your feed card."] },
   { id: "2026-11-24f", v: 107, date: "Nov 24", title: "Real answers only", items: ["The Charter application now has to read like real sentences. Random letters are refused."] },
@@ -2690,7 +2691,7 @@ async function approveCharter(a) {
     b.update(doc(db, "charterApps", a.id), { status: "approved" });
     b.set(doc(db, "charters", a.id), { uid: a.id, name: a.name, createdAt: serverTimestamp(), ...(a.photo ? { photo: a.photo } : {}) });
     await b.commit(); charterCache.clear(); toast(`@${a.name} is a Charter now. It's on the feed! 🎖️`);
-  } catch (err) { toast(errText(err)); }
+  } catch (err) { throw err; }
 }
 function viewOwner(p) {
   stopOwner();
@@ -2730,7 +2731,7 @@ function viewOwner(p) {
         a.photo ? el("img", { src: a.photo, alt: "Their picture", style: "width:100%;max-height:200px;object-fit:cover;border-radius:10px" }) : el("span", { class: "hint" }, "No picture"),
         el("p", { style: "margin:4px 0;white-space:pre-wrap;overflow-wrap:anywhere" }, a.why),
         el("div", { class: "row" },
-          el("button", { class: "btn small", type: "button", "data-act": "approve-charter", onclick: () => approveCharter(a) }, "Make Charter"),
+          el("button", { class: "btn small", type: "button", "data-act": "approve-charter", onclick: () => approveCharter(a).catch((err) => toast(`${errText(err)} (${err?.code || "error"})`)) }, "Make Charter"),
           el("button", { class: "btn ghost small", type: "button", "data-act": "decline-charter", onclick: async () => { try { await updateDoc(doc(db, "charterApps", a.id), { status: "declined" }); toast("Declined."); } catch (err) { toast(errText(err)); } } }, "Decline")))) : [el("p", { class: "empty" }, "No applications waiting.")]),
       el("b", null, `Charters (${have.length})`),
       ...(have.length ? have.map((c) => el("div", { class: "item", style: "cursor:default;flex-wrap:wrap" }, el("span", { class: "t" }, "🎖️ @" + c.name),
@@ -5247,15 +5248,16 @@ function openCharterTest(onDone, opts = {}) {   // opts.direct: skip the test (t
       drawPrev();
       const ta = el("textarea", { id: "ct-why", maxlength: 600, rows: 6, placeholder: "Why do you want to teach other anglers? What would you teach? (at least 40 letters)", style: "width:100%;box-sizing:border-box" });
       const send = el("button", { class: "btn wide", type: "button", id: "ct-send", onclick: async () => {
-        const why = ta.value.trim();
+        const why = ta.value.replace(/\s+/g, " ").trim();
         if (why.length < 40) { toast("Tell us a bit more. At least 40 letters."); return; }
         const bad = whyProblem(why); if (bad) { toast(bad); return; }
         if (isBad(why)) { toast(NO_SLURS); return; }
         send.disabled = true;
         try { await setDoc(doc(db, "charterApps", S.user.uid), { uid: S.user.uid, name: S.name, why, score: 10, total: 10, status: "pending", createdAt: serverTimestamp(), ...(photo ? { photo } : {}) });
+          ta.dataset.saved = "1";
           if (S.owner) { await approveCharter({ id: S.user.uid, name: S.name, photo }); body.replaceChildren(el("div", { class: "sch-result", id: "ct-sent" }, el("b", null, "You're a Charter now! 🎖️"), el("span", null, "It's on the feed with your picture.")), el("button", { class: "btn wide", type: "button", onclick: close }, "Done")); return; }
           body.replaceChildren(el("div", { class: "sch-result", id: "ct-sent" }, el("div", { class: "sch-big" }, "10 / 10"), el("b", null, "Sent! 🎉"), el("span", null, "The owner will read it. If you're approved, your profile gets a Charter badge and it shows on the feed.")), el("button", { class: "btn wide", type: "button", onclick: close }, "Done"));
-        } catch (err) { send.disabled = false; toast(errText(err)); }
+        } catch (err) { send.disabled = false; toast(`${errText(err)} (${err?.code || "error"}, step: ${S.owner && ta.dataset.saved ? "making you a Charter" : "sending the application"})`); }
       } }, "Send to the owner");
       if (opts.direct) getDoc(doc(db, "charterApps", S.user.uid)).then((d) => { if (d.exists() && !ta.value) { ta.value = d.data().why || ""; if (d.data().photo && !photo) { photo = d.data().photo; drawPrev(); } } }).catch(() => {});
       body.replaceChildren(el("div", { class: "sch-result" }, opts.direct ? el("b", null, S.owner ? "Make yourself a Charter 🎖️" : "Change your application 🎖️") : el("div", { class: "sch-big" }, "10 / 10"), opts.direct ? null : el("b", null, "Perfect score! 🎖️")), el("label", { class: "field" }, el("span", null, "One more thing: why do you want to teach?"), ta), el("div", { class: "stack", style: "gap:6px" }, el("b", null, "Your picture"), el("span", { class: "hint" }, "If you become a Charter, this picture shows on the feed. Use a picture of you fishing or your favorite catch. No faces of other people."), prev), send);
