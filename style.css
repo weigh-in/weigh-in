@@ -740,3 +740,5 @@ section.stack>h2::before{content:"";width:5px;height:1.1em;border-radius:3px;bac
 
 .ban-item{display:flex;align-items:center;gap:8px;flex-wrap:nowrap;max-width:100%;min-width:0;overflow:hidden}
 #own-banned{max-width:100%;overflow-x:hidden}
+#own-tabs{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));max-width:100%;overflow:visible}
+#own-tabs button{min-width:0;padding-left:6px;padding-right:6px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
