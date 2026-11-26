@@ -737,3 +737,6 @@ section.stack>h2::before{content:"";width:5px;height:1.1em;border-radius:3px;bac
 .season-ic{font-size:1.5rem}
 .season-cell.on{background:var(--lake);color:#fff}
 #map-tool.sheet-bg{z-index:1200}
+
+.ban-item{display:flex;align-items:center;gap:8px;flex-wrap:nowrap;max-width:100%;min-width:0;overflow:hidden}
+#own-banned{max-width:100%;overflow-x:hidden}
