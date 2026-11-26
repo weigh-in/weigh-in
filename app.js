@@ -2941,12 +2941,12 @@ let draftPhoto = "", draftLoc = null, draftSrc = "", draftWhere = "";   // draft
 async function askFishId(photo) {
   const day = new Date().toISOString().slice(0, 10), k = "fishidn-" + day, n = parseInt(getPref(k, "0"), 10) || 0;
   if (n >= 15) return { error: "limit" };
-  setPref(k, String(n + 1));
   try {
     const tok = await auth.currentUser.getIdToken();
     const r = await fetch("/api/fishid", { method: "POST", headers: { Authorization: "Bearer " + tok, "Content-Type": "application/json" }, body: JSON.stringify({ image: photo }) });
     const j = await r.json().catch(() => ({}));
     if (r.status === 503 || j.error === "off") return { error: "off" };
+    setPref(k, String(n + 1));
     if (!r.ok || !j.species) return { error: "fail" };
     return j;
   } catch { return { error: "fail" }; }
@@ -2970,6 +2970,7 @@ function viewPost(p) {
     catch { toast("Couldn't read that photo. Try another."); }
     e.target.value = "";
     paintPhoto();
+    if (draftPhoto) idBtn.click();   // guess while you are filling in the post
   } });
   const idOut = el("div", { id: "fid-out", class: "hint", style: "display:flex;flex-direction:column;gap:6px" });
   const idBtn = el("button", { class: "btn ghost small", type: "button", id: "fid-btn", style: "align-self:flex-start", onclick: async () => {
