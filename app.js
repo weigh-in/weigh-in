@@ -2797,7 +2797,7 @@ function viewOwner(p) {
     ["charters", "Charters", S.owner, el("section", { class: "stack", id: "own-p-charters" }, el("h2", null, "Charters"), el("p", { class: "muted small", style: "margin:0" }, "People who got 10 out of 10 on the hard test. Read why they want to teach, then make them a Charter or decline."), charBox)],
     ["banned", "Banned", can("ban") || S.owner, el("section", { class: "stack", id: "own-p-banned" }, el("h2", null, "Banned people"), bannedBox)]].filter((d) => d[2]);
   const ownSecs = ownDefs.map((d) => d[3]);
-  const ownBar = el("div", { class: "seg", id: "own-tabs", role: "tablist", style: `grid-template-columns:repeat(${Math.max(1, ownDefs.length)},1fr)` });
+  const ownBar = el("div", { class: "seg", id: "own-tabs", role: "tablist", });
   const ownShow = (k) => { S.ownTab = k; ownDefs.forEach((d) => { d[3].hidden = d[0] !== k; }); [...ownBar.children].forEach((x) => x.setAttribute("aria-selected", String(x.dataset.k === k))); };
   ownDefs.forEach((d) => ownBar.append(el("button", { type: "button", role: "tab", id: "own-tab-" + d[0], "data-k": d[0], onclick: () => ownShow(d[0]) }, ({ reports: "🚩 ", catches: "🎣 ", anglers: "👥 ", charters: "🎖️ ", banned: "🚫 " }[d[0]] || "") + d[1])));
   paintBanned();
