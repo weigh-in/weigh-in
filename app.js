@@ -324,9 +324,17 @@ const BASEMAPS = [
     { maxZoom: 19, maxNativeZoom: 18, attribution: "Tiles &copy; Esri" }],
   ["street", "Streets", "https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}",
     { maxZoom: 19, attribution: "Tiles &copy; Esri, HERE, Garmin, OpenStreetMap contributors" }],
+  // Depth charts: the official NOAA nautical chart (depth numbers, contours, hazards) drawn over a plain water map. It covers the coast, bays and the Great Lakes, plus big lakes NOAA charts.
+  ["depth", "Depth", "https://server.arcgisonline.com/ArcGIS/rest/services/Ocean/World_Ocean_Base/MapServer/tile/{z}/{y}/{x}",
+    { maxZoom: 19, maxNativeZoom: 13, attribution: "Esri | NOAA charts", wms: "https://gis.charttools.noaa.gov/arcgis/rest/services/MCS/NOAAChartDisplay/MapServer/exts/MaritimeChartService/WMSServer" }],
 ];
 const mapStyle = () => BASEMAPS.find((b) => b[0] === getPref("mapstyle", "water")) || BASEMAPS[0];
-const baseLayer = (L, b) => L.tileLayer(b[2], b[3]);
+const baseLayer = (L, b) => {
+  const under = L.tileLayer(b[2], b[3]);
+  if (!b[3].wms || !L.tileLayer.wms) return under;
+  const chart = L.tileLayer.wms(b[3].wms, { layers: "1,2,3,6,11", format: "image/png", transparent: true, version: "1.3.0", maxZoom: 19, attribution: "NOAA" });
+  return L.layerGroup([under, chart]);
+};
 const US_STATES = [["AL","Alabama"],["AK","Alaska"],["AZ","Arizona"],["AR","Arkansas"],["CA","California"],["CO","Colorado"],["CT","Connecticut"],["DE","Delaware"],["DC","District of Columbia"],["FL","Florida"],["GA","Georgia"],["HI","Hawaii"],["ID","Idaho"],["IL","Illinois"],["IN","Indiana"],["IA","Iowa"],["KS","Kansas"],["KY","Kentucky"],["LA","Louisiana"],["ME","Maine"],["MD","Maryland"],["MA","Massachusetts"],["MI","Michigan"],["MN","Minnesota"],["MS","Mississippi"],["MO","Missouri"],["MT","Montana"],["NE","Nebraska"],["NV","Nevada"],["NH","New Hampshire"],["NJ","New Jersey"],["NM","New Mexico"],["NY","New York"],["NC","North Carolina"],["ND","North Dakota"],["OH","Ohio"],["OK","Oklahoma"],["OR","Oregon"],["PA","Pennsylvania"],["RI","Rhode Island"],["SC","South Carolina"],["SD","South Dakota"],["TN","Tennessee"],["TX","Texas"],["UT","Utah"],["VT","Vermont"],["VA","Virginia"],["WA","Washington"],["WV","West Virginia"],["WI","Wisconsin"],["WY","Wyoming"]];
 const US_BOUNDS = [[17, -180], [72, -64]];   // the map stays on the USA (including Alaska and Hawaii)
 const placeLabel = (x) => [x.city, x.state].filter(Boolean).join(", ");
@@ -1459,13 +1467,15 @@ function feedPosts() {
 /* What's new. Newest first. Add a new entry on top each time the app changes. */
 /* Bump APP_VERSION every time you change the app, and add a matching entry on top of UPDATES (with v: the same number).
    Phones check app.js every few minutes and offer the new version on their own. */
-const APP_VERSION = 114;
+const APP_VERSION = 116;
 // The number people see. APP_VERSION stays a plain counter so updates are detected. Big changes bump the first number (2.0), smaller ones the second (1.1, 1.2).
 const REL_NAMES = { 59: "1.0", 60: "1.0", 61: "1.1", 62: "1.2", 63: "1.2", 64: "1.2", 65: "1.2", 66: "1.2", 67: "1.2",
-  68: "1.3", 69: "1.3", 70: "1.3", 71: "1.4", 72: "1.4", 73: "1.5", 74: "1.5", 75: "1.5", 76: "1.5", 77: "1.8", 78: "1.8", 79: "1.9", 80: "1.9", 81: "2.0", 82: "2.0", 83: "1.19", 84: "1.20", 85: "1.21", 86: "1.22", 87: "1.23", 88: "1.24", 89: "1.25", 90: "1.26", 91: "1.27", 92: "1.28", 93: "1.29", 94: "1.30", 95: "1.31", 96: "1.32", 97: "1.33", 98: "1.34", 99: "1.35", 100: "1.36", 101: "1.37", 102: "1.38", 103: "1.39", 104: "1.40", 105: "1.41", 106: "1.42", 107: "1.43", 108: "1.44", 109: "1.45", 110: "1.46", 111: "1.47", 112: "1.48", 113: "1.49", 114: "1.50" };
+  68: "1.3", 69: "1.3", 70: "1.3", 71: "1.4", 72: "1.4", 73: "1.5", 74: "1.5", 75: "1.5", 76: "1.5", 77: "1.8", 78: "1.8", 79: "1.9", 80: "1.9", 81: "2.0", 82: "2.0", 83: "1.19", 84: "1.20", 85: "1.21", 86: "1.22", 87: "1.23", 88: "1.24", 89: "1.25", 90: "1.26", 91: "1.27", 92: "1.28", 93: "1.29", 94: "1.30", 95: "1.31", 96: "1.32", 97: "1.33", 98: "1.34", 99: "1.35", 100: "1.36", 101: "1.37", 102: "1.38", 103: "1.39", 104: "1.40", 105: "1.41", 106: "1.42", 107: "1.43", 108: "1.44", 109: "1.45", 110: "1.46", 111: "1.47", 112: "1.48", 113: "1.49", 114: "1.50", 115: "1.51", 116: "1.52" };
 const relName = (v) => REL_NAMES[v] || (v < 59 ? `0.${v}` : `1.${v - 59}`);
 try { if ((parseInt(localStorage.getItem("weighin-appv"), 10) || 0) < APP_VERSION) localStorage.setItem("weighin-appv", String(APP_VERSION)); } catch { /* private mode */ }
 const UPDATES = [
+  { id: "2026-11-29a", v: 116, date: "Nov 29", title: "Rules, depth and fish ID", items: ["Map tab: 📜 Fishing rules opens your state's own wildlife page.", "Map style: Depth shows ocean and lake depth charts where they exist (mostly the coast and big lakes).", "Post a catch: 🐟 What fish is this? guesses the fish from your photo. It's only a guess."]},
+  { id: "2026-11-28a", v: 115, date: "Nov 28", title: "Slideshow music", items: ["The Your year slideshow plays a soft piano and guitar tune. The 🔊 button at the top turns it off and on."]},
   { id: "2026-11-27b", v: 114, date: "Nov 27", title: "Profile tidy-up", items: [
     "Your picture shows whole, in a circle, in the Me banner.",
     "Trip planner moved to the Map tab. Your years moved into your profile.",
@@ -2416,10 +2426,24 @@ function playWrap(d, own) {
   const orbs = el("div", { class: "wr-orbs", "aria-hidden": "true" }, el("i", { class: "wr-orb", style: "left:-10%;top:8%;width:60vmin;height:60vmin;background:#6ec6ff" }), el("i", { class: "wr-orb", style: "right:-18%;top:42%;width:70vmin;height:70vmin;background:#ffd27a;animation-delay:-5s" }), el("i", { class: "wr-orb", style: "left:10%;bottom:-12%;width:55vmin;height:55vmin;background:#c79bff;animation-delay:-9s" }));
   const wave = el("div", { class: "wr-wave", "aria-hidden": "true", html: WR_WAVE + WR_WAVE });
   const closeBtn = el("button", { type: "button", id: "wrap-x", class: "wr-x", "aria-label": "Close", onclick: (e) => { e.stopPropagation(); close(); } }, "✕");
+  // Soft background music (an original tune). A button mutes it, and the choice is remembered.
+  let tune = null;
+  const musicBtn = el("button", { type: "button", id: "wrap-music", class: "wr-x", "aria-label": "Music", onclick: (e) => {
+    e.stopPropagation(); const on = getPref("wrapmusic", "1") !== "1"; setPref("wrapmusic", on ? "1" : "0"); paintMusic();
+    if (on) startTune(); else tune?.pause();
+  } });
+  const paintMusic = () => { const on = getPref("wrapmusic", "1") === "1"; musicBtn.textContent = on ? "🔊" : "🔇"; musicBtn.setAttribute("aria-pressed", String(on)); musicBtn.setAttribute("aria-label", on ? "Turn the music off" : "Turn the music on"); };
+  const startTune = async () => {
+    try {
+      if (!tune) { const m = await import("./slideshow-music.js?v=" + APP_VERSION); tune = new Audio(m.default); tune.loop = true; tune.volume = 0.5; }
+      if (ov.isConnected && getPref("wrapmusic", "1") === "1") await tune.play();
+    } catch { /* no music is fine: blocked autoplay or the file isn't uploaded yet */ }
+  };
+  paintMusic();
   const ov = el("div", { class: "wrap-ov wr", role: "dialog", "aria-label": `${yr} in fish` },
-    ...layers, orbs, wave, el("div", { class: "wr-top" }, bars, el("div", { class: "wr-topr" }, closeBtn)), stage,
+    ...layers, orbs, wave, el("div", { class: "wr-top" }, bars, el("div", { class: "wr-topr" }, musicBtn, closeBtn)), stage,
     el("div", { class: "wr-brand", "aria-hidden": "true" }, "🎣 Weigh-In"));
-  const close = () => { cancelAnimationFrame(raf); ov.remove(); };
+  const close = () => { cancelAnimationFrame(raf); try { tune?.pause(); } catch { /* ok */ } ov.remove(); };
   const show = (n) => {
     i = Math.max(0, Math.min(slides.length - 1, n)); elapsed = 0; last = 0;
     const sl = slides[i];
@@ -2459,7 +2483,7 @@ function playWrap(d, own) {
   };
   ov.addEventListener("pointerup", release); ov.addEventListener("pointercancel", () => { clearTimeout(holdT); held = false; ov.classList.remove("paused"); });
   ov.addEventListener("click", (e) => { if (e.target.closest("button")) return; if (swallow) { swallow = false; return; } e.clientX < innerWidth / 3 ? show(i - 1) : show(i + 1); });
-  document.body.append(ov); show(0); raf = requestAnimationFrame(tick);
+  document.body.append(ov); show(0); raf = requestAnimationFrame(tick); startTune();
   if (!own) { try { const seen = JSON.parse(getPref("fyseen", "[]") || "[]"); if (!seen.includes(rid)) setPref("fyseen", JSON.stringify([...seen, rid].slice(-40))); } catch { /* fine */ } }
 }
 // A picture of the year to send in a text or post anywhere (made on the phone, nothing is uploaded).
@@ -2931,6 +2955,20 @@ function catchCounts(t, p) {
 }
 let tick = null;
 let draftPhoto = "", draftLoc = null, draftSrc = "", draftWhere = "";   // draftSrc: "auto" (found from the typed name) or "manual" (GPS or picked)
+// Fish ID: sends the photo to /api/fishid (Cloudflare Workers AI). Stays "not turned on" until that is set up. It is only a best guess.
+async function askFishId(photo) {
+  const day = new Date().toISOString().slice(0, 10), k = "fishidn-" + day, n = parseInt(getPref(k, "0"), 10) || 0;
+  if (n >= 15) return { error: "limit" };
+  setPref(k, String(n + 1));
+  try {
+    const tok = await auth.currentUser.getIdToken();
+    const r = await fetch("/api/fishid", { method: "POST", headers: { Authorization: "Bearer " + tok, "Content-Type": "application/json" }, body: JSON.stringify({ image: photo }) });
+    const j = await r.json().catch(() => ({}));
+    if (r.status === 503 || j.error === "off") return { error: "off" };
+    if (!r.ok || !j.species) return { error: "fail" };
+    return j;
+  } catch { return { error: "fail" }; }
+}
 function viewPost(p) {
   const myLive = S.tournaments.filter((t) => tourStatus(t) === "live" && (t.members || []).includes(S.user.uid));
   let postMode = "feed";   // "feed", "log" or "both"
@@ -2951,9 +2989,19 @@ function viewPost(p) {
     e.target.value = "";
     paintPhoto();
   } });
+  const idOut = el("div", { id: "fid-out", class: "hint", style: "display:flex;flex-direction:column;gap:6px" });
+  const idBtn = el("button", { class: "btn ghost small", type: "button", id: "fid-btn", style: "align-self:flex-start", onclick: async () => {
+    idBtn.disabled = true; idOut.textContent = "Looking at your fish…";
+    const r = await askFishId(draftPhoto); idBtn.disabled = false; idOut.replaceChildren();
+    if (r.error === "off") idOut.textContent = "Fish ID isn't turned on yet. It's coming soon.";
+    else if (r.error === "limit") idOut.textContent = "That's enough guesses for today. Try again tomorrow.";
+    else if (r.error) idOut.textContent = "Couldn't tell this time. Try a clearer photo of the whole fish.";
+    else idOut.append(el("span", null, `Looks like: ${r.species}${r.confidence ? " (" + r.confidence + ")" : ""}. It's only a guess, so check it yourself.`),
+      el("button", { class: "btn small", type: "button", id: "fid-use", onclick: () => { const i = document.getElementById("f-species"); if (i) i.value = r.species; idOut.textContent = "Added."; } }, "Use this name"));
+  } }, "🐟 What fish is this?");
   function paintPhoto() {
     preview.replaceChildren(draftPhoto ? el("img", { src: draftPhoto, alt: "Your catch photo" }) : el("span", { class: "muted" }, "Tap to take or choose a photo"), fileInput);
-    removeBtn.hidden = !draftPhoto;
+    removeBtn.hidden = !draftPhoto; idBtn.hidden = !draftPhoto; if (!draftPhoto) idOut.replaceChildren();
   }
   paintPhoto();
   if (draftSrc === "auto") { draftLoc = null; draftSrc = ""; draftWhere = ""; }   // the typed name starts empty on a fresh form
@@ -3017,7 +3065,7 @@ function viewPost(p) {
     tourHint.textContent = (ph ? `Now: ${ph.name}${ph.where ? " at " + ph.where : ""}${ph.lure ? ". Lure rule: " + ph.lure + " only" : ""}.` : "This catch will count in this tournament.") + (tourSpecies(t).length ? ` Only ${tourSpeciesText(t)} counts.` : "");
   };
   const f = el("form", { novalidate: true, id: "post-form" },
-    el("div", { class: "field" }, el("span", null, "Photo"), preview, removeBtn,
+    el("div", { class: "field" }, el("span", null, "Photo"), preview, removeBtn, idBtn, idOut,
       el("span", { class: "hint" }, "Fishing photos only. Anything else gets removed and the account can be banned.")),
     vidField(() => { if (draftVid && !draftPhoto) { draftPhoto = draftVid.poster || ""; paintPhoto(); } }),
     el("label", { class: "field" }, el("span", null, "Fish type"),
@@ -4419,14 +4467,38 @@ function destroyMap() { mapToken++; if (S.map) { S.map.remove(); S.map = null; S
 const lureKey = (x) => String(x.lure || "").trim().toLowerCase().replace(/\s+/g, " ");
 const nameCase = (t) => t.charAt(0).toUpperCase() + t.slice(1);
 /* Spot saver and Spot finder live on the Map now. Each opens in a big sheet over the map. */
+/* ======================= fishing rules (links to each state's official site) ======================= */
+// Rules change every year and are different for each lake, so Weigh-In never copies them. It opens the state's own wildlife site.
+const STATE_SITES = { AL: "outdooralabama.com", AK: "adfg.alaska.gov", AZ: "azgfd.com", AR: "agfc.com", CA: "wildlife.ca.gov", CO: "cpw.state.co.us", CT: "portal.ct.gov/deep", DE: "dnrec.delaware.gov", DC: "doee.dc.gov", FL: "myfwc.com", GA: "georgiawildlife.com", HI: "dlnr.hawaii.gov", ID: "idfg.idaho.gov", IL: "dnr.illinois.gov", IN: "in.gov/dnr", IA: "iowadnr.gov", KS: "ksoutdoors.com", KY: "fw.ky.gov", LA: "wlf.louisiana.gov", ME: "maine.gov/ifw", MD: "dnr.maryland.gov", MA: "mass.gov", MI: "michigan.gov/dnr", MN: "dnr.state.mn.us", MS: "mdwfp.com", MO: "mdc.mo.gov", MT: "fwp.mt.gov", NE: "outdoornebraska.gov", NV: "ndow.org", NH: "wildlife.nh.gov", NJ: "dep.nj.gov/njfw", NM: "wildlife.dgf.nm.gov", NY: "dec.ny.gov", NC: "ncwildlife.org", ND: "gf.nd.gov", OH: "ohiodnr.gov", OK: "wildlifedepartment.com", OR: "myodfw.com", PA: "fishandboat.com", RI: "dem.ri.gov", SC: "dnr.sc.gov", SD: "gfp.sd.gov", TN: "tn.gov/twra", TX: "tpwd.texas.gov", UT: "wildlife.utah.gov", VT: "vtfishandwildlife.com", VA: "dwr.virginia.gov", WA: "wdfw.wa.gov", WV: "wvdnr.gov", WI: "dnr.wisconsin.gov", WY: "wgfd.wyo.gov" };
+function viewRules(p) {
+  const sel = el("select", { id: "ru-state", "aria-label": "State" }, el("option", { value: "" }, "Pick your state"), US_STATES.map(([c, n]) => el("option", { value: c }, n)));
+  const out = el("div", { class: "stack", id: "ru-out" });
+  const link = (id, label, href) => el("a", { class: "btn wide", id, href, target: "_blank", rel: "noopener noreferrer", style: "text-align:center;text-decoration:none" }, label);
+  const paint = () => {
+    const c = sel.value, nm = US_STATES.find(([k]) => k === c)?.[1] || ""; out.replaceChildren();
+    if (!c) return;
+    setPref("state", c);
+    const q = encodeURIComponent(`${nm} fishing regulations size limits bag limits license`);
+    out.append(
+      STATE_SITES[c] ? link("ru-site", `🏛️ Open the official ${nm} wildlife site`, "https://" + STATE_SITES[c]) : null,
+      link("ru-search", `🔎 Search ${nm} fishing rules`, "https://duckduckgo.com/?q=" + q),
+      link("ru-noaa", "🌊 Saltwater rules (NOAA state list)", "https://www.fisheries.noaa.gov/recreational-fishing/state-recreational-fishing-websites"),
+      el("p", { class: "hint", style: "margin:0" }, "Look for size limits, bag limits, seasons and the license you need. Rules can be different for each lake, river or stretch of coast."));
+  };
+  sel.value = getPref("state", ""); sel.onchange = paint;
+  p.append(el("p", { class: "muted", style: "margin:0" }, "Rules change every year and can be different for each lake. So Weigh-In sends you to your state's own page, which is always the real one. Always check before you fish."),
+    el("label", { class: "field" }, el("span", null, "Where you fish"), sel), out,
+    el("p", { class: "hint", style: "margin:0" }, "Kids can usually fish without a license, but the age is different in every state. Check yours."));
+  paint();
+}
 function openMapTool(kind) {
   document.querySelector("#map-tool")?.remove();
   const body = el("div", { class: "stack", style: "padding:4px 16px 24px" });
   const close = () => { bg.remove(); S.repaintTool = null; };
   const bg = el("div", { class: "sheet-bg", id: "map-tool", "data-kind": kind, onclick: (e) => { if (e.target === bg) close(); } },
-    el("div", { class: "sheet", role: "dialog", "aria-label": kind === "spots" ? "Spot saver" : kind === "trip" ? "Trip planner" : "Spot finder", style: "height:92%;overflow:auto" },
-      el("div", { class: "sheet-h" }, el("h2", null, kind === "spots" ? "📍 Spot saver" : kind === "trip" ? "🧳 Trip planner" : "🔍 Spot finder"), el("button", { class: "link", type: "button", id: "map-tool-x", onclick: close }, "Close")), body));
-  const paint = () => { body.replaceChildren(); return kind === "spots" ? viewSpots(body) : kind === "trip" ? viewTrip(body) : viewWater(body); };
+    el("div", { class: "sheet", role: "dialog", "aria-label": kind === "spots" ? "Spot saver" : kind === "trip" ? "Trip planner" : kind === "rules" ? "Fishing rules" : "Spot finder", style: "height:92%;overflow:auto" },
+      el("div", { class: "sheet-h" }, el("h2", null, kind === "spots" ? "📍 Spot saver" : kind === "trip" ? "🧳 Trip planner" : kind === "rules" ? "📜 Fishing rules" : "🔍 Spot finder"), el("button", { class: "link", type: "button", id: "map-tool-x", onclick: close }, "Close")), body));
+  const paint = () => { body.replaceChildren(); return kind === "spots" ? viewSpots(body) : kind === "trip" ? viewTrip(body) : kind === "rules" ? viewRules(body) : viewWater(body); };
   S.repaintTool = paint; document.body.append(bg); paint();
 }
 function renderMap() {
@@ -4467,7 +4539,8 @@ function renderMap() {
   const tools = el("div", { class: "map-tools" },
     el("button", { class: "btn small", type: "button", id: "map-spots", onclick: () => openMapTool("spots") }, "📍 Spot saver"),
     el("button", { class: "btn small", type: "button", id: "map-water", onclick: () => openMapTool("water") }, "🔍 Spot finder"),
-    el("button", { class: "btn small", type: "button", id: "map-trip", onclick: () => openMapTool("trip") }, "🧳 Trip planner"));
+    el("button", { class: "btn small", type: "button", id: "map-trip", onclick: () => openMapTool("trip") }, "🧳 Trip planner"),
+    el("button", { class: "btn small", type: "button", id: "map-rules", onclick: () => openMapTool("rules") }, "📜 Fishing rules"));
   // The switcher floats over the map itself, so it never sits on top of the filter bar.
   $screen.replaceChildren(bar, tools, el("div", { class: "map-wrap" }, box, styles), fab, note);
   const token = ++mapToken;
@@ -4483,7 +4556,7 @@ function renderMap() {
       const old = base;
       base = baseLayer(L, b).addTo(S.map);
       const drop = () => { if (old !== base) S.map.removeLayer(old); };
-      base.once("load", drop); setTimeout(drop, 2500);
+      if (base.once) base.once("load", drop); setTimeout(drop, 2500);
     };
     L.control.scale({ imperial: true, metric: false, position: "topleft" }).addTo(S.map);
     S.markers = (L.markerClusterGroup ? L.markerClusterGroup({ maxClusterRadius: 40, showCoverageOnHover: false,
