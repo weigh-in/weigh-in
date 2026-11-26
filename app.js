@@ -265,7 +265,7 @@ const S = {
   posts: [], tournaments: [], log: [], saved: [],
   myLikes: new Set(), lcount: new Map(), likeNMode: false,
   live: [], older: [], moreLeft: true, loadingMore: false, scrollTo: null,
-  reqIn: [], reqOut: [], friendships: [], unread: new Set(), chatOpen: null, recaps: [], charters: new Map(), offIn: [], offOut: [], tradeAll: [], tradeMine: [], tourReqs: [], joinIn: [], joinOut: [], inviteIn: [], inviteOut: [],
+  reqIn: [], reqOut: [], friendships: [], unread: new Set(), chatOpen: null, recaps: [], charters: new Map(), tutors: new Map(), offIn: [], offOut: [], tradeAll: [], tradeMine: [], tourReqs: [], joinIn: [], joinOut: [], inviteIn: [], inviteOut: [],
   openTournament: null, tourPosts: [], viewing: null, creatingTour: false,
   meView: "main", mine: [], spots: [], map: null, markers: null, likes: new Map(), mod: null,
 };
@@ -622,6 +622,10 @@ function startApp() {
   unsubs.push(onSnapshot(query(collection(db, "charters"), limit(200)), (sn) => {
     S.charters = new Map(sn.docs.map((d) => [d.id, { id: d.id, ...d.data({ serverTimestamps: "estimate" }) }]));
     if (S.tab === "feed") renderFeedCards();
+    if (document.querySelector("#tutor-list")) paintTutors();
+  }, () => {}));
+  unsubs.push(onSnapshot(query(collection(db, "tutorListings"), limit(200)), (sn) => {
+    S.tutors = new Map(sn.docs.map((d) => [d.id, { id: d.id, ...d.data({ serverTimestamps: "estimate" }) }]));
     if (document.querySelector("#tutor-list")) paintTutors();
   }, () => {}));
   unsubs.push(onSnapshot(query(collection(db, "warnings"), where("to", "==", uid)), (sn) => showWarnings(sn.docs.map((d) => ({ id: d.id, ...d.data({ serverTimestamps: "estimate" }) }))), () => {}));
@@ -1455,13 +1459,20 @@ function feedPosts() {
 /* What's new. Newest first. Add a new entry on top each time the app changes. */
 /* Bump APP_VERSION every time you change the app, and add a matching entry on top of UPDATES (with v: the same number).
    Phones check app.js every few minutes and offer the new version on their own. */
-const APP_VERSION = 112;
+const APP_VERSION = 113;
 // The number people see. APP_VERSION stays a plain counter so updates are detected. Big changes bump the first number (2.0), smaller ones the second (1.1, 1.2).
 const REL_NAMES = { 59: "1.0", 60: "1.0", 61: "1.1", 62: "1.2", 63: "1.2", 64: "1.2", 65: "1.2", 66: "1.2", 67: "1.2",
-  68: "1.3", 69: "1.3", 70: "1.3", 71: "1.4", 72: "1.4", 73: "1.5", 74: "1.5", 75: "1.5", 76: "1.5", 77: "1.8", 78: "1.8", 79: "1.9", 80: "1.9", 81: "2.0", 82: "2.0", 83: "1.19", 84: "1.20", 85: "1.21", 86: "1.22", 87: "1.23", 88: "1.24", 89: "1.25", 90: "1.26", 91: "1.27", 92: "1.28", 93: "1.29", 94: "1.30", 95: "1.31", 96: "1.32", 97: "1.33", 98: "1.34", 99: "1.35", 100: "1.36", 101: "1.37", 102: "1.38", 103: "1.39", 104: "1.40", 105: "1.41", 106: "1.42", 107: "1.43", 108: "1.44", 109: "1.45", 110: "1.46", 111: "1.47", 112: "1.48" };
+  68: "1.3", 69: "1.3", 70: "1.3", 71: "1.4", 72: "1.4", 73: "1.5", 74: "1.5", 75: "1.5", 76: "1.5", 77: "1.8", 78: "1.8", 79: "1.9", 80: "1.9", 81: "2.0", 82: "2.0", 83: "1.19", 84: "1.20", 85: "1.21", 86: "1.22", 87: "1.23", 88: "1.24", 89: "1.25", 90: "1.26", 91: "1.27", 92: "1.28", 93: "1.29", 94: "1.30", 95: "1.31", 96: "1.32", 97: "1.33", 98: "1.34", 99: "1.35", 100: "1.36", 101: "1.37", 102: "1.38", 103: "1.39", 104: "1.40", 105: "1.41", 106: "1.42", 107: "1.43", 108: "1.44", 109: "1.45", 110: "1.46", 111: "1.47", 112: "1.48", 113: "1.49" };
 const relName = (v) => REL_NAMES[v] || (v < 59 ? `0.${v}` : `1.${v - 59}`);
 try { if ((parseInt(localStorage.getItem("weighin-appv"), 10) || 0) < APP_VERSION) localStorage.setItem("weighin-appv", String(APP_VERSION)); } catch { /* private mode */ }
 const UPDATES = [
+  { id: "2026-11-27a", v: 113, date: "Nov 27", title: "New Me page, round Post button, water type", items: [
+    "Me has a new top: your picture fills the whole banner with your name on it. Tap it to open your profile.",
+    "Updates, Chat, Fishing school, Fishing game and Trip planner are slim bars now. Settings moved to the bottom of your profile.",
+    "The Post button is a round bobber that pokes up over the feed.",
+    "When you post, pick Post to feed, Log only or Both. Your fishing log is a link on the post page.",
+    "New in your profile: pick Freshwater, Saltwater or Both, and your favorite fish. The fish list, the map and your post form show only that water. The fish list is in A to Z order.",
+    "Charters can add a Tutor listing: where they teach, how much (cash only) and how long a lesson is."]},
   { id: "2026-11-26a", v: 112, date: "Nov 26", title: "Map tools, nudges and game sounds", items: [
     "Spot saver and Spot finder moved to the Map. Tap the buttons above the map.",
     "If notifications are off, Weigh-In now asks you once in a while to turn them on. You can say Not now or Don't ask again.",
@@ -2776,7 +2787,7 @@ function viewOwner(p) {
   const ownSecs = ownDefs.map((d) => d[3]);
   const ownBar = el("div", { class: "seg", id: "own-tabs", role: "tablist", style: `grid-template-columns:repeat(${Math.max(1, ownDefs.length)},1fr)` });
   const ownShow = (k) => { S.ownTab = k; ownDefs.forEach((d) => { d[3].hidden = d[0] !== k; }); [...ownBar.children].forEach((x) => x.setAttribute("aria-selected", String(x.dataset.k === k))); };
-  ownDefs.forEach((d) => ownBar.append(el("button", { type: "button", role: "tab", id: "own-tab-" + d[0], "data-k": d[0], onclick: () => ownShow(d[0]) }, d[1])));
+  ownDefs.forEach((d) => ownBar.append(el("button", { type: "button", role: "tab", id: "own-tab-" + d[0], "data-k": d[0], onclick: () => ownShow(d[0]) }, ({ reports: "🚩 ", catches: "🎣 ", anglers: "👥 ", charters: "🎖️ ", banned: "🚫 " }[d[0]] || "") + d[1])));
   paintBanned();
   p.append(backBtn("‹ Profile"), el("h1", null, S.owner ? "Owner tools" : "Moderator tools"),
     el("label", { class: "row", style: "gap:12px;flex-wrap:nowrap;padding:12px 14px;border:2px solid var(--line, #c9d6de);border-radius:12px" }, editBox,
@@ -2916,6 +2927,14 @@ let tick = null;
 let draftPhoto = "", draftLoc = null, draftSrc = "", draftWhere = "";   // draftSrc: "auto" (found from the typed name) or "manual" (GPS or picked)
 function viewPost(p) {
   const myLive = S.tournaments.filter((t) => tourStatus(t) === "live" && (t.members || []).includes(S.user.uid));
+  let postMode = "feed";   // "feed", "log" or "both"
+  const postLabel = () => postMode === "log" ? "Save to my log" : postMode === "both" ? "Post and log" : "Post catch";
+  const modeRow = el("div", { class: "chips post-mode", role: "group", "aria-label": "Where this catch goes" });
+  const paintMode = () => {
+    modeRow.replaceChildren(...[["feed", "📣 Post to feed"], ["log", "📓 Log only"], ["both", "Both"]].map(([k, n]) => el("button", { class: "chip", type: "button", "data-mode": k, "aria-pressed": String(postMode === k), onclick: () => { postMode = k; paintMode(); } }, n)));
+    const sb = document.querySelector("#post-form button[type=submit]"); if (sb) sb.textContent = postLabel();
+  };
+  paintMode();
   const preview = el("div", { class: "photo-pick" });
   const removeBtn = el("button", { class: "link", type: "button", style: "align-self:flex-start", onclick: () => { draftPhoto = ""; paintPhoto(); } }, "Remove photo");
   const fileInput = el("input", { type: "file", accept: "image/*", id: "f-photo", "aria-label": "Catch photo", onchange: async (e) => {
@@ -2991,12 +3010,13 @@ function viewPost(p) {
     if (t.manual && !ph) { tourHint.textContent = "The organizer hasn't started a section right now, so a catch posted now won't count in this tournament."; return; }
     tourHint.textContent = (ph ? `Now: ${ph.name}${ph.where ? " at " + ph.where : ""}${ph.lure ? ". Lure rule: " + ph.lure + " only" : ""}.` : "This catch will count in this tournament.") + (tourSpecies(t).length ? ` Only ${tourSpeciesText(t)} counts.` : "");
   };
-  const f = el("form", { novalidate: true },
+  const f = el("form", { novalidate: true, id: "post-form" },
     el("div", { class: "field" }, el("span", null, "Photo"), preview, removeBtn,
       el("span", { class: "hint" }, "Fishing photos only. Anything else gets removed and the account can be banned.")),
     vidField(() => { if (draftVid && !draftPhoto) { draftPhoto = draftVid.poster || ""; paintPhoto(); } }),
     el("label", { class: "field" }, el("span", null, "Fish type"),
-      el("input", { id: "f-species", name: "species", list: "species", maxlength: 40, placeholder: "Largemouth Bass", autocomplete: "off", required: true })),
+      el("input", { id: "f-species", name: "species", list: "species-w", maxlength: 40, placeholder: getPref("target", "") || "Largemouth Bass", value: getPref("target", ""), autocomplete: "off", required: true }),
+      el("datalist", { id: "species-w" }, fishFor().map((n) => el("option", { value: n })))),
     el("div", { class: "two" },
       el("label", { class: "field" }, el("span", null, "Weight (lb)"), el("input", { id: "f-lb", name: "lb", type: "number", inputmode: "decimal", min: 0, max: 500, step: 0.01, placeholder: "4.5" })),
       el("label", { class: "field" }, el("span", null, "Length (in)"), el("input", { id: "f-in", name: "inches", type: "number", inputmode: "decimal", min: 0, max: 200, step: 0.25, placeholder: "18.5" }))),
@@ -3017,18 +3037,31 @@ function viewPost(p) {
       el("select", { id: "f-tour", name: "tour", onchange: (e) => paintTourHint(e.target.value) }, el("option", { value: "" }, "No tournament"),
         myLive.map((t) => el("option", { value: t.id }, t.name))),
       tourHint),
-    el("button", { class: "btn wide", type: "submit" }, "Post catch"));
+    el("div", { class: "field" }, modeRow,
+      el("button", { class: "link", type: "button", id: "f-openlog", style: "align-self:flex-start", onclick: () => { go("me"); S.meView = "log"; renderTab(); } }, "📓 Open my fishing log ›")),
+    el("button", { class: "btn wide", type: "submit" }, postLabel()));
   f.addEventListener("submit", async (e) => {
     e.preventDefault();
     const fd = new FormData(f);
     const species = String(fd.get("species") || "").trim();
     const lb = parseFloat(fd.get("lb")) || 0, inches = parseFloat(fd.get("inches")) || 0;
     if (!species) { toast("Enter what kind of fish it is."); return; }
-    if (!draftPhoto) { toast("Add a photo of your fish. Fishing photos only."); return; }
+    if (!draftPhoto && postMode !== "log") { toast("Add a photo of your fish. Fishing photos only."); return; }
     if (isBad(species, fd.get("lure"), fd.get("spot"), fd.get("city"))) { toast(NO_SLURS); return; }
-    if (!lb && !inches) { toast("Add a weight or a length."); return; }
+    if (!lb && !inches && postMode !== "log") { toast("Add a weight or a length."); return; }
     const dateStr = String(fd.get("date") || localDate(new Date()));
     if (!/^\d{4}-\d{2}-\d{2}$/.test(dateStr) || dateStr > localDate(new Date())) { toast("Pick a date that isn't in the future."); return; }
+    const logIt = async () => {
+      const place = [String(fd.get("spot") || "").trim(), String(fd.get("city") || "").trim()].filter(Boolean).join(", ");
+      const size = [lb ? lb + " lb" : "", inches ? inches + " in" : ""].filter(Boolean).join(", "), lureT = String(fd.get("lure") || "").trim();
+      const notes = `${species}${size ? ", " + size : ""}${lureT ? " on " + lureT : ""}`;
+      await addDoc(collection(db, "users", S.user.uid, "log"), { date: dateStr, count: 1, place: place.slice(0, 60), weather: "", notes: notes.slice(0, 1000), createdAt: serverTimestamp() });
+    };
+    if (postMode === "log") {
+      try { await logIt(); toast("Saved to your private fishing log."); draftPhoto = ""; draftVid = null; draftLoc = null; draftSrc = ""; draftWhere = ""; go("me"); S.meView = "log"; renderTab(); }
+      catch (err) { toast(errText(err)); }
+      return;
+    }
     const tid = dateStr === localDate(new Date()) ? String(fd.get("tour") || "") : "";
     const t = S.tournaments.find((x) => x.id === tid);
     const phaseIdx = t ? phaseAt(t) : -1, rule = t ? phasesOf(t)[phaseIdx] : null;
@@ -3064,7 +3097,7 @@ function viewPost(p) {
       if (draftVid) {
         btn.textContent = "Saving video…";
         try { const n = await vidSave(ref.id, S.user.uid, draftVid); vinfo = { n, mime: draftVid.mime.split(";")[0], dur: Math.round(draftVid.dur * 10) / 10 }; }
-        catch (err) { vidDelete(ref.id, 8); toast("Couldn't save the video: " + errText(err)); btn.disabled = false; btn.textContent = "Post catch"; return; }
+        catch (err) { vidDelete(ref.id, 8); toast("Couldn't save the video: " + errText(err)); btn.disabled = false; btn.textContent = postLabel(); return; }
         btn.textContent = "Posting…";
       }
       btn.textContent = "Saving photo…";
@@ -3092,10 +3125,11 @@ function viewPost(p) {
         } catch { pinFailed = true; }
       }
       draftPhoto = ""; draftVid = null; draftLoc = null; draftSrc = ""; draftWhere = "";
+      if (postMode === "both") { try { await logIt(); } catch { /* the post is already up */ } }
       notifyFriends("post", { species });
       if (pb) celebrate(species, sizeText({ lb, inches })); else toast(pinFailed ? `Posted your ${species}, but the map pin didn't save.` : pin ? `Posted your ${species} and put it on the map!` : `Posted your ${species}!`);
       go("feed");
-    } catch (err) { toast(errText(err)); btn.disabled = false; btn.textContent = "Post catch"; }
+    } catch (err) { toast(errText(err)); btn.disabled = false; btn.textContent = postLabel(); }
   });
   p.append(el("h1", null, "Post a catch"), f);
 }
@@ -4411,7 +4445,7 @@ function renderMap() {
   } }, "📍");
   function paintBar() {
     const valid = S.spots.filter((x) => typeof x.lat === "number");
-    const species = [...new Set(valid.map((x) => String(x.species).trim()))].sort();
+    const species = [...new Set(valid.map((x) => String(x.species).trim()).filter(waterOk))].sort();
     const lures = new Map(); valid.forEach((x) => { const k = lureKey(x); if (k) lures.set(k, nameCase(k)); });
     if (f.species && !species.includes(f.species)) f.species = "";
     if (f.lure && !lures.has(f.lure)) f.lure = "";
@@ -4501,7 +4535,7 @@ function drawSpots(fit) {
   if (!L || !S.map || !S.markers) return;
   S.markers.clearLayers();
   const shown = S.spots.filter((x) => typeof x.lat === "number" && typeof x.lng === "number"
-    && (!f.species || String(x.species).trim() === f.species) && (!f.lure || lureKey(x) === f.lure) && (!f.mine || x.uid === S.user.uid));
+    && waterOk(x.species) && (!f.species || String(x.species).trim() === f.species) && (!f.lure || lureKey(x) === f.lure) && (!f.mine || x.uid === S.user.uid));
   const pts = [];
   for (const sp of shown) {
     pts.push([sp.lat, sp.lng]);
@@ -5320,14 +5354,49 @@ function openCharterTest(onDone, opts = {}) {   // opts.direct: skip the test (t
 function paintTutors(given) {
   const box = given || document.querySelector("#tutor-list"); if (!box) return;
   const rows = [...S.charters.values()].sort((a, b) => String(a.name).localeCompare(String(b.name)));
-  box.replaceChildren(...(rows.length ? rows.map((c) => el("div", { class: "item", style: "cursor:default;flex-wrap:wrap", "data-tutor": c.id },
-    el("span", { class: "row", style: "gap:8px;flex-wrap:nowrap;min-width:0" }, avatar(c.id, c.name, 36), el("span", { class: "stack", style: "gap:0;min-width:0" }, el("span", { class: "t" }, "@" + c.name), el("span", { class: "s" }, "🎖️ Charter"))),
-    el("button", { class: "btn ghost small", type: "button", onclick: () => openAngler(c.id, c.name) }, "See profile"))) : [el("p", { class: "empty" }, "No Charters yet. Be the first: take the Charter test in your profile.")]));
+  box.replaceChildren(...(rows.length ? rows.map((c) => {
+    const t = S.tutors.get(c.id), mine = c.id === S.user.uid;
+    return el("div", { class: "item", style: "cursor:default;flex-wrap:wrap;gap:8px", "data-tutor": c.id },
+      el("span", { class: "row", style: "gap:8px;flex-wrap:nowrap;min-width:0;flex:1" }, avatar(c.id, c.name, 36), el("span", { class: "stack", style: "gap:0;min-width:0" }, el("span", { class: "t" }, "@" + c.name), el("span", { class: "s" }, "🎖️ Charter"))),
+      el("button", { class: "btn ghost small", type: "button", onclick: () => openAngler(c.id, c.name) }, "See profile"),
+      t ? el("div", { class: "tutor-info", style: "width:100%;display:grid;gap:3px" },
+        el("span", null, "📍 ", el("b", null, t.where || "")), el("span", null, "💵 ", el("b", null, t.price || ""), " · cash only"), el("span", null, "⏱️ ", el("b", null, t.length || "")),
+        t.about ? el("span", { class: "muted" }, t.about) : null) : el("span", { class: "hint", style: "width:100%" }, mine ? "You haven't added your listing yet." : "No details yet."),
+      mine ? el("button", { class: "btn small", type: "button", id: "tutor-edit", style: "width:100%", onclick: () => openTutorForm(t) }, t ? "✏️ Edit my listing" : "➕ Add my listing") : null);
+  }) : [el("p", { class: "empty" }, "No Charters yet. Be the first: take the Charter test in your profile.")]));
+}
+// A Charter says where they teach, what it costs and how long a lesson is. Cash only, and the safety note stays on the page.
+function openTutorForm(t) {
+  const close = () => bg.remove();
+  const f = (id, label, ph, max, val) => el("label", { class: "field" }, el("span", null, label), el("input", { id, maxlength: max, placeholder: ph, value: val || "" }));
+  const about = el("textarea", { id: "tf-about", maxlength: 300, placeholder: "What you can teach, like casting, knots or reading the water" }, t?.about || "");
+  const bg = el("div", { class: "sheet-bg", onclick: (e) => { if (e.target === bg) close(); } },
+    el("div", { class: "sheet", role: "dialog", "aria-label": "My tutor listing", style: "height:auto;max-height:94%" },
+      el("div", { class: "sheet-h" }, el("h2", null, "🎖️ My listing"), el("button", { class: "link", type: "button", onclick: close }, "Close")),
+      el("div", { class: "stack", style: "padding:16px;overflow:auto" },
+        f("tf-where", "Where", "Public fishing dock at Lake Creve Coeur", 80, t?.where),
+        f("tf-price", "How much (cash only)", "$20 per lesson", 40, t?.price),
+        f("tf-len", "How long", "1 hour", 40, t?.length),
+        el("label", { class: "field" }, el("span", null, "About (optional)"), about),
+        el("p", { class: "hint", style: "margin:0" }, "Always tell a parent or guardian, and meet in a public place with an adult you trust. Weigh-In never handles money."),
+        el("button", { class: "btn wide", type: "button", id: "tf-save", onclick: async (e) => {
+          const v = (id) => document.getElementById(id).value.replace(/\s+/g, " ").trim();
+          const where = v("tf-where"), price = v("tf-price"), length = v("tf-len"), ab = about.value.replace(/\s+/g, " ").trim();
+          if (!where || !price || !length) { toast("Fill in where, how much and how long."); return; }
+          if (isBad(where, price, length, ab)) { toast(NO_SLURS); return; }
+          e.currentTarget.disabled = true;
+          try {
+            await setDoc(doc(db, "tutorListings", S.user.uid), { uid: S.user.uid, where, price, length, ...(ab ? { about: ab } : {}), updatedAt: serverTimestamp() });
+            toast("Listing saved."); close();
+          } catch (err) { e.currentTarget.disabled = false; toast(errText(err)); }
+        } }, "Save listing"),
+        t ? el("button", { class: "link danger small", type: "button", style: "align-self:center", onclick: async () => { try { await deleteDoc(doc(db, "tutorListings", S.user.uid)); toast("Listing removed."); close(); } catch (err) { toast(errText(err)); } } }, "Remove my listing") : null)));
+  document.body.append(bg);
 }
 function schTutor(p) {
   const list = el("div", { class: "list", id: "tutor-list" });
   p.append(el("h1", null, "🎖️ Tutor"),
-    el("p", { class: "muted", style: "margin:0" }, "Tutors are Charters: anglers the owner picked after a really hard test. They can teach you more about fishing."),
+    el("p", { class: "muted", style: "margin:0" }, "Tutors are Charters: anglers the owner picked after a really hard test. They list where they teach, what it costs and how long a lesson is."),
     el("div", { class: "card-note", id: "tutor-pay", style: "padding:12px 14px;border:2px solid var(--line, #c9d6de);border-radius:12px" },
       el("b", null, "💵 Payment: cash only"), el("p", { class: "hint", style: "margin:4px 0 0" }, "Pay your tutor in cash. Weigh-In never handles money.")),
     el("p", { class: "hint", style: "margin:0" }, "Safety first: always tell a parent or guardian, and never meet anyone alone. Meet in a public place with an adult you trust."),
@@ -5623,28 +5692,24 @@ function viewMe(p) {
   const pins = S.spots.filter((s) => s.uid === S.user.uid).length;
   const open = (v) => () => { S.meView = v; renderTab(); };
   p.classList.add("me-home");   // tighter spacing, so the whole profile fits without scrolling
-  const card = (id, icon, title, hint, fn, hot) => el("button", { class: "me-tile", type: "button", id, onclick: fn },
-    el("span", { class: "me-tile-i", "aria-hidden": "true" }, icon),
-    el("b", { class: "me-tile-t" }, title),
-    el("span", { class: "me-tile-h" }, hint),
-    hot ? el("span", { class: "pill live" }, "New") : null);
-  const iconTile = (id, emoji, label, aria, dot, fn) => el("button", { class: "icon-tile", type: "button", id, "aria-label": aria || label, onclick: fn },
-    el("span", { class: "icon-tile-e", "aria-hidden": "true" }, emoji), el("span", { class: "icon-tile-t" }, label),
-    dot ? el("span", { class: "dot" }) : null);
-  p.append(
-    el("button", { class: "me-hero", type: "button", id: "me-head", "aria-label": "Open your profile", onclick: open("profile") },
-      el("span", { class: "me-hero-av", id: "me-profile" }, avatar(S.user.uid, S.name, 116)),
+  // A slim bar for each thing you can open: icon on the left, name and a small line, an arrow on the right.
+  const bar = (id, icon, title, hint, fn, dot, cls) => el("button", { class: "me-bar" + (cls ? " " + cls : ""), type: "button", id, onclick: fn },
+    el("span", { class: "me-bar-i", "aria-hidden": "true" }, icon),
+    el("span", { class: "me-bar-t" }, el("b", null, title), el("span", null, hint)),
+    dot ? el("span", { class: "dot" }) : null,
+    el("span", { class: "me-bar-go", "aria-hidden": "true" }, "›"));
+  const hero = el("button", { class: "me-hero", type: "button", id: "me-head", "aria-label": "Open your profile", onclick: open("profile"),
+    style: `background-color:hsl(${hue(S.name || S.user.uid)} 45% 36%)` },
+    el("span", { class: "me-hero-letter", "aria-hidden": "true" }, (S.name || "?")[0].toUpperCase()),
+    el("span", { class: "me-hero-txt" },
       el("h1", { class: "me-hero-name", id: "me-profile-name" }, "@" + S.name),
-      el("span", { class: "me-hero-sub" }, "View and edit your profile ›")),
-    // The round emoji buttons said nothing about what they did, so each is now a tile with its name under it.
-    el("div", { class: "icon-row", id: "me-icons" }, ...[
-      iconTile("me-new", "\u{1F514}", "Updates", unseenUpdate() ? "Release notes, new" : "Release notes", unseenUpdate(), () => openWhatsNew(renderTab)),
-      iconTile("me-settings", "\u2699\uFE0F", "Settings", "Settings", false, open("settings")),
-      yearsList().ys.length ? iconTile("me-yearsbtn", "\u{1F39E}\uFE0F", "Years", "Your years", false, openYears) : null,
-      iconTile("me-friends", "\u{1F4AC}", "Chat", S.reqIn.length + S.unread.size ? `Friends and chat, ${S.reqIn.length + S.unread.size} new` : "Friends and chat", !!(S.reqIn.length + S.unread.size), open("friends")),
-      iconTile("me-log", "\u{1F4D3}", "Log", "Fishing log", false, open("log")),
-      iconTile("me-trip", "\u{1F9F3}", "Trip", "Trip planner", false, open("trip")),
-    ].filter(Boolean)),
+      isCharter(S.user.uid) ? el("span", { class: "me-hero-sub" }, "🎖️ Charter") : null,
+      el("span", { class: "me-hero-sub", id: "me-profile" }, "View and edit profile ›")));
+  getUser(S.user.uid).then((u) => { if (u?.photo) { hero.style.backgroundImage = `url("${u.photo}")`; hero.classList.add("has-photo"); } });
+  const unread = S.reqIn.length + S.unread.size;
+  const sr = schRank(sch().xp);
+  p.append(
+    hero,
     el("div", { class: "stats four" },
       el("div", null, el("b", null, String(mine.length)), el("span", null, "Catches")),
       el("div", null, el("b", null, String(mine.reduce((n, x) => n + likeCount(x), 0))), el("span", null, "Likes")),
@@ -5653,12 +5718,17 @@ function viewMe(p) {
     isInstalled()
       ? el("button", { class: "btn wide share-btn", type: "button", id: "me-share", onclick: shareApp }, "📤 Share Weigh-In with friends")
       : el("div", { class: "share-row" },
-          el("button", { class: "btn share-btn", type: "button", id: "me-share", onclick: shareApp }, "📤 Share Weigh-In with friends"),
+          el("button", { class: "btn share-btn", type: "button", id: "me-share", onclick: shareApp }, "📤 Share Weigh-In"),
           el("button", { class: "btn share-btn", type: "button", id: "me-install", onclick: installApp }, "📲 Download the app")),
-    el("div", { class: "me-grid" },
-    (() => { const r = schRank(sch().xp); return card("me-school", r.icon, "Fishing school", `${r.title} · ${sch().xp} XP`, () => { S.sch = { v: "home" }; S.meView = "school"; renderTab(); }); })(),
-    card("me-game", "🎣", "Fishing game", `Level ${fcLevel()} · 🪙 ${fcCoins()}`, openFishGame),
-    wrapSeason() ? card("me-wrap", "🎞️", "Your year", `${wrapYear()} recap`, () => openWrapped(wrapYear())) : null),
+    el("div", { class: "me-bars" },
+      isStaff() ? bar("me-owner-top", "🛠️", S.owner ? "Owner tools" : "Moderator tools", S.editMode ? "Edit mode is ON" : "Reports, anglers, Charters and bans", open("owner"), false, "owner-bar") : null,
+      bar("me-new", "🔔", "Updates", unseenUpdate() ? "New release notes" : "Release notes", () => openWhatsNew(renderTab), unseenUpdate()),
+      bar("me-friends", "💬", "Chat", unread ? `${unread} new` : "Friends and messages", open("friends"), !!unread),
+      bar("me-school", sr.icon, "Fishing school", `${sr.title} · ${sch().xp} XP`, () => { S.sch = { v: "home" }; S.meView = "school"; renderTab(); }),
+      bar("me-game", "🎣", "Fishing game", `Level ${fcLevel()} · 🪙 ${fcCoins()}`, openFishGame),
+      bar("me-trip", "🧳", "Trip planner", "Food, rooms and tackle nearby", open("trip")),
+      yearsList().ys.length ? bar("me-yearsbtn", "🎞️", "Your years", "Look back at past years", openYears) : null,
+      wrapSeason() ? bar("me-wrap", "🎞️", "Your year", `${wrapYear()} recap`, () => openWrapped(wrapYear())) : null)
   );
 }
 // ---- Trip planner: pick a place and how many people. Finds food, lodging and tackle shops nearby, suggests lures, and splits the cost. ----
@@ -5820,8 +5890,8 @@ function viewProfile(p) {
       })(),
       el("button", { class: "item", type: "button", id: "me-name", onclick: () => openNameSheet(renderTab) }, el("span", { class: "t" }, "✏️ Change name"), el("span", { class: "label" }, "@" + S.name))),
     el("h2", null, "My catches"));
-  if (!mine.length) { p.append(el("p", { class: "empty" }, "You haven't posted a catch yet. Tap the red Post button.")); return; }
-  p.append(el("div", { class: "list" }, mine.map((c) => el("div", { class: "item", style: "cursor:default" },
+  if (!mine.length) p.append(el("p", { class: "empty" }, "You haven't posted a catch yet. Tap the red Post button."));
+  else p.append(el("div", { class: "list" }, mine.map((c) => el("div", { class: "item", style: "cursor:default" },
     el("div", { class: "row", style: "gap:12px;flex-wrap:nowrap;min-width:0" },
       c.photo ? el("img", { src: c.photo, alt: "", style: "width:56px;height:56px;object-fit:cover;border-radius:8px;flex:none" }) : null,
       el("div", { class: "stack", style: "gap:2px;min-width:0" }, el("span", { class: "t" }, `${c.species}, ${sizeText(c)}`),
@@ -5829,6 +5899,7 @@ function viewProfile(p) {
     el("div", { class: "row", style: "gap:10px;flex:none" },
       c.photo ? el("button", { class: "link small", type: "button", "data-swap-photo": c.id, onclick: () => swapPhoto(c) }, "📷 Photo") : null,
       el("button", { class: "link danger small", type: "button", onclick: () => deletePost(c) }, "Delete"))))));
+  viewSettings(p, true);   // settings live at the bottom of your profile now
 }
 
 async function deleteMyAccount() {
@@ -5861,36 +5932,74 @@ async function deleteMyAccount() {
     location.reload();
   } catch (e) { toast(e?.code === "auth/requires-recent-login" ? "Sign out and sign back in, then try again." : errText(e)); }
 }
-function viewSettings(p) {
+/* ======================= water type and the fish list ======================= */
+// Pick saltwater, freshwater or both once, then the fish list, the map and your post form only show what fits. f = freshwater, s = saltwater, b = both.
+const FISH = [
+["Alligator Gar","f"],["American Shad","b"],["Atlantic Salmon","b"],["Black Drum","s"],["Black Sea Bass","s"],["Blue Catfish","f"],["Blue Marlin","s"],["Bluefin Tuna","s"],["Bluefish","s"],["Bluegill","f"],
+["Bonefish","s"],["Bowfin","f"],["Brook Trout","f"],["Brown Trout","f"],["Bullhead Catfish","f"],["Cobia","s"],["Common Carp","f"],["Crappie","f"],["Cutthroat Trout","f"],["Dolphinfish (Mahi-Mahi)","s"],
+["Flathead Catfish","f"],["Flounder","s"],["Freshwater Drum","f"],["Gar","f"],["Grass Carp","f"],["Grouper","s"],["Halibut","s"],["Hybrid Striped Bass","f"],["Kingfish (King Mackerel)","s"],["Lake Trout","f"],
+["Largemouth Bass","f"],["Lingcod","s"],["Mangrove Snapper","s"],["Muskie","f"],["Northern Pike","f"],["Paddlefish","f"],["Perch","f"],["Permit","s"],["Pickerel","f"],["Pompano","s"],
+["Rainbow Trout","f"],["Red Snapper","s"],["Redear Sunfish","f"],["Redfish (Red Drum)","s"],["Rock Bass","f"],["Rockfish","s"],["Sailfish","s"],["Sauger","f"],["Sheepshead","s"],["Smallmouth Bass","f"],
+["Snook","s"],["Spanish Mackerel","s"],["Speckled Trout","s"],["Spotted Bass","f"],["Steelhead","b"],["Striped Bass","b"],["Sturgeon","b"],["Swordfish","s"],["Tarpon","s"],["Tautog","s"],
+["Tilapia","f"],["Tripletail","s"],["Wahoo","s"],["Walleye","f"],["Warmouth","f"],["White Bass","f"],["White Perch","f"],["Yellow Perch","f"],["Yellowfin Tuna","s"],["Yellowtail","s"],
+["Chinook Salmon","b"],["Coho Salmon","b"],["Sockeye Salmon","b"],["Pink Salmon","b"],["Dolly Varden","f"],["Arctic Grayling","f"],["Whitefish","f"],["Sea Trout","s"],["Weakfish","s"],["Whiting","s"],["Spot","s"],["Croaker","s"],["Mullet","s"],["Barracuda","s"],["Amberjack","s"],["Jack Crevalle","s"],["Triggerfish","s"],["Scup (Porgy)","s"],["Striped Mullet","s"],["Shark","s"],["Skate","s"],["Stingray","s"],["Cod","s"],["Haddock","s"],["Pollock","s"],["Hogfish","s"],["Ladyfish","s"],["Lane Snapper","s"],["Vermilion Snapper","s"],["Albacore","s"],["Bonito","s"],["Blue Runner","s"],["Spearfish","s"],
+].sort((a, b) => a[0].localeCompare(b[0]));
+const FISH_W = new Map(FISH.map(([n, w]) => [n.toLowerCase(), w]));
+const waterPref = () => { const w = getPref("water", "both"); return w === "salt" || w === "fresh" ? w : "both"; };
+// Does this fish fit what you fish for? A fish we don't know about always shows.
+function waterOk(name) {
+  const w = waterPref(); if (w === "both") return true;
+  const k = String(name || "").trim().toLowerCase();
+  let t = FISH_W.get(k);
+  if (!t) { for (const [n, v] of FISH_W) { if (k && (n.startsWith(k) || k.startsWith(n.split(" (")[0]))) { t = v; break; } } }
+  return !t || t === "b" || (w === "salt" ? t === "s" : t === "f");
+}
+const fishFor = () => FISH.filter(([n]) => waterOk(n)).map(([n]) => n);
+function viewSettings(p, inline) {
   const prec = el("select", { id: "s-prec", onchange: () => setPref("prec", prec.value) },
     el("option", { value: "approx" }, "Approximate area (about 1 km)"), el("option", { value: "exact" }, "Exact spot"));
   prec.value = getPref("prec", "approx");
-  p.append(backBtn("‹ Me"), el("h1", null, "Settings"),
-    isStaff() ? el("section", { class: "stack" }, el("h2", null, S.owner ? "Owner" : "Moderator"),
-      el("button", { class: "item", type: "button", id: "me-owner", onclick: () => { S.meView = "owner"; renderTab(); } }, el("span", { class: "t" }, S.owner ? "Owner tools" : "Moderator tools"), el("span", { class: "label" }, S.editMode ? "Edit mode ON" : "›"))) : null,
-    el("section", { class: "stack", id: "s-theme" }, el("h2", null, "Appearance"),
+  p.append(...(inline ? [el("h2", { id: "s-head" }, "Settings")] : [backBtn("‹ Me"), el("h1", null, "Settings")]),
+    isStaff() ? el("button", { class: "me-bar owner-bar", type: "button", id: "me-owner", onclick: () => { S.meView = "owner"; renderTab(); } },
+      el("span", { class: "me-bar-i", "aria-hidden": "true" }, "🛠️"),
+      el("span", { class: "me-bar-t" }, el("b", null, S.owner ? "Owner tools" : "Moderator tools"), el("span", null, S.editMode ? "Edit mode is ON" : "Reports, anglers, Charters and bans")),
+      el("span", { class: "me-bar-go", "aria-hidden": "true" }, "›")) : null,
+    el("section", { class: "stack" }, el("h2", null, "📍 Map pins"),
+      el("label", { class: "field" }, el("span", null, "How exact should my pins be?"), prec,
+        el("span", { class: "hint" }, "A pin only goes on the map when you tap “Add my location” on a post. Deleting a post removes its pin.")),
+      el("span", { class: "hint" }, "Everyone using Weigh-In can see map pins. Skip the location for your home or a secret spot.")),
+    el("section", { class: "stack", id: "s-theme" }, el("h2", null, "🎨 Appearance"),
       el("div", { class: "list" }, THEMES.map(([k, name, sub]) => el("button", { class: "item", type: "button", "data-theme": k, onclick: () => { setPref("theme", k); applyTheme(); renderTab(); } },
-        el("span", { class: "stack", style: "gap:0;text-align:left" }, el("span", { class: "t" }, name), el("span", { class: "hint" }, sub)),
+        el("span", { class: "stack", style: "gap:0;text-align:left;flex:1" }, el("span", { class: "t" }, ({ auto: "🌓 ", light: "☀️ ", night: "🌙 ", black: "⚫ " }[k] || "") + name), el("span", { class: "hint" }, sub)),
         el("span", { class: "label" }, (getPref("theme", "auto") === k ? "✓ On" : "")))))),
-    el("section", { class: "stack" }, el("h2", null, "Install the app"),
+    el("section", { class: "stack" }, el("h2", null, "📲 Install the app"),
       isInstalled() ? el("p", { class: "muted" }, "You're using the installed app.")
         : el("button", { class: "btn wide", type: "button", id: "s-install", onclick: installApp }, "Install Weigh-In on this device"),
       isInstalled() ? null : el("span", { class: "hint" }, "Puts a Weigh-In icon on your home screen or desktop so it opens like a normal app.")),
-    el("section", { class: "stack" }, el("h2", null, "Profile picture"),
+    el("section", { class: "stack" }, el("h2", null, "🖼️ Profile picture"),
       el("div", { class: "row", style: "gap:14px" }, avatar(S.user.uid, S.name, 64),
         el("label", { class: "btn ghost small", style: "position:relative;overflow:hidden" }, "Change picture", photoInput("set-photo", "Change profile picture")),
         el("button", { class: "link", type: "button", onclick: clearMyPhoto }, "Remove"))),
-    el("section", { class: "stack" }, el("h2", null, "Account"),
+    el("section", { class: "stack" }, el("h2", null, "👤 Account"),
       el("div", { class: "kv" }, el("span", null, "Angler name"), el("b", null, "@" + S.name)),
       el("div", { class: "kv" }, el("span", null, "Email"), el("b", null, auth.currentUser?.email || "")),
       el("span", { class: "hint" }, "Change your name in your profile (tap your picture in Me)."),
       el("button", { class: "btn ghost small", type: "button", style: "align-self:flex-start", onclick: async () => {
         try { await sendPasswordResetEmail(auth, auth.currentUser.email); toast("Check your email for a reset link."); } catch (e) { toast(errText(e)); }
       } }, "Email me a password reset link")),
-    el("section", { class: "stack" }, el("h2", null, "Map pins"),
-      el("label", { class: "field" }, el("span", null, "How exact should my pins be?"), prec,
-        el("span", { class: "hint" }, "A pin only goes on the map when you tap “Add my location” on a post. Deleting a post removes its pin.")),
-      el("span", { class: "hint" }, "Everyone using Weigh-In can see map pins. Skip the location for your home or a secret spot.")),
+    (() => {
+      const row = el("div", { class: "chips", role: "group", "aria-label": "Water I fish" });
+      const target = el("select", { id: "s-target", "aria-label": "Fish I want to catch", onchange: () => { setPref("target", target.value); } });
+      const paint = () => {
+        row.replaceChildren(...[["both", "🌊 Both"], ["fresh", "🏞️ Freshwater"], ["salt", "🧂 Saltwater"]].map(([k, n]) => el("button", { class: "chip", type: "button", "data-water": k, "aria-pressed": String(waterPref() === k), onclick: () => { setPref("water", k); if (getPref("target", "") && !waterOk(getPref("target", ""))) setPref("target", ""); paint(); try { if (S.map) drawSpots?.(false); } catch { /* map not open */ } } }, n)));
+        target.replaceChildren(el("option", { value: "" }, "No favorite yet"), ...fishFor().map((n) => el("option", { value: n }, n)));
+        target.value = getPref("target", "");
+      };
+      paint();
+      return el("section", { class: "stack", id: "s-water" }, el("h2", null, "🎣 What I fish for"), row,
+        el("label", { class: "field" }, el("span", null, "Fish I want to catch"), target,
+          el("span", { class: "hint" }, "The fish list, the map and your post form only show the type of water you pick. Your favorite fish fills in when you post.")));
+    })(),
     el("section", { class: "stack" },
       el("button", { class: "btn ghost wide", type: "button", id: "s-about", onclick: openPrivacy }, "About and privacy"),
       el("button", { class: "btn ghost wide", type: "button", id: "s-fix", onclick: fixTheApp }, "Fix the app (reload a clean copy)"),
