@@ -324,9 +324,6 @@ const BASEMAPS = [
     { maxZoom: 19, maxNativeZoom: 18, attribution: "Tiles &copy; Esri" }],
   ["street", "Streets", "https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}",
     { maxZoom: 19, attribution: "Tiles &copy; Esri, HERE, Garmin, OpenStreetMap contributors" }],
-  // Depth charts: the official NOAA nautical chart (depth numbers, contours, hazards) drawn over a plain water map. It covers the coast, bays and the Great Lakes, plus big lakes NOAA charts.
-  ["depth", "Depth", "https://server.arcgisonline.com/ArcGIS/rest/services/Ocean/World_Ocean_Base/MapServer/tile/{z}/{y}/{x}",
-    { maxZoom: 19, maxNativeZoom: 13, attribution: "Esri | NOAA charts", wms: "https://gis.charttools.noaa.gov/arcgis/rest/services/MCS/NOAAChartDisplay/MapServer/exts/MaritimeChartService/WMSServer" }],
 ];
 const mapStyle = () => BASEMAPS.find((b) => b[0] === getPref("mapstyle", "water")) || BASEMAPS[0];
 const baseLayer = (L, b) => {
@@ -1474,8 +1471,7 @@ const REL_NAMES = { 59: "1.0", 60: "1.0", 61: "1.1", 62: "1.2", 63: "1.2", 64: "
 const relName = (v) => REL_NAMES[v] || (v < 59 ? `0.${v}` : `1.${v - 59}`);
 try { if ((parseInt(localStorage.getItem("weighin-appv"), 10) || 0) < APP_VERSION) localStorage.setItem("weighin-appv", String(APP_VERSION)); } catch { /* private mode */ }
 const UPDATES = [
-  { id: "2026-11-29a", v: 116, date: "Nov 29", title: "Rules, depth and fish ID", items: ["Map tab: 📜 Fishing rules opens your state's own wildlife page.", "Map style: Depth shows ocean and lake depth charts where they exist (mostly the coast and big lakes).", "Post a catch: 🐟 What fish is this? guesses the fish from your photo. It's only a guess."]},
-  { id: "2026-11-28a", v: 115, date: "Nov 28", title: "Slideshow music", items: ["The Your year slideshow plays a soft piano and guitar tune. The 🔊 button at the top turns it off and on."]},
+  { id: "2026-11-29a", v: 116, date: "Nov 29", title: "Rules, depth and fish ID", items: ["Map tab: 📜 Fishing rules opens your state's own wildlife page.", "Tap the water on the map and it tells you how deep it is. Works on the ocean, bays and big lakes like the Great Lakes. Small ponds show no depth.", "Post a catch: 🐟 What fish is this? guesses the fish from your photo. It's only a guess."]},
   { id: "2026-11-27b", v: 114, date: "Nov 27", title: "Profile tidy-up", items: [
     "Your picture shows whole, in a circle, in the Me banner.",
     "Trip planner moved to the Map tab. Your years moved into your profile.",
@@ -2426,24 +2422,10 @@ function playWrap(d, own) {
   const orbs = el("div", { class: "wr-orbs", "aria-hidden": "true" }, el("i", { class: "wr-orb", style: "left:-10%;top:8%;width:60vmin;height:60vmin;background:#6ec6ff" }), el("i", { class: "wr-orb", style: "right:-18%;top:42%;width:70vmin;height:70vmin;background:#ffd27a;animation-delay:-5s" }), el("i", { class: "wr-orb", style: "left:10%;bottom:-12%;width:55vmin;height:55vmin;background:#c79bff;animation-delay:-9s" }));
   const wave = el("div", { class: "wr-wave", "aria-hidden": "true", html: WR_WAVE + WR_WAVE });
   const closeBtn = el("button", { type: "button", id: "wrap-x", class: "wr-x", "aria-label": "Close", onclick: (e) => { e.stopPropagation(); close(); } }, "✕");
-  // Soft background music (an original tune). A button mutes it, and the choice is remembered.
-  let tune = null;
-  const musicBtn = el("button", { type: "button", id: "wrap-music", class: "wr-x", "aria-label": "Music", onclick: (e) => {
-    e.stopPropagation(); const on = getPref("wrapmusic", "1") !== "1"; setPref("wrapmusic", on ? "1" : "0"); paintMusic();
-    if (on) startTune(); else tune?.pause();
-  } });
-  const paintMusic = () => { const on = getPref("wrapmusic", "1") === "1"; musicBtn.textContent = on ? "🔊" : "🔇"; musicBtn.setAttribute("aria-pressed", String(on)); musicBtn.setAttribute("aria-label", on ? "Turn the music off" : "Turn the music on"); };
-  const startTune = async () => {
-    try {
-      if (!tune) { const m = await import("./slideshow-music.js?v=" + APP_VERSION); tune = new Audio(m.default); tune.loop = true; tune.volume = 0.5; }
-      if (ov.isConnected && getPref("wrapmusic", "1") === "1") await tune.play();
-    } catch { /* no music is fine: blocked autoplay or the file isn't uploaded yet */ }
-  };
-  paintMusic();
   const ov = el("div", { class: "wrap-ov wr", role: "dialog", "aria-label": `${yr} in fish` },
-    ...layers, orbs, wave, el("div", { class: "wr-top" }, bars, el("div", { class: "wr-topr" }, musicBtn, closeBtn)), stage,
+    ...layers, orbs, wave, el("div", { class: "wr-top" }, bars, el("div", { class: "wr-topr" }, closeBtn)), stage,
     el("div", { class: "wr-brand", "aria-hidden": "true" }, "🎣 Weigh-In"));
-  const close = () => { cancelAnimationFrame(raf); try { tune?.pause(); } catch { /* ok */ } ov.remove(); };
+  const close = () => { cancelAnimationFrame(raf); ov.remove(); };
   const show = (n) => {
     i = Math.max(0, Math.min(slides.length - 1, n)); elapsed = 0; last = 0;
     const sl = slides[i];
@@ -2483,7 +2465,7 @@ function playWrap(d, own) {
   };
   ov.addEventListener("pointerup", release); ov.addEventListener("pointercancel", () => { clearTimeout(holdT); held = false; ov.classList.remove("paused"); });
   ov.addEventListener("click", (e) => { if (e.target.closest("button")) return; if (swallow) { swallow = false; return; } e.clientX < innerWidth / 3 ? show(i - 1) : show(i + 1); });
-  document.body.append(ov); show(0); raf = requestAnimationFrame(tick); startTune();
+  document.body.append(ov); show(0); raf = requestAnimationFrame(tick);
   if (!own) { try { const seen = JSON.parse(getPref("fyseen", "[]") || "[]"); if (!seen.includes(rid)) setPref("fyseen", JSON.stringify([...seen, rid].slice(-40))); } catch { /* fine */ } }
 }
 // A picture of the year to send in a text or post anywhere (made on the phone, nothing is uploaded).
@@ -4463,6 +4445,17 @@ function loadLeaflet() {
   }));
   return leafletP;
 }
+// Tap the water and it tells you how deep it is (NOAA bathymetry). Only covers ocean, bays and big lakes; small ponds have no data.
+async function depthAt(lat, lng) {
+  try {
+    const u = "https://gis.ngdc.noaa.gov/arcgis/rest/services/DEM_mosaics/DEM_global_mosaic/ImageServer/identify?f=json&returnGeometry=false&geometryType=esriGeometryPoint&geometry=" + encodeURIComponent(JSON.stringify({ x: lng, y: lat, spatialReference: { wkid: 4326 } }));
+    const ac = new AbortController(), to = setTimeout(() => ac.abort(), 8000);
+    const r = await fetch(u, { signal: ac.signal }); clearTimeout(to);
+    const v = parseFloat((await r.json())?.value);
+    if (!isFinite(v)) return null;
+    return v < 0 ? Math.round(-v * 3.28084) : 0;   // meters below the surface -> feet
+  } catch { return null; }
+}
 function destroyMap() { mapToken++; if (S.map) { S.map.remove(); S.map = null; S.markers = null; S.me = null; } }
 const lureKey = (x) => String(x.lure || "").trim().toLowerCase().replace(/\s+/g, " ");
 const nameCase = (t) => t.charAt(0).toUpperCase() + t.slice(1);
@@ -4548,6 +4541,11 @@ function renderMap() {
     if (S.tab !== "map" || token !== mapToken) return;
     S.map = L.map(box, { maxBounds: US_BOUNDS, maxBoundsViscosity: 0.9, minZoom: 3 }).setView([39.5, -98.35], 4);
     let base = baseLayer(L, mapStyle()).addTo(S.map);
+    S.map.on("click", async (e) => {
+      if (S.map.getZoom() < 9) return;   // too far out to mean anything
+      const ft = await depthAt(e.latlng.lat, e.latlng.lng);
+      toast(ft === null ? "No depth info here." : ft > 0 ? `About ${ft} ft deep here (a guess from ocean and big-lake maps)` : "That's land, or very shallow water.");
+    });
     // Switching look: the old tiles stay until the new ones have arrived, so the map never flashes empty.
     setMapStyle = (id) => {
       const b = BASEMAPS.find((x) => x[0] === id) || BASEMAPS[0];
