@@ -1459,13 +1459,19 @@ function feedPosts() {
 /* What's new. Newest first. Add a new entry on top each time the app changes. */
 /* Bump APP_VERSION every time you change the app, and add a matching entry on top of UPDATES (with v: the same number).
    Phones check app.js every few minutes and offer the new version on their own. */
-const APP_VERSION = 113;
+const APP_VERSION = 114;
 // The number people see. APP_VERSION stays a plain counter so updates are detected. Big changes bump the first number (2.0), smaller ones the second (1.1, 1.2).
 const REL_NAMES = { 59: "1.0", 60: "1.0", 61: "1.1", 62: "1.2", 63: "1.2", 64: "1.2", 65: "1.2", 66: "1.2", 67: "1.2",
-  68: "1.3", 69: "1.3", 70: "1.3", 71: "1.4", 72: "1.4", 73: "1.5", 74: "1.5", 75: "1.5", 76: "1.5", 77: "1.8", 78: "1.8", 79: "1.9", 80: "1.9", 81: "2.0", 82: "2.0", 83: "1.19", 84: "1.20", 85: "1.21", 86: "1.22", 87: "1.23", 88: "1.24", 89: "1.25", 90: "1.26", 91: "1.27", 92: "1.28", 93: "1.29", 94: "1.30", 95: "1.31", 96: "1.32", 97: "1.33", 98: "1.34", 99: "1.35", 100: "1.36", 101: "1.37", 102: "1.38", 103: "1.39", 104: "1.40", 105: "1.41", 106: "1.42", 107: "1.43", 108: "1.44", 109: "1.45", 110: "1.46", 111: "1.47", 112: "1.48", 113: "1.49" };
+  68: "1.3", 69: "1.3", 70: "1.3", 71: "1.4", 72: "1.4", 73: "1.5", 74: "1.5", 75: "1.5", 76: "1.5", 77: "1.8", 78: "1.8", 79: "1.9", 80: "1.9", 81: "2.0", 82: "2.0", 83: "1.19", 84: "1.20", 85: "1.21", 86: "1.22", 87: "1.23", 88: "1.24", 89: "1.25", 90: "1.26", 91: "1.27", 92: "1.28", 93: "1.29", 94: "1.30", 95: "1.31", 96: "1.32", 97: "1.33", 98: "1.34", 99: "1.35", 100: "1.36", 101: "1.37", 102: "1.38", 103: "1.39", 104: "1.40", 105: "1.41", 106: "1.42", 107: "1.43", 108: "1.44", 109: "1.45", 110: "1.46", 111: "1.47", 112: "1.48", 113: "1.49", 114: "1.50" };
 const relName = (v) => REL_NAMES[v] || (v < 59 ? `0.${v}` : `1.${v - 59}`);
 try { if ((parseInt(localStorage.getItem("weighin-appv"), 10) || 0) < APP_VERSION) localStorage.setItem("weighin-appv", String(APP_VERSION)); } catch { /* private mode */ }
 const UPDATES = [
+  { id: "2026-11-27b", v: 114, date: "Nov 27", title: "Profile tidy-up", items: [
+    "Your picture shows whole, in a circle, in the Me banner.",
+    "Trip planner moved to the Map tab. Your years moved into your profile.",
+    "My catches is a button now. Tap it to see your list.",
+    "The season is a little square with four boxes. It follows the calendar and the current season is lit. You can't change it.",
+    "Your favorite fish is a search box. Type a few letters and pick one."]},
   { id: "2026-11-27a", v: 113, date: "Nov 27", title: "New Me page, round Post button, water type", items: [
     "Me has a new top: your picture fills the whole banner with your name on it. Tap it to open your profile.",
     "Updates, Chat, Fishing school, Fishing game and Trip planner are slim bars now. Settings moved to the bottom of your profile.",
@@ -4418,9 +4424,9 @@ function openMapTool(kind) {
   const body = el("div", { class: "stack", style: "padding:4px 16px 24px" });
   const close = () => { bg.remove(); S.repaintTool = null; };
   const bg = el("div", { class: "sheet-bg", id: "map-tool", "data-kind": kind, onclick: (e) => { if (e.target === bg) close(); } },
-    el("div", { class: "sheet", role: "dialog", "aria-label": kind === "spots" ? "Spot saver" : "Spot finder", style: "height:92%;overflow:auto" },
-      el("div", { class: "sheet-h" }, el("h2", null, kind === "spots" ? "📍 Spot saver" : "🔍 Spot finder"), el("button", { class: "link", type: "button", id: "map-tool-x", onclick: close }, "Close")), body));
-  const paint = () => { body.replaceChildren(); return kind === "spots" ? viewSpots(body) : viewWater(body); };
+    el("div", { class: "sheet", role: "dialog", "aria-label": kind === "spots" ? "Spot saver" : kind === "trip" ? "Trip planner" : "Spot finder", style: "height:92%;overflow:auto" },
+      el("div", { class: "sheet-h" }, el("h2", null, kind === "spots" ? "📍 Spot saver" : kind === "trip" ? "🧳 Trip planner" : "🔍 Spot finder"), el("button", { class: "link", type: "button", id: "map-tool-x", onclick: close }, "Close")), body));
+  const paint = () => { body.replaceChildren(); return kind === "spots" ? viewSpots(body) : kind === "trip" ? viewTrip(body) : viewWater(body); };
   S.repaintTool = paint; document.body.append(bg); paint();
 }
 function renderMap() {
@@ -4460,7 +4466,8 @@ function renderMap() {
   paintBar();
   const tools = el("div", { class: "map-tools" },
     el("button", { class: "btn small", type: "button", id: "map-spots", onclick: () => openMapTool("spots") }, "📍 Spot saver"),
-    el("button", { class: "btn small", type: "button", id: "map-water", onclick: () => openMapTool("water") }, "🔍 Spot finder"));
+    el("button", { class: "btn small", type: "button", id: "map-water", onclick: () => openMapTool("water") }, "🔍 Spot finder"),
+    el("button", { class: "btn small", type: "button", id: "map-trip", onclick: () => openMapTool("trip") }, "🧳 Trip planner"));
   // The switcher floats over the map itself, so it never sits on top of the filter bar.
   $screen.replaceChildren(bar, tools, el("div", { class: "map-wrap" }, box, styles), fab, note);
   const token = ++mapToken;
@@ -5643,6 +5650,7 @@ function watchMine() {
   meUnsub = onSnapshot(query(collection(db, "posts"), where("uid", "==", S.user.uid), limit(60)), (s) => {
     S.mine = s.docs.map((d) => ({ id: d.id, ...d.data({ serverTimestamps: "estimate" }) }));
     if (S.tab === "me" && (S.meView === "main" || S.meView === "profile")) renderTab();
+    S.repaintCatches?.();
   }, () => {});
 }
 async function setMyPhoto(file) {
@@ -5698,14 +5706,16 @@ function viewMe(p) {
     el("span", { class: "me-bar-t" }, el("b", null, title), el("span", null, hint)),
     dot ? el("span", { class: "dot" }) : null,
     el("span", { class: "me-bar-go", "aria-hidden": "true" }, "›"));
+  const heroAv = avatar(S.user.uid, S.name, 128);
   const hero = el("button", { class: "me-hero", type: "button", id: "me-head", "aria-label": "Open your profile", onclick: open("profile"),
     style: `background-color:hsl(${hue(S.name || S.user.uid)} 45% 36%)` },
-    el("span", { class: "me-hero-letter", "aria-hidden": "true" }, (S.name || "?")[0].toUpperCase()),
+    el("span", { class: "me-hero-blur", "aria-hidden": "true" }),
     el("span", { class: "me-hero-txt" },
+      el("span", { class: "me-hero-av" }, heroAv),
       el("h1", { class: "me-hero-name", id: "me-profile-name" }, "@" + S.name),
       isCharter(S.user.uid) ? el("span", { class: "me-hero-sub" }, "🎖️ Charter") : null,
       el("span", { class: "me-hero-sub", id: "me-profile" }, "View and edit profile ›")));
-  getUser(S.user.uid).then((u) => { if (u?.photo) { hero.style.backgroundImage = `url("${u.photo}")`; hero.classList.add("has-photo"); } });
+  getUser(S.user.uid).then((u) => { if (u?.photo) { hero.querySelector(".me-hero-blur").style.backgroundImage = `url("${u.photo}")`; hero.classList.add("has-photo"); } });
   const unread = S.reqIn.length + S.unread.size;
   const sr = schRank(sch().xp);
   p.append(
@@ -5721,14 +5731,10 @@ function viewMe(p) {
           el("button", { class: "btn share-btn", type: "button", id: "me-share", onclick: shareApp }, "📤 Share Weigh-In"),
           el("button", { class: "btn share-btn", type: "button", id: "me-install", onclick: installApp }, "📲 Download the app")),
     el("div", { class: "me-bars" },
-      isStaff() ? bar("me-owner-top", "🛠️", S.owner ? "Owner tools" : "Moderator tools", S.editMode ? "Edit mode is ON" : "Reports, anglers, Charters and bans", open("owner"), false, "owner-bar") : null,
       bar("me-new", "🔔", "Updates", unseenUpdate() ? "New release notes" : "Release notes", () => openWhatsNew(renderTab), unseenUpdate()),
       bar("me-friends", "💬", "Chat", unread ? `${unread} new` : "Friends and messages", open("friends"), !!unread),
       bar("me-school", sr.icon, "Fishing school", `${sr.title} · ${sch().xp} XP`, () => { S.sch = { v: "home" }; S.meView = "school"; renderTab(); }),
-      bar("me-game", "🎣", "Fishing game", `Level ${fcLevel()} · 🪙 ${fcCoins()}`, openFishGame),
-      bar("me-trip", "🧳", "Trip planner", "Food, rooms and tackle nearby", open("trip")),
-      yearsList().ys.length ? bar("me-yearsbtn", "🎞️", "Your years", "Look back at past years", openYears) : null,
-      wrapSeason() ? bar("me-wrap", "🎞️", "Your year", `${wrapYear()} recap`, () => openWrapped(wrapYear())) : null)
+      bar("me-game", "🎣", "Fishing game", `Level ${fcLevel()} · 🪙 ${fcCoins()}`, openFishGame))
   );
 }
 // ---- Trip planner: pick a place and how many people. Finds food, lodging and tackle shops nearby, suggests lures, and splits the cost. ----
@@ -5871,12 +5877,15 @@ function viewProfile(p) {
       el("div", null, el("b", null, String(mine.reduce((n, x) => n + likeCount(x), 0))), el("span", null, "Likes")),
       el("div", null, el("b", null, biggest ? fmtLb(biggest) : "–"), el("span", null, "Biggest")),
       el("div", null, el("b", null, String(pins)), el("span", null, "Map pins"))),
+    (() => {   // The season comes from the calendar only. This is just a display: four boxes, the current season is lit.
+      const now = fcSeason();
+      return el("div", { class: "season-box", id: "me-season", role: "img", "aria-label": "Season now: " + SEASONS[now].n },
+        ...["winter", "spring", "summer", "fall"].map((k) => el("div", { class: "season-cell" + (k === now ? " on" : "") }, el("span", { class: "season-ic" }, SEASONS[k].icon), el("span", null, SEASONS[k].n))));
+    })(),
     el("div", { class: "list" },
+      yearsList().ys.length ? el("button", { class: "item", type: "button", id: "me-yearsbtn", onclick: openYears }, el("span", { class: "t" }, "🎞️ Your years"), el("span", { class: "label" }, "›")) : null,
+      wrapSeason() ? el("button", { class: "item", type: "button", id: "me-wrap", onclick: () => openWrapped(wrapYear()) }, el("span", { class: "t" }, `🎞️ ${wrapYear()} recap`), el("span", { class: "label" }, "›")) : null,
       PUSH_OK() ? el("button", { class: "item", type: "button", id: "me-notify", onclick: async () => { if (pushOn()) await disablePush(); else await enablePush(); renderTab(); } }, el("span", { class: "t" }, pushOn() ? "🔔 Notifications" : "🔕 Notifications"), el("span", { class: "label" }, pushOn() ? "On. Tap to turn off" : "Off. Tap to hear when friends post")) : null,
-      el("button", { class: "item", type: "button", id: "me-season", onclick: (e) => {
-        const order = ["auto", "winter", "spring", "summer", "fall"], nx = order[(order.indexOf(getPref("season", "auto")) + 1) % order.length];
-        setPref("season", nx); applySeason(); const lb = e.currentTarget.querySelector(".label"); if (lb) lb.textContent = seasonLabel(); toast(nx === "auto" ? "The season follows the calendar." : SEASONS[nx].hi);
-      } }, el("span", { class: "t" }, "🌈 Season"), el("span", { class: "label" }, seasonLabel())),
       (() => {
         const lab = el("span", { class: "label" }, isCharter(S.user.uid) ? "You're a Charter" : "…");
         const b = el("button", { class: "item", type: "button", id: "me-charter", onclick: async () => {
@@ -5889,19 +5898,32 @@ function viewProfile(p) {
         return b;
       })(),
       el("button", { class: "item", type: "button", id: "me-name", onclick: () => openNameSheet(renderTab) }, el("span", { class: "t" }, "✏️ Change name"), el("span", { class: "label" }, "@" + S.name))),
-    el("h2", null, "My catches"));
-  if (!mine.length) p.append(el("p", { class: "empty" }, "You haven't posted a catch yet. Tap the red Post button."));
-  else p.append(el("div", { class: "list" }, mine.map((c) => el("div", { class: "item", style: "cursor:default" },
-    el("div", { class: "row", style: "gap:12px;flex-wrap:nowrap;min-width:0" },
-      c.photo ? el("img", { src: c.photo, alt: "", style: "width:56px;height:56px;object-fit:cover;border-radius:8px;flex:none" }) : null,
-      el("div", { class: "stack", style: "gap:2px;min-width:0" }, el("span", { class: "t" }, `${c.species}, ${sizeText(c)}`),
-        el("span", { class: "s" }, `${c.lure ? "on " + c.lure + " · " : ""}${catchLabel(c)} · ♥ ${likeCount(c)}`))),
-    el("div", { class: "row", style: "gap:10px;flex:none" },
-      c.photo ? el("button", { class: "link small", type: "button", "data-swap-photo": c.id, onclick: () => swapPhoto(c) }, "📷 Photo") : null,
-      el("button", { class: "link danger small", type: "button", onclick: () => deletePost(c) }, "Delete"))))));
+    el("button", { class: "me-bar", type: "button", id: "me-catches", onclick: openMyCatches },
+      el("span", { class: "me-bar-i", "aria-hidden": "true" }, "🎣"), el("span", { class: "me-bar-t" }, el("b", null, "My catches"), el("span", null, mine.length ? `${mine.length} posted` : "None yet")), el("span", { class: "me-bar-go", "aria-hidden": "true" }, "›")));
   viewSettings(p, true);   // settings live at the bottom of your profile now
 }
 
+// Your catches live behind a button so the profile stays short.
+function openMyCatches() {
+  document.querySelector("#my-catches")?.remove();
+  const body = el("div", { class: "msgs" });
+  const close = () => { bg.remove(); S.repaintCatches = null; };
+  const bg = el("div", { class: "sheet-bg", id: "my-catches", onclick: (e) => { if (e.target === bg) close(); } },
+    el("div", { class: "sheet", role: "dialog", "aria-label": "My catches", style: "height:92%" },
+      el("div", { class: "sheet-h" }, el("h2", null, "🎣 My catches"), el("button", { class: "link", type: "button", id: "my-catches-x", onclick: close }, "Close")), body));
+  const paint = () => {
+    const mine = [...S.mine].sort((a, b) => (b.createdAt?.toMillis?.() || 0) - (a.createdAt?.toMillis?.() || 0));
+    body.replaceChildren(...(!mine.length ? [el("p", { class: "empty" }, "You haven't posted a catch yet. Tap the red Post button.")] : [el("div", { class: "list" }, mine.map((c) => el("div", { class: "item", style: "cursor:default" },
+      el("div", { class: "row", style: "gap:12px;flex-wrap:nowrap;min-width:0" },
+        c.photo ? el("img", { src: c.photo, alt: "", style: "width:56px;height:56px;object-fit:cover;border-radius:8px;flex:none" }) : null,
+        el("div", { class: "stack", style: "gap:2px;min-width:0" }, el("span", { class: "t" }, `${c.species}, ${sizeText(c)}`),
+          el("span", { class: "s" }, `${c.lure ? "on " + c.lure + " · " : ""}${catchLabel(c)} · ♥ ${likeCount(c)}`))),
+      el("div", { class: "row", style: "gap:10px;flex:none" },
+        c.photo ? el("button", { class: "link small", type: "button", "data-swap-photo": c.id, onclick: () => swapPhoto(c) }, "📷 Photo") : null,
+        el("button", { class: "link danger small", type: "button", onclick: () => deletePost(c) }, "Delete")))))]));
+  };
+  S.repaintCatches = paint; document.body.append(bg); paint();
+}
 async function deleteMyAccount() {
   const u = auth.currentUser; if (!u || !S.user) return;
   const last = Date.parse(u.metadata?.lastSignInTime || "") || 0;
@@ -5989,15 +6011,21 @@ function viewSettings(p, inline) {
       } }, "Email me a password reset link")),
     (() => {
       const row = el("div", { class: "chips", role: "group", "aria-label": "Water I fish" });
-      const target = el("select", { id: "s-target", "aria-label": "Fish I want to catch", onchange: () => { setPref("target", target.value); } });
+      const target = el("input", { id: "s-target", list: "s-fishlist", placeholder: "Search fish, like Bluegill", autocomplete: "off", "aria-label": "Fish I want to catch", onchange: () => {
+        const v = target.value.trim(); if (!v) { setPref("target", ""); return; }
+        const hit = fishFor().find((n) => n.toLowerCase() === v.toLowerCase()) || fishFor().find((n) => n.toLowerCase().startsWith(v.toLowerCase())) || fishFor().find((n) => n.toLowerCase().includes(v.toLowerCase()));
+        if (!hit) { toast("Pick a fish from the list. Try another word."); target.value = getPref("target", ""); return; }
+        target.value = hit; setPref("target", hit); toast("Favorite fish: " + hit);
+      } });
+      const fishList = el("datalist", { id: "s-fishlist" });
       const paint = () => {
         row.replaceChildren(...[["both", "🌊 Both"], ["fresh", "🏞️ Freshwater"], ["salt", "🧂 Saltwater"]].map(([k, n]) => el("button", { class: "chip", type: "button", "data-water": k, "aria-pressed": String(waterPref() === k), onclick: () => { setPref("water", k); if (getPref("target", "") && !waterOk(getPref("target", ""))) setPref("target", ""); paint(); try { if (S.map) drawSpots?.(false); } catch { /* map not open */ } } }, n)));
-        target.replaceChildren(el("option", { value: "" }, "No favorite yet"), ...fishFor().map((n) => el("option", { value: n }, n)));
+        fishList.replaceChildren(...fishFor().map((n) => el("option", { value: n })));
         target.value = getPref("target", "");
       };
       paint();
       return el("section", { class: "stack", id: "s-water" }, el("h2", null, "🎣 What I fish for"), row,
-        el("label", { class: "field" }, el("span", null, "Fish I want to catch"), target,
+        el("label", { class: "field" }, el("span", null, "Fish I want to catch"), target, fishList,
           el("span", { class: "hint" }, "The fish list, the map and your post form only show the type of water you pick. Your favorite fish fills in when you post.")));
     })(),
     el("section", { class: "stack" },
@@ -6079,7 +6107,7 @@ const SEASONS = {
   spring: { n: "Spring", icon: "🌷", hi: "Happy Spring!", msg: "Fish are waking up. Bass and crappie are biting in Lake Duel." },
   summer: { n: "Summer", icon: "☀️", hi: "Happy Summer!", msg: "Long days on the water. Catfish and bluegill love the heat." },
   fall: { n: "Fall", icon: "🍂", hi: "Happy Fall!", msg: "Cooler water has walleye and pike feeding hard." } };
-function fcSeason() { const o = getPref("season", "auto"); if (SEASONS[o]) return o; const m = new Date().getMonth(); return m === 11 || m < 2 ? "winter" : m < 5 ? "spring" : m < 8 ? "summer" : "fall"; }
+function fcSeason() { const m = new Date().getMonth(); return m === 11 || m < 2 ? "winter" : m < 5 ? "spring" : m < 8 ? "summer" : "fall"; }
 function applySeason() {
   const se = fcSeason();
   try { document.documentElement.dataset.season = se; } catch { /* fine */ }
