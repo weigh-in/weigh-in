@@ -2773,9 +2773,9 @@ function viewOwner(p) {
   }
   const paintBanned = () => bannedBox.replaceChildren(...(bans.size ? [...bans].map((id) => {
     const u = users.find((x) => x.id === id), nm = banInfo.get(id)?.name || u?.name || "angler";
-    return el("div", { class: "item", style: "cursor:default;flex-wrap:wrap" },
-      el("span", { class: "row", style: "gap:8px;flex-wrap:nowrap;min-width:0" }, avatar(id, nm, 28), el("span", { class: "stack", style: "gap:0;min-width:0" }, el("span", { class: "t" }, "@" + nm), banInfo.get(id)?.createdAt?.toMillis ? el("span", { class: "s" }, "Banned " + ago(banInfo.get(id).createdAt)) : null)),
-      can("ban") ? el("button", { class: "btn ghost small", type: "button", "data-unban": id, onclick: () => unbanUser(id, nm) }, "Unban") : null);
+    return el("div", { class: "item ban-item", style: "cursor:default" },
+      el("span", { class: "row", style: "gap:8px;flex-wrap:nowrap;min-width:0;flex:1 1 0;overflow:hidden" }, avatar(id, nm, 28), el("span", { class: "stack", style: "gap:0;min-width:0;flex:1 1 0" }, el("span", { class: "t", style: "overflow:hidden;text-overflow:ellipsis;white-space:nowrap" }, "@" + nm), banInfo.get(id)?.createdAt?.toMillis ? el("span", { class: "s" }, "Banned " + ago(banInfo.get(id).createdAt)) : null)),
+      can("ban") ? el("button", { class: "btn ghost small", style: "flex:none", type: "button", "data-unban": id, onclick: () => unbanUser(id, nm) }, "Unban") : null);
   }) : [el("p", { class: "empty" }, "Nobody is banned.")]));
   if (can("reports")) ownerUns.push(onSnapshot(query(collection(db, "reports"), orderBy("createdAt", "desc"), limit(50)), (s) => { reports = s.docs.map((d) => ({ id: d.id, ...d.data({ serverTimestamps: "estimate" }) })); paintReports(); }, () => reportsBox.replaceChildren(el("p", { class: "muted" }, "Couldn't load reports."))));
   if (can("ban")) ownerUns.push(onSnapshot(collection(db, "bans"), (s) => { bans = new Set(s.docs.map((d) => d.id)); banInfo = new Map(s.docs.map((d) => [d.id, d.data({ serverTimestamps: "estimate" })])); paintMembers(); paintBanned(); }, () => {}));
