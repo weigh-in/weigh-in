@@ -692,10 +692,11 @@ html[data-season="fall"]{--lake:#9a4f1f;--lake-soft:#f3e1cf;--water:#F3EDE4;--li
 #map-tool h1{display:none}
 /* Profile: your picture fills the whole top, your name sits on it, then slim bars that fit without scrolling. */
 .me-home{gap:8px;justify-content:flex-start}
-.me-hero{position:relative;flex:1 1 auto;min-height:190px;width:100%;border:0;border-radius:20px;overflow:hidden;color:#fff;font:inherit;cursor:pointer;background-size:cover;background-position:center;display:flex;align-items:flex-end;text-align:left;padding:0}
-.me-hero-letter{position:absolute;inset:0;display:grid;place-items:center;font-size:7rem;font-weight:700;color:rgba(255,255,255,.35)}
-.me-hero.has-photo .me-hero-letter{display:none}
-.me-hero-txt{position:relative;display:flex;flex-direction:column;gap:2px;width:100%;padding:34px 16px 14px;background:linear-gradient(to top,rgba(0,0,0,.72),rgba(0,0,0,0))}
+.me-hero{position:relative;flex:1 1 auto;min-height:190px;width:100%;border:0;border-radius:20px;overflow:hidden;color:#fff;font:inherit;cursor:pointer;display:flex;align-items:center;justify-content:center;text-align:center;padding:0}
+.me-hero-blur{position:absolute;inset:-20px;background-size:cover;background-position:center;filter:blur(18px) brightness(.7);transform:scale(1.1)}
+.me-hero-txt{position:relative;display:flex;flex-direction:column;align-items:center;gap:3px;width:100%;padding:14px 16px}
+.me-hero-av{display:block;line-height:0;border-radius:50%;box-shadow:0 0 0 4px rgba(255,255,255,.92),0 8px 20px rgba(0,0,0,.35)}
+.me-hero-av .av img{object-fit:cover}
 .me-hero-name{margin:0;font-size:1.7rem;color:#fff;overflow-wrap:anywhere;text-shadow:0 1px 6px rgba(0,0,0,.5)}
 .me-hero-sub{font-size:.82rem;font-weight:700;color:#fff;opacity:.92}
 .me-home .stats.four{gap:8px}
@@ -729,3 +730,9 @@ section.stack>h2::before{content:"";width:5px;height:1.1em;border-radius:3px;bac
 .owner-bar{border-color:var(--lake);background:var(--lake-soft);box-shadow:0 3px 0 var(--lake)}
 .owner-bar .me-bar-t b{color:var(--lake)}
 .seg button{font-weight:700}
+
+/* Season display: four boxes split by one line across and one down. The current season is lit. Nothing to tap. */
+.season-box{display:grid;grid-template-columns:1fr 1fr;gap:2px;background:var(--line);border:2px solid var(--line);border-radius:14px;overflow:hidden;width:100%;max-width:240px;align-self:center}
+.season-cell{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;padding:10px 6px;background:var(--water);font-weight:700;font-size:.82rem;color:var(--muted)}
+.season-ic{font-size:1.5rem}
+.season-cell.on{background:var(--lake);color:#fff}
