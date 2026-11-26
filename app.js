@@ -1471,7 +1471,7 @@ const REL_NAMES = { 59: "1.0", 60: "1.0", 61: "1.1", 62: "1.2", 63: "1.2", 64: "
 const relName = (v) => REL_NAMES[v] || (v < 59 ? `0.${v}` : `1.${v - 59}`);
 try { if ((parseInt(localStorage.getItem("weighin-appv"), 10) || 0) < APP_VERSION) localStorage.setItem("weighin-appv", String(APP_VERSION)); } catch { /* private mode */ }
 const UPDATES = [
-  { id: "2026-11-29a", v: 116, date: "Nov 29", title: "Rules, depth and fish ID", items: ["Map tab: 📜 Fishing rules opens your state's own wildlife page.", "Tap the water on the map and it tells you how deep it is. Works on the ocean, bays and big lakes like the Great Lakes. Small ponds show no depth.", "Post a catch: 🐟 What fish is this? guesses the fish, its weight and its length from your photo. It's only a guess."]},
+  { id: "2026-11-29a", v: 116, date: "Nov 29", title: "Rules, depth and fish ID", items: ["Map tab: 📜 Fishing rules opens your state's own wildlife page.", "Tap the water on the map and it tells you how deep it is. Works on the ocean, bays and big lakes like the Great Lakes. Small ponds show no depth.", "Post a catch: Posting: pick a photo and Weigh-In fills in the fish, weight and length for you, and warns you if it isn't a fish. It's only a guess."]},
   { id: "2026-11-27b", v: 114, date: "Nov 27", title: "Profile tidy-up", items: [
     "Your picture shows whole, in a circle, in the Me banner.",
     "Trip planner moved to the Map tab. Your years moved into your profile.",
@@ -2943,11 +2943,11 @@ async function askFishId(photo) {
   if (n >= 15) return { error: "limit" };
   try {
     const tok = await auth.currentUser.getIdToken();
-    const r = await fetch("/api/fishid", { method: "POST", headers: { Authorization: "Bearer " + tok, "Content-Type": "application/json" }, body: JSON.stringify({ image: photo }) });
+    const r = await fetch("/api/fishid", { method: "POST", headers: { Authorization: "Bearer " + tok, "Content-Type": "application/json" }, body: JSON.stringify({ image: photo, names: fishFor().slice(0, 150) }) });
     const j = await r.json().catch(() => ({}));
     if (r.status === 503 || j.error === "off") return { error: "off" };
     setPref(k, String(n + 1));
-    if (!r.ok || !j.species) return { error: "fail" };
+    if (!r.ok || (j.isFish !== false && !j.species)) return { error: "fail" };
     return j;
   } catch { return { error: "fail" }; }
 }
@@ -2970,21 +2970,32 @@ function viewPost(p) {
     catch { toast("Couldn't read that photo. Try another."); }
     e.target.value = "";
     paintPhoto();
-    if (draftPhoto) idBtn.click();   // guess while you are filling in the post
+    if (draftPhoto) runId();   // look at the photo while you are filling in the post
   } });
   const idOut = el("div", { id: "fid-out", class: "hint", style: "display:flex;flex-direction:column;gap:6px" });
-  const idBtn = el("button", { class: "btn ghost small", type: "button", id: "fid-btn", style: "align-self:flex-start", onclick: async () => {
-    idBtn.disabled = true; idOut.textContent = "Looking at your fish…";
-    const r = await askFishId(draftPhoto); idBtn.disabled = false; idOut.replaceChildren();
-    if (r.error === "off") idOut.textContent = "Fish ID isn't turned on yet. It's coming soon.";
-    else if (r.error === "limit") idOut.textContent = "That's enough guesses for today. Try again tomorrow.";
-    else if (r.error) idOut.textContent = "Couldn't tell this time. Try a clearer photo of the whole fish.";
-    else idOut.append(el("span", null, `Looks like: ${r.species}${r.confidence ? " (" + r.confidence + ")" : ""}${r.lb ? ", about " + r.lb + " lb" : ""}${r.inches ? ", about " + r.inches + " in long" : ""}. It's only a guess, so check it yourself. A scale and tape are better.`),
-      el("button", { class: "btn small", type: "button", id: "fid-use", onclick: () => { const i = document.getElementById("f-species"); if (i) i.value = r.species; const lb = document.getElementById("f-lb"), inch = document.getElementById("f-in"); if (lb && r.lb && !lb.value) lb.value = r.lb; if (inch && r.inches && !inch.value) inch.value = r.inches; idOut.textContent = "Added."; } }, "Use this guess"));
-  } }, "🐟 What fish is this?");
+  let notFish = false, idRun = 0, autoSp = "";
+  // Looks at the photo by itself as soon as it is picked: fills in the fish, weight and length, and warns if it isn't a fish.
+  const runId = async () => {
+    const mine = ++idRun; notFish = false; idOut.textContent = "Looking at your photo…";
+    const r = await askFishId(draftPhoto); if (mine !== idRun || !draftPhoto) return; idOut.replaceChildren();
+    if (r.error === "off") { idOut.textContent = ""; return; }
+    if (r.error === "limit") { idOut.textContent = "That's enough auto-guesses for today. Type the fish in yourself."; return; }
+    if (r.error) { idOut.textContent = "Couldn't look at this photo. Type the fish in yourself."; return; }
+    if (r.isFish === false) {
+      notFish = true;
+      idOut.append(el("span", { id: "fid-notfish", style: "color:var(--bad,#b3261e);font-weight:700" }, "This doesn't look like a photo of a fish. Weigh-In is for fishing photos only."),
+        el("button", { class: "btn ghost small", type: "button", id: "fid-ok", style: "align-self:flex-start", onclick: () => { notFish = false; idOut.textContent = ""; } }, "It is a fish"));
+      return;
+    }
+    const sp = document.getElementById("f-species"), lb = document.getElementById("f-lb"), inch = document.getElementById("f-in");
+    if (r.species && r.confidence !== "low" && sp && (!sp.value || sp.value === autoSp)) { sp.value = r.species; autoSp = r.species; }
+    if (lb && r.lb && !lb.value) lb.value = r.lb;
+    if (inch && r.inches && !inch.value) inch.value = r.inches;
+    idOut.textContent = r.species ? (r.confidence === "low" ? `Not sure, maybe ${r.species}. Check it yourself.` : `Filled in ${r.species}${r.lb ? ", about " + r.lb + " lb" : ""}${r.inches ? ", about " + r.inches + " in" : ""}. It's a guess, so fix it if it's wrong.`) : "Couldn't tell the kind. Type it in yourself.";
+  };
   function paintPhoto() {
     preview.replaceChildren(draftPhoto ? el("img", { src: draftPhoto, alt: "Your catch photo" }) : el("span", { class: "muted" }, "Tap to take or choose a photo"), fileInput);
-    removeBtn.hidden = !draftPhoto; idBtn.hidden = !draftPhoto; if (!draftPhoto) idOut.replaceChildren();
+    removeBtn.hidden = !draftPhoto; if (!draftPhoto) { idRun++; notFish = false; idOut.replaceChildren(); }
   }
   paintPhoto();
   if (draftSrc === "auto") { draftLoc = null; draftSrc = ""; draftWhere = ""; }   // the typed name starts empty on a fresh form
@@ -3048,7 +3059,7 @@ function viewPost(p) {
     tourHint.textContent = (ph ? `Now: ${ph.name}${ph.where ? " at " + ph.where : ""}${ph.lure ? ". Lure rule: " + ph.lure + " only" : ""}.` : "This catch will count in this tournament.") + (tourSpecies(t).length ? ` Only ${tourSpeciesText(t)} counts.` : "");
   };
   const f = el("form", { novalidate: true, id: "post-form" },
-    el("div", { class: "field" }, el("span", null, "Photo"), preview, removeBtn, idBtn, idOut,
+    el("div", { class: "field" }, el("span", null, "Photo"), preview, removeBtn, idOut,
       el("span", { class: "hint" }, "Fishing photos only. Anything else gets removed and the account can be banned.")),
     vidField(() => { if (draftVid && !draftPhoto) { draftPhoto = draftVid.poster || ""; paintPhoto(); } }),
     el("label", { class: "field" }, el("span", null, "Fish type"),
@@ -3082,6 +3093,7 @@ function viewPost(p) {
     const fd = new FormData(f);
     const species = String(fd.get("species") || "").trim();
     const lb = parseFloat(fd.get("lb")) || 0, inches = parseFloat(fd.get("inches")) || 0;
+    if (notFish && draftPhoto) { toast("That doesn't look like a fish. Pick a fishing photo."); return; }
     if (!species) { toast("Enter what kind of fish it is."); return; }
     if (!draftPhoto && postMode !== "log") { toast("Add a photo of your fish. Fishing photos only."); return; }
     if (isBad(species, fd.get("lure"), fd.get("spot"), fd.get("city"))) { toast(NO_SLURS); return; }
