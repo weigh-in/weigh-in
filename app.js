@@ -5716,6 +5716,7 @@ async function applyUpdate() {
     }
   } catch { /* reload anyway */ }
   rememberUpdate();
+  try { sessionStorage.setItem("wi-upd", "1"); } catch { /* fine */ }
   try { await Promise.all(["index.html", "./"].map((u) => fetch(u, { cache: "reload" }).catch(() => {}))); } catch { /* reload anyway */ }
   location.reload();
 }
