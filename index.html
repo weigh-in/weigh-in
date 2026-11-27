@@ -177,7 +177,7 @@
       { l: 12,  g: [172, 190], a: -20 },
       { l: 12,  g: [172, 204], a: -10 }
     ];
-    var K = [0, .07, .17, .25, .285, .33, .40, .60], TR = .335, TL = .60, LOOP = 7400;
+    var K = [0, .07, .17, .25, .285, .33, .40, .60], TR = .335, TL = .60, LOOP = 10000;
     function sm(x) { return x * x * (3 - 2 * x); }
     function cl(x) { return x < 0 ? 0 : x > 1 ? 1 : x; }
     function mix(a, b, u) { return a + (b - a) * u; }
