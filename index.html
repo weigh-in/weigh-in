@@ -49,6 +49,7 @@
 @keyframes cl{from{transform:translateX(-14px)}to{transform:translateX(18px)}}
 .sh{animation:sh 3.2s ease-in-out infinite alternate}@keyframes sh{from{transform:translateX(-5px);opacity:.35}to{transform:translateX(5px);opacity:.7}}
 .boot-txt{position:absolute;left:0;right:0;bottom:max(20px,env(safe-area-inset-bottom));text-align:center;font-size:1.25rem;letter-spacing:.01em;color:#fff;text-shadow:0 2px 10px rgba(0,0,0,.5)}
+.boot-ver{position:absolute;left:0;right:0;bottom:calc(max(20px,env(safe-area-inset-bottom)) + 34px);text-align:center;font-size:.8rem;color:rgba(255,255,255,.85);text-shadow:0 1px 6px rgba(0,0,0,.5)}
 .boot-txt i{font-style:normal;animation:bsDot 1.2s infinite both}.boot-txt i:nth-child(2){animation-delay:.2s}.boot-txt i:nth-child(3){animation-delay:.4s}
 @keyframes bsDot{0%,20%{opacity:.15}50%{opacity:1}100%{opacity:.15}}
 </style><svg id="bs-svg" viewBox="-8 -40 385 513" preserveAspectRatio="xMidYMid meet" style="position:absolute;inset:0;width:100%;height:100%;overflow:visible" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="An angler casting a bobber into a lake">
@@ -126,7 +127,7 @@
 <g id="bobg"><path d="M-6 0 a6 6 0 0 1 12 0z" fill="#E43D36"/><path d="M-6 0 a6 6 0 0 0 12 0z" fill="#fff" stroke="#C9C9D0" stroke-width=".5"/><ellipse cx="-2.2" cy="-3" rx="1.6" ry="1" fill="#fff" opacity=".7"/><path d="M0 -6 v-3" stroke="#2B2B33" stroke-width=".8"/></g>
 <g id="splash" opacity="0"><ellipse id="rp1" cx="0" cy="0" rx="0" ry="0" fill="none" stroke="#fff" stroke-width="1.4"/><ellipse id="rp2" cx="0" cy="0" rx="0" ry="0" fill="none" stroke="#E4F4FD" stroke-width="1"/><g id="drops" fill="#fff"></g></g>
 <rect id="veil" x="-900" y="-400" width="2100" height="1200" fill="#EAF6FD" opacity="0"/>
-</svg><div class="boot-txt">Loading Weigh-In<i>.</i><i>.</i><i>.</i></div></template>
+</svg><div class="boot-ver">1.53</div><div class="boot-txt">Loading Weigh-In<i>.</i><i>.</i><i>.</i></div></template>
 <script>
   // The loading scene lives in its own sealed box (shadow DOM), so no change to the app's styles can alter the animation.
   (function () {
