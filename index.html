@@ -127,7 +127,7 @@
 <g id="bobg"><path d="M-6 0 a6 6 0 0 1 12 0z" fill="#E43D36"/><path d="M-6 0 a6 6 0 0 0 12 0z" fill="#fff" stroke="#C9C9D0" stroke-width=".5"/><ellipse cx="-2.2" cy="-3" rx="1.6" ry="1" fill="#fff" opacity=".7"/><path d="M0 -6 v-3" stroke="#2B2B33" stroke-width=".8"/></g>
 <g id="splash" opacity="0"><ellipse id="rp1" cx="0" cy="0" rx="0" ry="0" fill="none" stroke="#fff" stroke-width="1.4"/><ellipse id="rp2" cx="0" cy="0" rx="0" ry="0" fill="none" stroke="#E4F4FD" stroke-width="1"/><g id="drops" fill="#fff"></g></g>
 <rect id="veil" x="-900" y="-400" width="2100" height="1200" fill="#EAF6FD" opacity="0"/>
-</svg><div class="boot-ver">1.54</div><div class="boot-txt">Loading Weigh-In<i>.</i><i>.</i><i>.</i></div></template>
+</svg><div class="boot-ver">1.56</div><div class="boot-txt">Loading Weigh-In<i>.</i><i>.</i><i>.</i></div></template>
 <script>
   // The loading scene lives in its own sealed box (shadow DOM), so no change to the app's styles can alter the animation.
   (function () {
@@ -177,7 +177,7 @@
       { l: 12,  g: [172, 190], a: -20 },
       { l: 12,  g: [172, 204], a: -10 }
     ];
-    var K = [0, .07, .17, .25, .285, .33, .40, .60], TR = .335, TL = .60, LOOP = 8000;
+    var K = [0, .07, .17, .25, .285, .33, .40, .60], TR = .335, TL = .60, LOOP = 6800;
     function sm(x) { return x * x * (3 - 2 * x); }
     function cl(x) { return x < 0 ? 0 : x > 1 ? 1 : x; }
     function mix(a, b, u) { return a + (b - a) * u; }
